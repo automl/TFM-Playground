@@ -43,7 +43,7 @@ class PriorDumpDataLoader(DataLoader):
 
                 num_features=self.data['num_features'][self.pointer:end].max()
                 if self.has_num_datapoints:
-                    max_seq_in_batch = int(f['num_datapoints'][self.pointer:end].max())
+                    max_seq_in_batch = int(self.data['num_datapoints'][self.pointer:end].max())
                 else:
                     max_seq_in_batch = int(self.num_datapoints_max)
                 x = torch.from_numpy(self.data['X'][self.pointer:end, :max_seq_in_batch, :num_features])
