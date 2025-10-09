@@ -160,12 +160,12 @@ class NanoTabPFNRegressor():
         self.model = model.to(device)
         self.device = device
         self.dist = dist
-        self.normalized_dist = None  # Used after fit()
         self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """
-        Stores X_train and y_train for later use. Computes target normalization. Builds normalized bar distribution from existing self.dist.
+        Stores X_train and y_train for later use.
+        Computes target normalization.
         """
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
@@ -175,14 +175,11 @@ class NanoTabPFNRegressor():
         self.y_train_std = np.std(self.y_train) + 1e-8
         self.y_train_n = (self.y_train - self.y_train_mean) / self.y_train_std
 
-        # Convert base distribution to original scale for output
-        bucket_edges = self.dist.borders
-        bucket_edges_denorm = bucket_edges * self.y_train_std + self.y_train_mean
-        self.normalized_dist = FullSupportBarDistribution(bucket_edges_denorm).float()
-
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
-        Performs in-context learning using X_train and y_train. Predicts the means of the output distributions for X_test.
+        Performs in-context learning using X_train and y_train.
+        Predicts the means of the output distributions for X_test.
+        Renormalizes the predictions back to the original target scale.
         """
         X = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train_n
@@ -192,6 +189,7 @@ class NanoTabPFNRegressor():
             y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device).unsqueeze(0)
 
             logits = self.model((X_tensor, y_tensor), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(0)
-            preds = self.normalized_dist.mean(logits)
+            preds_n = self.dist.mean(logits)         
+            preds = preds_n * self.y_train_std + self.y_train_mean
 
         return preds.cpu().numpy()
