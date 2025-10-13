@@ -1,0 +1,13 @@
+other/
+
+__pycache__/
+
+*.egg-info/
+
+*.zip
+*.pth
+*.h5
+
+.DS_Store
+
+uv.lock
