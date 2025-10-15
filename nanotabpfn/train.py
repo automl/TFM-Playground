@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from typing import Dict
 from pfns.bar_distribution import FullSupportBarDistribution
 import schedulefree
+import os
 
 from nanotabpfn.callbacks import Callback
 from nanotabpfn.model import NanoTabPFNModel
@@ -13,7 +14,8 @@ from nanotabpfn.utils import get_default_device
 
 def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,
           epochs: int, accumulate_gradients: int = 1, lr: float = 1e-4, device: torch.device = None,
-          callbacks: list[Callback]=None, ckpt: Dict[str, torch.Tensor] = None, multi_gpu: bool = False):
+          callbacks: list[Callback] = None, ckpt: Dict[str, torch.Tensor] = None, multi_gpu: bool = False,
+          run_name: str = 'nanoTFM'):
     """
     Trains our model on the given prior using the given criterion.
 
@@ -32,6 +34,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     Returns:
         (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
     """
+    work_dir = 'workdir/'+run_name
+    os.makedirs(work_dir, exist_ok=True)
     if multi_gpu:
         model = nn.DataParallel(model)
     if callbacks is None:
@@ -93,7 +97,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 'model': (model.module if multi_gpu else model).state_dict(),
                 'optimizer': optimizer.state_dict()
             }
-            torch.save(training_state, 'latest_checkpoint.pth')
+            torch.save(training_state, work_dir+'/latest_checkpoint.pth')
 
             for callback in callbacks:
                 if type(criterion) is FullSupportBarDistribution:

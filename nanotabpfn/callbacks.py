@@ -76,8 +76,10 @@ class WandbLoggerCallback(BaseLoggerCallback):
             wandb.init(
                 project=project,
                 name=name,
+                id=name,
                 config=config,
                 dir=log_dir,
+                resume="allow"
             )
         except ImportError:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
