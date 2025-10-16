@@ -1,7 +1,7 @@
 import argparse
 
 import torch
-from pfns.bar_distribution import FullSupportBarDistribution
+from pfns.model.bar_distribution import FullSupportBarDistribution
 from sklearn.metrics import r2_score
 
 from nanotabpfn.callbacks import ConsoleLoggerCallback

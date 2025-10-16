@@ -22,7 +22,7 @@ dependencies = [
     "requests>=2",
     "scikit-learn>=1.5",
     "schedulefree>=1.4",
-    "pfns==0.3.0",
+    "pfns==0.4.2",
     "openml==0.15.1",
 ]
 
