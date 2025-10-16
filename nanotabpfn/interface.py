@@ -5,7 +5,7 @@ import pandas as pd
 import requests
 import torch
 import torch.nn.functional as F
-from pfns.bar_distribution import FullSupportBarDistribution
+from pfns.model.bar_distribution import FullSupportBarDistribution
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
