@@ -1,1 +1,2 @@
 from nanotabpfn.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
+from nanotabpfn.ensembles import EnsembleClassifer

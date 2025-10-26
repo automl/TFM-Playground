@@ -80,7 +80,7 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
 
 class NanoTabPFNClassifier():
     """ scikit-learn like interface """
-    def __init__(self, model: NanoTabPFNModel|str|None = None, device: None|str|torch.device = None, num_mem_chunks: int = 8):
+    def __init__(self, model: NanoTabPFNModel|str|None = None, device: None|str|torch.device = None, num_mem_chunks: int = 8, preprocess_features: bool = True):
         if device is None:
             device = get_default_device()
         if model is None:
@@ -95,11 +95,14 @@ class NanoTabPFNClassifier():
         self.model = model.to(device)
         self.device = device
         self.num_mem_chunks = num_mem_chunks
+        self.preprocess_features = preprocess_features
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """ stores X_train and y_train for later use, also computes the highest class number occuring in num_classes """
-        self.feature_preprocessor = get_feature_preprocessor(X_train)
-        self.X_train = self.feature_preprocessor.fit_transform(X_train)
+        self.X_train = X_train
+        if self.preprocess_features:
+            self.feature_preprocessor = get_feature_preprocessor(self.X_train)
+            self.X_train: np.ndarray = self.feature_preprocessor.fit_transform(self.X_train) # type:ignore
         self.y_train = y_train
         self.num_classes = max(set(y_train))+1
 
@@ -113,7 +116,9 @@ class NanoTabPFNClassifier():
         creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities
         """
-        x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
+        if self.preprocess_features:
+            X_test = self.feature_preprocessor.transform(X_test) # type:ignore
+        x = np.concatenate((self.X_train, X_test))
         y = self.y_train
         with torch.no_grad():
             x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)  # introduce batch size 1

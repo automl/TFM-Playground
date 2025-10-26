@@ -8,6 +8,7 @@ from openml.tasks import TaskType
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score, r2_score
 from sklearn.preprocessing import LabelEncoder
 
+from nanotabpfn.ensembles import EnsembleClassifer
 from nanotabpfn.interface import NanoTabPFNRegressor, NanoTabPFNClassifier
 
 TOY_TASKS_REGRESSION = [
@@ -35,7 +36,7 @@ TABARENA_TASKS = [
 @torch.no_grad()
 def get_openml_predictions(
         *,
-        model: NanoTabPFNRegressor | NanoTabPFNClassifier,
+        model: NanoTabPFNRegressor | NanoTabPFNClassifier | EnsembleClassifer,
         tasks: list[int] | str = "tabarena-v0.1",
         max_n_features: int = 500,
         max_n_samples: int = 10_000,
@@ -133,6 +134,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-model_type", type=str, choices=["regression", "classification"], required=True,
                         help="Whether to use the regressor or classifier model")
+    parser.add_argument("-ensemble_size", type=int, default=None,
+                        help="Set the number of preprocessors to ensemble with. If None, then no ensembling is applied.")
     parser.add_argument("-checkpoint", type=str, default=None,
                         help="Path to load the model weights from. If None, default weights are used.")
     parser.add_argument("-dist_path", type=str, default=None,
@@ -150,7 +153,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.model_type == "classification":
-        model = NanoTabPFNClassifier(model=args.checkpoint, num_mem_chunks=args.num_mem_chunks)
+        if args.ensemble_size is None:
+            model = NanoTabPFNClassifier(model=args.checkpoint, num_mem_chunks=args.num_mem_chunks)
+        else:
+            model = EnsembleClassifer(NanoTabPFNClassifier(model=args.checkpoint, num_mem_chunks=args.num_mem_chunks, preprocess_features=False), num_preprocessors=args.ensemble_size)
     else:
         model = NanoTabPFNRegressor(model=args.checkpoint, dist=args.dist_path, num_mem_chunks=args.num_mem_chunks)
     model.model.eval()
