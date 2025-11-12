@@ -24,6 +24,7 @@ dependencies = [
     "schedulefree>=1.4",
     "pfns==0.3.0",
     "openml==0.15.1",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
