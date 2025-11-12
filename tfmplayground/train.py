@@ -7,7 +7,7 @@ from pfns.bar_distribution import FullSupportBarDistribution
 import schedulefree
 import os
 
-from tfmplayground.callbacks import Callback
+from tfmplayground.training.callbacks import Callback
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
 

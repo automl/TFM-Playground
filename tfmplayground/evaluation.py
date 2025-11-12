@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import openml
 import torch
+import logging
 from openml.config import set_root_cache_directory
 from openml.tasks import TaskType
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score, r2_score
@@ -10,6 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from tfmplayground.interface import NanoTabPFNRegressor, NanoTabPFNClassifier
 
+openml.config.set_console_log_level(logging.WARNING)
 TOY_TASKS_REGRESSION = [
     362443, # diabetes
 ]
