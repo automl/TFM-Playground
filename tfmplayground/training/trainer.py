@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 
 import logging
 import os
@@ -14,7 +14,12 @@ from torch.utils.data import IterableDataset, DataLoader
 from tqdm import tqdm
 
 from .base import Callback, Trainer
-from .util import infer_device, log_on_main, ddp_teardown
+from .util import (
+    infer_device,
+    log_on_main,
+    ddp_teardown,
+    generate_random_run_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +30,8 @@ class BaseTrainer(Trainer):
     model: nn.Module
     train_dataset: IterableDataset
     callbacks: list[Callback]
-    run_dir: str
-    run_name: str
+    run_dir: Union[str, None]
+    run_name: Union[str, None]
 
     # DDP
     ddp: bool
@@ -46,8 +51,8 @@ class BaseTrainer(Trainer):
         epochs: int = 10000,
         steps: int = 100,
         callbacks: list[Callback] = [],
-        run_dir: str = "",
-        run_name: str = "",
+        run_dir: Optional[str] = None,
+        run_name: Optional[str] = None,
         use_cpu: bool = False,
         dataloader_num_workers: int = 0,
         **kwargs,
@@ -60,6 +65,7 @@ class BaseTrainer(Trainer):
         # output setup
         self.run_dir = run_dir
         self.run_name = run_name
+        self._setup_output_dir()
 
         # device setup
         self.device, self.ddp = infer_device(use_cpu)
@@ -109,8 +115,8 @@ class BaseTrainer(Trainer):
             batch_size=None,
             num_workers=dataloader_num_workers,
         )
-        # TODO: handle checkpoint loading
 
+        # TODO: handle checkpoint loading
     def _configure_ddp(self) -> None:
         # right now we only support DDP on CUDA
         init_process_group(backend="nccl")
@@ -126,6 +132,24 @@ class BaseTrainer(Trainer):
     def _load_checkpoint(self) -> Dict[str, Any]:
         pass  # TODO
 
+    def _setup_output_dir(self) -> None:
+        if self.run_dir is None:
+            self.run_dir = "training_outputs/"
+        os.makedirs(self.run_dir, exist_ok=True)
+
+        if self.run_name is None:
+            # TODO: generate random name
+            self.run_name = generate_random_run_name()
+
+        # name of each subdir should be self.run_name-run-id where id starts at 1 and increments
+        # if the dir already exists
+        run_id = 1
+        while os.path.exists(os.path.join(self.run_dir, f"{self.run_name}-run-{run_id}")):
+            run_id += 1
+        self.run_name = f"{self.run_name}-run-{run_id}"
+        self.run_dir = os.path.join(self.run_dir, self.run_name)
+        os.makedirs(self.run_dir, exist_ok=True)
+
     def _loss(self, output: torch.Tensor, targets: torch.Tensor) -> float:
         losses = self.criterion(output, targets)
         loss = losses.mean() / self.accumulate_gradients
@@ -134,9 +158,6 @@ class BaseTrainer(Trainer):
 
     @ddp_teardown
     def train(self, resume_from_checkpoint: bool = False) -> nn.Module:
-        work_dir = "workdir/" + self.run_name
-        os.makedirs(work_dir, exist_ok=True)
-
         if resume_from_checkpoint:
             checkpoint = self._load_checkpoint()
             if checkpoint is not None:
@@ -230,7 +251,7 @@ class BaseTrainer(Trainer):
                     "model": self.raw_model.state_dict(),
                     "optimizer": self.optimizer.state_dict(),
                 }
-                torch.save(training_state, work_dir + "/latest_checkpoint.pth")
+                torch.save(training_state, os.path.join(self.run_dir, "latest_checkpoint.pth"))
 
                 for callback in self.callbacks:
                     if type(self.criterion) is FullSupportBarDistribution:

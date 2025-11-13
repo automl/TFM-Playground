@@ -3,11 +3,75 @@ import logging
 from typing import Tuple
 import os
 
+import random
 import torch
 from torch.distributed import destroy_process_group
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+RANDOM_IDENTIFIES = [
+    "dog",
+    "cat",
+    "car",
+    "tree",
+    "house",
+    "computer",
+    "phone",
+    "bicycle",
+    "river",
+    "mountain",
+    "ocean",
+    "cloud",
+    "star",
+    "moon",
+    "sun",
+    "flower",
+    "bird",
+    "fish",
+    "butterfly",
+    "rainbow",
+    "forest",
+    "desert",
+    "island",
+    "valley",
+    "canyon",
+    "waterfall",
+    "volcano",
+]
+
+RANDOM_ATTRIBUTES = [
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "fast",
+    "slow",
+    "bright",
+    "dark",
+    "loud",
+    "quiet",
+    "happy",
+    "sad",
+    "strong",
+    "weak",
+    "hot",
+    "cold",
+    "soft",
+    "smooth",
+    "rough",
+    "shiny",
+    "dull",
+    "fresh",
+    "stale",
+]
+
+
+def generate_random_run_name() -> str:
+    identify = random.choice(RANDOM_IDENTIFIES)
+    attribute = random.choice(RANDOM_ATTRIBUTES)
+    number = random.randint(0, 999)
+    return f"{attribute}_{identify}_{number:03d}"
 
 
 def check_ddp_availability() -> bool:
