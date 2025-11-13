@@ -4,7 +4,7 @@ import torch
 from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.metrics import r2_score
 
-from tfmplayground.callbacks import ConsoleLoggerCallback
+from tfmplayground.training.callbacks import ConsoleLoggerCallback
 from tfmplayground.evaluation import get_openml_predictions, TOY_TASKS_REGRESSION
 from tfmplayground.interface import NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel

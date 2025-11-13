@@ -1,0 +1,22 @@
+#### Hydra specific configs, do not change ####
+###############################################
+
+model:
+  num_attention_heads: 6
+  embedding_size: 192
+  mlp_hidden_size: 768
+  num_layers: 6
+
+dataset:
+  filename: ./50x3_3_100k_classification.h5
+  device: cuda
+  batch_size: 50
+  starting_index: 0
+
+training:
+  steps: 25
+  accumulate_gradients: 1
+  dataloader_num_workers: 0  # keep 0 for now
+  lr: 1e-4
+  epochs: 80
+  run_name: nanotabpfn

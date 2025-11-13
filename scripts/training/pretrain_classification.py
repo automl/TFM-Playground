@@ -4,16 +4,17 @@ import torch
 from sklearn.metrics import accuracy_score, roc_auc_score
 from torch import nn
 
-from tfmplayground.callbacks import ConsoleLoggerCallback, WandbLoggerCallback
+from tfmplayground.training.callbacks import ConsoleLoggerCallback, WandbLoggerCallback
 from tfmplayground.evaluation import get_openml_predictions, TOY_TASKS_CLASSIFICATION, TABARENA_TASKS
 from tfmplayground.interface import NanoTabPFNClassifier
 from tfmplayground.model import NanoTabPFNModel
-from tfmplayground.priors import PriorDumpDataLoader
+from tfmplayground.priors.dataloader import PriorDumpDataLoader, PriorDataLoader
+from tfmplayground.priors.tabicl import TabICLPriorDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, set_randomness_seed
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--priordump", type=str, default="/50x3_3_100k_classification.h5", help="path to the prior dump")
+parser.add_argument("--priordump", type=str, default="./50x3_3_100k_classification.h5", help="path to the prior dump")
 parser.add_argument("--heads", type=int, default=6, help="number of attention heads")
 parser.add_argument("--embeddingsize", type=int, default=192, help="the size of the embeddings used for the cells")
 parser.add_argument("--hiddensize", type=int, default=768, help="size of the hidden layer of the mlps")
@@ -35,6 +36,18 @@ device = get_default_device()
 ckpt = None
 if args.loadcheckpoint:
     ckpt = torch.load(args.loadcheckpoint)
+
+
+# prior = TabICLPriorDataLoader(
+#         num_steps=args.steps,
+#         batch_size=args.batchsize,
+#         num_datapoints_min=100,
+#         num_datapoints_max=1000,
+#         min_features=3,
+#         max_features=15,
+#         max_num_classes=2,
+#         device=device,
+#     )
 
 prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
 
@@ -85,7 +98,7 @@ class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
         print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg roc auc {avg_score:.3f}',
               flush=True)
 
-#callbacks = [ProductionEvaluationLoggerCallback('nanoTFM', args.runname)]
+# callbacks = [ProductionEvaluationLoggerCallback('nanoTFM', args.runname)]
 callbacks = [ToyEvaluationLoggerCallback(TOY_TASKS_CLASSIFICATION)]
 
 trained_model, loss = train(
