@@ -25,6 +25,7 @@ dependencies = [
     "pfns==0.3.0",
     "openml==0.15.1",
     "tqdm",
+    "hydra-core"
 ]
 
 [project.optional-dependencies]
