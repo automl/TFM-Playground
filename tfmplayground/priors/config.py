@@ -30,8 +30,8 @@ def get_ticl_prior_config(prior_type: str, max_num_classes: int = None) -> dict:
         return {
             "sampling": "uniform",
             "noise": 1e-3,
-            "outputscale": 1.0,
-            "lengthscale": 0.2,
+            "outputscale": 3.0,
+            "lengthscale": 1.0,
         }
     elif prior_type == "classification_adapter":
         return {
