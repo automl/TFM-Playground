@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A Playground for Tabular Foundation Models"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -24,6 +24,13 @@ dependencies = [
     "schedulefree>=1.4",
     "pfns==0.3.0",
     "openml==0.15.1",
+    "numpy>=2.0.2",
+    "tabicl @ git+https://github.com/soda-inria/tabicl@e88d1600701240fd353803bf1b73b5309b18d406",
+    "ticl @ git+https://github.com/microsoft/ticl.git@main",
+    "numba>=0.61.2",
+    "interpret>=0.4.4",
+    "mlflow>=3.1.4",
+    "gpytorch>=1.13",
 ]
 
 [project.optional-dependencies]
