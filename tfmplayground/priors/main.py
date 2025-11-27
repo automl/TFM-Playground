@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--num_batches", type=int, default=100, help="Number of batches to dump.")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for dumping.")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device to run prior sampling on.")
-    parser.add_argument("--prior_type", type=str, default="mlp", choices=["mlp", "gp", "classification_adapter", "boolean_conjunctions", "step_function"], help="Which TICL prior to use.")
+    parser.add_argument("--prior_type", type=str, default="mlp", choices=["mlp", "gp", "classification_adapter", "boolean_conjunctions", "step_function", "tabicl"], help="Which TICL prior to use.")
     parser.add_argument("--base_prior_type", type=str, default="mlp", choices=["mlp", "gp"], help="Base regression prior for classification_adapter.")
     parser.add_argument("--min_features", type=int, default=1, help="Minimum number of input features.")
     parser.add_argument("--max_features", type=int, default=100, help="Maximum number of input features.")

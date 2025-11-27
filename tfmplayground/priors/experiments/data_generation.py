@@ -52,7 +52,7 @@ def generate_prior_data(
     print(f"  Seed: {gen_config['seed']}")
     print(f"  Output: {save_path}")
     
-    # get project root (two levels up from this script)
+    # get project root
     project_root = Path(__file__).parent.parent.parent
     
     # build command to call the main CLI
@@ -72,6 +72,8 @@ def generate_prior_data(
     ]
     
     # run the subprocess command from project root
+    print(cmd)
+    print("="*50)
     result = subprocess.run(cmd, capture_output=False, text=True, cwd=str(project_root))
     
     if result.returncode != 0:
@@ -140,12 +142,14 @@ def select_priors_interactive(available_priors: Dict) -> List[str]:
 
 def main():
     """Generate data for selected priors using configuration."""
+    mode = sys.argv[1]  # Mode: classification, regression
+    
     config = load_config(str(Path(__file__).parent / "config.yaml"))
-    available_priors = config['available_priors']
+    available_priors = config['available_priors'][mode]
     save_dir = config['output']['data_dir']
     
     print("=" * 50)
-    print("REGRESSION DATA GENERATION")
+    print("DATA GENERATION")
     print("=" * 50)
     print(f"Output: {save_dir}")
     

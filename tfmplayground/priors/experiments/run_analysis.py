@@ -3,11 +3,12 @@
 import os
 import re
 from pathlib import Path
+import sys
 from typing import Dict, List
 from itertools import combinations
 
 from utils import load_config
-from data_analysis import RegressionDataAnalyzer, compare_priors
+from data_analysis import RegressionDataAnalyzer, compare_regression_priors, ClassificationDataAnalyzer, compare_classification_priors
 
 
 def discover_data_files(data_dir: str) -> Dict[str, str]:
@@ -103,6 +104,9 @@ def select_analysis_mode() -> str:
 
 def main():
     """Run interactive analysis CLI."""
+    
+    mode = sys.argv[1]  # Mode: classification, regression
+    
     config = load_config(str(Path(__file__).parent / "config.yaml"))
     
     data_dir = config['output']['data_dir']
@@ -112,14 +116,14 @@ def main():
     os.makedirs(reports_dir, exist_ok=True)
     
     print("\n" + "=" * 50)
-    print("REGRESSION DATA ANALYSIS")
+    print(f"{mode.upper()} DATA ANALYSIS")
     print("=" * 50)
     
     available_files = discover_data_files(data_dir)
     
     if not available_files:
         print(f"\nNo data files found in {data_dir}")
-        print("Please run data generation first (1_data_generation.py)")
+        print("Please run data generation first (data_generation.py)")
         return
     
     selected_priors = select_priors_for_analysis(available_files)
@@ -145,7 +149,10 @@ def main():
             print(f"{'=' * 50}")
             
             try:
-                analyzer = RegressionDataAnalyzer(file_path)
+                if mode == 'regression':
+                    analyzer = RegressionDataAnalyzer(file_path)
+                else:
+                    analyzer = ClassificationDataAnalyzer(file_path)
                 analyzers[prior_name] = analyzer
                 
                 report = analyzer.generate_report()
@@ -164,7 +171,10 @@ def main():
         for prior_name in selected_priors:
             file_path = available_files[prior_name]
             try:
-                analyzer = RegressionDataAnalyzer(file_path)
+                if mode == 'regression':
+                    analyzer = RegressionDataAnalyzer(file_path)
+                else:
+                    analyzer = ClassificationDataAnalyzer(file_path)
                 analyzers[prior_name] = analyzer
             except Exception as e:
                 print(f"Error loading {prior_name}: {e}")
@@ -181,8 +191,11 @@ def main():
             print(f"{'=' * 50}")
             
             try:
-                comparison = compare_priors(analyzer1, analyzer2, name1.upper(), name2.upper())
-                
+                if mode == 'regression':
+                    comparison = compare_regression_priors(analyzer1, analyzer2, name1.upper(), name2.upper())
+                else:
+                    comparison = compare_classification_priors(analyzer1, analyzer2, name1.upper(), name2.upper())
+
                 if save_reports:
                     comp_filename = f"comparison_{name1}_vs_{name2}.txt"
                     comp_path = os.path.join(reports_dir, comp_filename)

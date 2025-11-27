@@ -1,15 +1,99 @@
 """Analyzer for regression data generated from synthetic priors."""
 
 import os
-from typing import Dict
+from typing import Dict, Any
+
+from abc import ABC, abstractmethod
 
 import h5py
 import numpy as np
 from scipy import stats
-from sklearn.feature_selection import mutual_info_regression
+from sklearn.feature_selection import mutual_info_regression, mutual_info_classif, f_classif
 
 
-class RegressionDataAnalyzer:
+class DataAnalyzer(ABC):
+    """Base analyzer for datasets generated from synthetic priors.
+    
+    Provides shared loading and basic statistics utilities for regression and
+    classification analyzers.
+    """
+
+    def __init__(self, h5_path: str):
+        self.h5_path = h5_path
+        self.data: Dict[str, np.ndarray] = {}
+        self.metadata: Dict[str, Any] = {}
+        self._load_data()
+
+    def _load_data(self) -> None:
+        """Load common dataset structure from an HDF5 file.
+
+        Expects groups/arrays `X`, `y`, `num_features`, `num_datapoints`,
+        and `single_eval_pos`. Optionally reads `problem_type` metadata if
+        present.
+        """
+        print(f"Loading data from {self.h5_path}...")
+
+        with h5py.File(self.h5_path, "r") as f:
+            self.data = {
+                "X": f["X"][:],
+                "y": f["y"][:],
+                "num_features": f["num_features"][:],
+                "num_datapoints": f["num_datapoints"][:],
+                "single_eval_pos": f["single_eval_pos"][:],
+            }
+
+            if "problem_type" in f:
+                raw = f["problem_type"][()]
+                if isinstance(raw, bytes):
+                    self.metadata["problem_type"] = raw.decode("utf-8")
+                else:
+                    self.metadata["problem_type"] = str(raw)
+
+        print(f"  Loaded {len(self.data['X'])} samples")
+        if "problem_type" in self.metadata:
+            print(f"  Problem type: {self.metadata['problem_type']}")
+
+    def get_basic_statistics(self) -> Dict:
+        """Extract basic statistics of the dataset common to all analyzers.
+
+        Returns:
+            Dictionary containing various statistics.
+        """
+        stats_dict: Dict[str, Any] = {
+            "total_samples": len(self.data["X"]),
+            # samples could potentially have different lengths/features
+            "max_seq_len": self.data["X"].shape[1],
+            "max_features": self.data["X"].shape[2],
+        }
+
+        # actual sequence lengths (because it's padded to maximums)
+        stats_dict["seq_lengths"] = {
+            "min": int(self.data["num_datapoints"].min()),
+            "max": int(self.data["num_datapoints"].max()),
+            "mean": float(self.data["num_datapoints"].mean()),
+            "std": float(self.data["num_datapoints"].std()),
+        }
+
+        # actual number of features used
+        stats_dict["num_features"] = {
+            "min": int(self.data["num_features"].min()),
+            "max": int(self.data["num_features"].max()),
+            "mean": float(self.data["num_features"].mean()),
+            "std": float(self.data["num_features"].std()),
+        }
+
+        # analyze evaluation positions
+        stats_dict["eval_positions"] = {
+            "min": int(self.data["single_eval_pos"].min()),
+            "max": int(self.data["single_eval_pos"].max()),
+            "mean": float(self.data["single_eval_pos"].mean()),
+            "std": float(self.data["single_eval_pos"].std()),
+        }
+
+        return stats_dict
+
+
+class RegressionDataAnalyzer(DataAnalyzer):
     """Analyzes regression datasets generated from synthetic priors (GP, MLP, etc.).
     
     Computes comprehensive statistics to compare different prior characteristics:
@@ -19,70 +103,8 @@ class RegressionDataAnalyzer:
     - Feature redundancy and mutual information
     """
 
-    def __init__(self, h5_path: str):
-        self.h5_path = h5_path
-        self.data = None
-        self.metadata = {}
-        self._load_data()
-    
-    # TODO: Carry this under a common '.py' for experiments cuz it's likely reused in the classification analysis
-    def _load_data(self):
-        print(f"Loading data from {self.h5_path}...")
-        
-        with h5py.File(self.h5_path, "r") as f:
-            self.data = {
-                "X": f["X"][:],
-                "y": f["y"][:],
-                "num_features": f["num_features"][:],
-                "num_datapoints": f["num_datapoints"][:],
-                "single_eval_pos": f["single_eval_pos"][:],
-            }
-            
-            self.metadata = {
-                "problem_type": f["problem_type"][()].decode("utf-8")
-            }
-            
-        print(f"  Loaded {len(self.data['X'])} samples")
-        print(f"  Problem type: {self.metadata['problem_type']}")
-        
-    def get_basic_statistics(self) -> Dict:
-        """Extract basic statistics of the dataset.
-        
-        Returns:
-            Dictionary containing various statistics
-        """
-        stats_dict = {
-            "total_samples": len(self.data["X"]),
-            # samples could potentially have different lengths/features
-            "max_seq_len": self.data["X"].shape[1],
-            "max_features": self.data["X"].shape[2],
-        }
-
-        # actual sequence lengths (cuz its padded to maximums)
-        stats_dict["seq_lengths"] = {
-            "min": int(self.data["num_datapoints"].min()), # shortest sequence length
-            "max": int(self.data["num_datapoints"].max()), # longest sequence length
-            "mean": float(self.data["num_datapoints"].mean()), # mean sequence length
-            "std": float(self.data["num_datapoints"].std()), # std sequence length
-        }
-        
-        # actual number of features used
-        stats_dict["num_features"] = {
-            "min": int(self.data["num_features"].min()),
-            "max": int(self.data["num_features"].max()),
-            "mean": float(self.data["num_features"].mean()),
-            "std": float(self.data["num_features"].std()),
-        }
-        
-        # analyze evaluation positions
-        stats_dict["eval_positions"] = {
-            "min": int(self.data["single_eval_pos"].min()),
-            "max": int(self.data["single_eval_pos"].max()),
-            "mean": float(self.data["single_eval_pos"].mean()),
-            "std": float(self.data["single_eval_pos"].std()),
-        }
-        
-        return stats_dict
+    # Inherits data loading and basic statistics from DataAnalyzer and adds
+    # regression-specific analyses below.
     
     def analyze_target_distribution(self) -> Dict:
         """Analyze the distribution of target values.
@@ -646,7 +668,7 @@ class RegressionDataAnalyzer:
         return "\n".join(report_lines)
     
     
-def compare_priors(analyzer1: RegressionDataAnalyzer, analyzer2: RegressionDataAnalyzer, 
+def compare_regression_priors(analyzer1: RegressionDataAnalyzer, analyzer2: RegressionDataAnalyzer, 
                    name1: str, name2: str) -> str:
     """Compare two different priors side by side.
     
@@ -813,4 +835,507 @@ def compare_priors(analyzer1: RegressionDataAnalyzer, analyzer2: RegressionDataA
     report_lines.append("")
     report_lines.append("=" * 80)
     
+    return "\n".join(report_lines)
+
+
+# ==========================================================
+# Classification analyzer and comparison
+# ==========================================================
+
+class ClassificationDataAnalyzer(DataAnalyzer):
+    """Analyzes classification datasets generated from synthetic priors.
+
+    Assumes the same HDF5 structure as RegressionDataAnalyzer, but with
+    discrete class labels in ``y``.
+    """
+
+    def analyze_target_distribution(self) -> Dict:
+        """Analyze the distribution of class labels.
+
+        Returns:
+            Dictionary with class distribution statistics.
+        """
+        # collect all non-padded labels
+        labels = []
+        for i in range(len(self.data["y"])):
+            n_points = int(self.data["num_datapoints"][i])
+            labels.extend(self.data["y"][i, :n_points].astype(int))
+
+        labels = np.array(labels)
+        values, counts = np.unique(labels, return_counts=True)
+        total = counts.sum()
+        probs = counts / total
+
+        # basic distribution info
+        stats_dict: Dict[str, Any] = {
+            "num_classes": int(len(values)),
+            "n_samples": int(total),
+            "classes": values.tolist(),
+            "class_counts": counts.tolist(),
+            "class_probs": probs.tolist(),
+        }
+
+        # imbalance metrics
+        max_count = counts.max()
+        min_count = counts.min()
+        stats_dict["majority_class"] = int(values[np.argmax(counts)])
+        stats_dict["minority_class"] = int(values[np.argmin(counts)])
+        stats_dict["majority_ratio"] = float(max_count / total)
+        stats_dict["minority_ratio"] = float(min_count / total)
+        stats_dict["imbalance_ratio"] = float(max_count / max(1, min_count))
+
+        # entropy of label distribution
+        entropy = -(probs * np.log2(probs + 1e-12)).sum()
+        stats_dict["entropy_bits"] = float(entropy)
+
+        return stats_dict
+
+    def analyze_feature_distributions(self, sample_size: int = 1000) -> Dict:
+        """Same as the regression version, but reused for classification.
+
+        Args:
+            sample_size: Number of samples to use for analysis.
+        """
+        sample_indices = np.random.choice(
+            len(self.data["X"]),
+            min(sample_size, len(self.data["X"])),
+            replace=False,
+        )
+
+        features = []
+        for i in sample_indices:
+            n_points = int(self.data["num_datapoints"][i])
+            n_features = int(self.data["num_features"][i])
+            features.extend(self.data["X"][i, :n_points, :n_features].flatten())
+
+        features = np.array(features)
+
+        feature_stats: Dict[str, Any] = {
+            "mean": float(features.mean()),
+            "std": float(features.std()),
+            "variance": float(features.var()),
+            "min": float(features.min()),
+            "max": float(features.max()),
+            "range": float(features.max() - features.min()),
+            "median": float(np.median(features)),
+            "q25": float(np.percentile(features, 25)),
+            "q75": float(np.percentile(features, 75)),
+            "iqr": float(np.percentile(features, 75) - np.percentile(features, 25)),
+            "skewness": float(stats.skew(features)),
+            "kurtosis": float(stats.kurtosis(features)),
+        }
+
+        # outlier detection via IQR
+        lower_bound = feature_stats["q25"] - 1.5 * feature_stats["iqr"]
+        upper_bound = feature_stats["q75"] + 1.5 * feature_stats["iqr"]
+        outliers = (features < lower_bound) | (features > upper_bound)
+        feature_stats["outlier_ratio"] = float(outliers.sum() / len(features))
+
+        # coefficient of variation
+        if feature_stats["mean"] != 0:
+            feature_stats["coefficient_of_variation"] = feature_stats["std"] / abs(
+                feature_stats["mean"]
+            )
+        else:
+            feature_stats["coefficient_of_variation"] = float("inf")
+
+        # zero ratio (sparsity indicator)
+        feature_stats["zero_ratio"] = float((features == 0).sum() / len(features))
+
+        return feature_stats
+
+    def analyze_target_feature_relationships(self, n_samples: int = 100) -> Dict:
+        """Analyze relationships between features and class labels.
+
+        Uses ANOVA F-statistics aggregated across tasks as a proxy for how
+        discriminative features are for the classes.
+        """
+        f_scores = []
+
+        sample_indices = np.random.choice(
+            len(self.data["X"]),
+            min(n_samples, len(self.data["X"])),
+            replace=False,
+        )
+
+        for i in sample_indices:
+            n_points = int(self.data["num_datapoints"][i])
+            n_features = int(self.data["num_features"][i])
+            if n_points < 5 or n_features < 1:
+                continue
+
+            X_sample = self.data["X"][i, :n_points, :n_features]
+            y_sample = self.data["y"][i, :n_points].astype(int)
+
+            # need at least 2 classes to compute F-statistics
+            if len(np.unique(y_sample)) < 2:
+                continue
+
+            try:
+                f_vals, p_vals = f_classif(X_sample, y_sample)
+                # aggregate F scores only; p-values are often extreme for big n
+                f_scores.extend(f_vals)
+            except Exception:
+                continue
+
+        rel_stats: Dict[str, Any] = {}
+        if f_scores:
+            f_scores_arr = np.array(f_scores)
+            rel_stats = {
+                "f_mean": float(f_scores_arr.mean()),
+                "f_std": float(f_scores_arr.std()),
+                "f_max": float(f_scores_arr.max()),
+                "f_median": float(np.median(f_scores_arr)),
+                "f_q25": float(np.percentile(f_scores_arr, 25)),
+                "f_q75": float(np.percentile(f_scores_arr, 75)),
+            }
+
+        return rel_stats
+
+    def analyze_mutual_information(self, n_samples: int = 100) -> Dict:
+        """Analyze mutual information between features and class labels.
+
+        Uses sklearn's ``mutual_info_classif`` to capture nonlinear
+        dependencies between continuous features and discrete labels.
+        """
+        mi_scores = []
+
+        sample_indices = np.random.choice(
+            len(self.data["X"]),
+            min(n_samples, len(self.data["X"])),
+            replace=False,
+        )
+
+        for i in sample_indices:
+            n_points = int(self.data["num_datapoints"][i])
+            n_features = int(self.data["num_features"][i])
+            if n_points < 10 or n_features < 1:
+                continue
+
+            X_sample = self.data["X"][i, :n_points, :n_features]
+            y_sample = self.data["y"][i, :n_points].astype(int)
+
+            if len(np.unique(y_sample)) < 2:
+                continue
+
+            try:
+                mi = mutual_info_classif(X_sample, y_sample, random_state=42)
+                mi_scores.extend(mi)
+            except Exception:
+                continue
+
+        if not mi_scores:
+            return {}
+
+        mi_arr = np.array(mi_scores)
+        mi_stats: Dict[str, Any] = {
+            "mean": float(mi_arr.mean()),
+            "std": float(mi_arr.std()),
+            "max": float(mi_arr.max()),
+            "min": float(mi_arr.min()),
+            "median": float(np.median(mi_arr)),
+            "q75": float(np.percentile(mi_arr, 75)),
+        }
+
+        return mi_stats
+
+    def analyze_feature_redundancy(self, n_samples: int = 100) -> Dict:
+        """Same redundancy/collinearity analysis as in regression.
+
+        Label-agnostic; only looks at correlations between features.
+        """
+        all_corr = []
+        high_corr_pair_counts = []
+
+        sample_indices = np.random.choice(
+            len(self.data["X"]),
+            min(n_samples, len(self.data["X"])),
+            replace=False,
+        )
+
+        for i in sample_indices:
+            n_points = int(self.data["num_datapoints"][i])
+            n_features = int(self.data["num_features"][i])
+            if n_features < 2:
+                continue
+
+            X_sample = self.data["X"][i, :n_points, :n_features]
+
+            try:
+                corr_matrix = np.corrcoef(X_sample.T)
+                mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+                correlations = corr_matrix[mask]
+                all_corr.extend(correlations)
+
+                high_corr = np.abs(correlations) > 0.8
+                high_corr_pair_counts.append(high_corr.sum())
+            except Exception:
+                continue
+
+        if not all_corr:
+            return {}
+
+        all_corr_arr = np.array(all_corr)
+        redundancy_stats: Dict[str, Any] = {
+            "mean_abs_correlation": float(np.abs(all_corr_arr).mean()),
+            "max_abs_correlation": float(np.abs(all_corr_arr).max()),
+            "std_correlation": float(all_corr_arr.std()),
+            "high_correlation_ratio": float((np.abs(all_corr_arr) > 0.8).sum() / len(all_corr_arr)),
+            "mean_high_corr_pairs": float(np.mean(high_corr_pair_counts)) if high_corr_pair_counts else 0.0,
+        }
+
+        return redundancy_stats
+
+    def generate_report(self) -> str:
+        """Generate a comprehensive text report for classification data."""
+        report_lines = []
+        report_lines.append("=" * 50)
+        report_lines.append("CLASSIFICATION DATA ANALYSIS REPORT")
+        report_lines.append("=" * 50)
+        report_lines.append(f"File: {os.path.basename(self.h5_path)}")
+        report_lines.append("")
+
+        # basic statistics
+        report_lines.append("BASIC STATISTICS")
+        report_lines.append("-" * 50)
+        basic_stats = self.get_basic_statistics()
+        report_lines.append(f"Total samples: {basic_stats['total_samples']}")
+        report_lines.append(f"Max sequence length: {basic_stats['max_seq_len']}")
+        report_lines.append(f"Max features: {basic_stats['max_features']}")
+        report_lines.append("")
+
+        report_lines.append("Actual sequence lengths:")
+        for key, val in basic_stats["seq_lengths"].items():
+            report_lines.append(f"  {key}: {val:.2f}")
+        report_lines.append("")
+
+        report_lines.append("Actual number of features:")
+        for key, val in basic_stats["num_features"].items():
+            report_lines.append(f"  {key}: {val:.2f}")
+        report_lines.append("")
+
+        report_lines.append("Evaluation positions:")
+        for key, val in basic_stats["eval_positions"].items():
+            report_lines.append(f"  {key}: {val:.2f}")
+        report_lines.append("")
+
+        # label distribution
+        report_lines.append("LABEL DISTRIBUTION")
+        report_lines.append("-" * 50)
+        label_stats = self.analyze_target_distribution()
+        for key, val in label_stats.items():
+            report_lines.append(f"{key}: {val}")
+        report_lines.append("")
+
+        # feature distribution
+        report_lines.append("FEATURE DISTRIBUTION")
+        report_lines.append("-" * 50)
+        feature_stats = self.analyze_feature_distributions()
+        for key, val in feature_stats.items():
+            if isinstance(val, (int, np.integer)):
+                report_lines.append(f"{key}: {val}")
+            elif np.isinf(val):
+                report_lines.append(f"{key}: inf")
+            else:
+                report_lines.append(f"{key}: {val:.4f}")
+        report_lines.append("")
+
+        # redundancy
+        report_lines.append("FEATURE REDUNDANCY (Collinearity)")
+        report_lines.append("-" * 50)
+        redundancy_stats = self.analyze_feature_redundancy()
+        if redundancy_stats:
+            for key, val in redundancy_stats.items():
+                report_lines.append(f"{key}: {val:.4f}")
+        else:
+            report_lines.append("No redundancy data available")
+        report_lines.append("")
+
+        # feature-label relationships
+        report_lines.append("FEATURE-LABEL RELATIONSHIPS (ANOVA F)")
+        report_lines.append("-" * 50)
+        rel_stats = self.analyze_target_feature_relationships()
+        if rel_stats:
+            for key, val in rel_stats.items():
+                report_lines.append(f"{key}: {val:.4f}")
+        else:
+            report_lines.append("No relationship data available")
+        report_lines.append("")
+
+        # mutual information
+        report_lines.append("MUTUAL INFORMATION (Nonlinear Dependencies)")
+        report_lines.append("-" * 50)
+        mi_stats = self.analyze_mutual_information()
+        if mi_stats:
+            for key, val in mi_stats.items():
+                report_lines.append(f"{key}: {val:.4f}")
+        else:
+            report_lines.append("No mutual information data available")
+        report_lines.append("")
+
+        report_lines.append("=" * 50)
+        return "\n".join(report_lines)
+
+
+def compare_classification_priors(
+    analyzer1: ClassificationDataAnalyzer,
+    analyzer2: ClassificationDataAnalyzer,
+    name1: str,
+    name2: str,
+) -> str:
+    """Compare two different classification priors side by side.
+
+    The structure mirrors ``compare_regression_priors`` but uses
+    classification-specific statistics.
+    """
+    report_lines: list[str] = []
+    report_lines.append("=" * 80)
+    report_lines.append(f"CLASSIFICATION COMPARISON: {name1} vs {name2}")
+    report_lines.append("=" * 80)
+    report_lines.append("")
+
+    # label distributions
+    target1 = analyzer1.analyze_target_distribution()
+    target2 = analyzer2.analyze_target_distribution()
+
+    report_lines.append("LABEL DISTRIBUTION COMPARISON")
+    report_lines.append("-" * 80)
+    report_lines.append(f"{'Metric':<30} {name1:<20} {name2:<20} {'Diff':<15}")
+    report_lines.append("-" * 80)
+    for key in target1.keys():
+        v1 = target1[key]
+        v2 = target2.get(key, None)
+        if v2 is None:
+            continue
+
+        if isinstance(v1, (list, dict)):
+            # for structured entries we just print both; diff is not meaningful
+            report_lines.append(f"{key:<30} {str(v1):<20} {str(v2):<20} {'-':<15}")
+        elif isinstance(v1, (int, np.integer)):
+            diff = v2 - v1
+            report_lines.append(f"{key:<30} {v1:<20} {v2:<20} {diff:<15}")
+        else:
+            diff = float(v2) - float(v1)
+            report_lines.append(f"{key:<30} {float(v1):<20.4f} {float(v2):<20.4f} {diff:<15.4f}")
+    report_lines.append("")
+
+    # feature distributions
+    feature1 = analyzer1.analyze_feature_distributions()
+    feature2 = analyzer2.analyze_feature_distributions()
+
+    report_lines.append("FEATURE DISTRIBUTION COMPARISON")
+    report_lines.append("-" * 80)
+    report_lines.append(f"{'Metric':<30} {name1:<20} {name2:<20} {'Diff':<15}")
+    report_lines.append("-" * 80)
+    for key in feature1.keys():
+        v1 = feature1[key]
+        v2 = feature2.get(key, None)
+        if v2 is None:
+            continue
+
+        if np.isinf(v1) or np.isinf(v2):
+            report_lines.append(f"{key:<30} {'inf':<20} {'inf':<20} {'-':<15}")
+        else:
+            diff = float(v2) - float(v1)
+            report_lines.append(f"{key:<30} {float(v1):<20.4f} {float(v2):<20.4f} {diff:<15.4f}")
+    report_lines.append("")
+
+    # feature-label relationships (F)
+    rel1 = analyzer1.analyze_target_feature_relationships()
+    rel2 = analyzer2.analyze_target_feature_relationships()
+
+    if rel1 and rel2:
+        report_lines.append("FEATURE-LABEL RELATIONSHIPS COMPARISON (ANOVA F)")
+        report_lines.append("-" * 80)
+        report_lines.append(f"{'Metric':<30} {name1:<20} {name2:<20} {'Diff':<15}")
+        report_lines.append("-" * 80)
+        for key in rel1.keys():
+            if key not in rel2:
+                continue
+            diff = float(rel2[key]) - float(rel1[key])
+            report_lines.append(
+                f"{key:<30} {float(rel1[key]):<20.4f} {float(rel2[key]):<20.4f} {diff:<15.4f}"
+            )
+        report_lines.append("")
+
+    # mutual information
+    mi1 = analyzer1.analyze_mutual_information()
+    mi2 = analyzer2.analyze_mutual_information()
+
+    if mi1 and mi2:
+        report_lines.append("MUTUAL INFORMATION COMPARISON")
+        report_lines.append("-" * 80)
+        report_lines.append(f"{'Metric':<30} {name1:<20} {name2:<20} {'Diff':<15}")
+        report_lines.append("-" * 80)
+        for key in mi1.keys():
+            if key not in mi2:
+                continue
+            diff = float(mi2[key]) - float(mi1[key])
+            report_lines.append(
+                f"{key:<30} {float(mi1[key]):<20.4f} {float(mi2[key]):<20.4f} {diff:<15.4f}"
+            )
+        report_lines.append("")
+
+    # redundancy
+    redundancy1 = analyzer1.analyze_feature_redundancy()
+    redundancy2 = analyzer2.analyze_feature_redundancy()
+
+    if redundancy1 and redundancy2:
+        report_lines.append("FEATURE REDUNDANCY COMPARISON")
+        report_lines.append("-" * 80)
+        report_lines.append(f"{'Metric':<30} {name1:<20} {name2:<20} {'Diff':<15}")
+        report_lines.append("-" * 80)
+        for key in redundancy1.keys():
+            if key not in redundancy2:
+                continue
+            diff = float(redundancy2[key]) - float(redundancy1[key])
+            report_lines.append(
+                f"{key:<30} {float(redundancy1[key]):<20.4f} {float(redundancy2[key]):<20.4f} {diff:<15.4f}"
+            )
+        report_lines.append("")
+
+    # summary
+    report_lines.append("KEY DIFFERENCES SUMMARY")
+    report_lines.append("-" * 80)
+
+    # label imbalance
+    if "imbalance_ratio" in target1 and "imbalance_ratio" in target2:
+        ir_diff = float(target2["imbalance_ratio"]) - float(target1["imbalance_ratio"])
+        if abs(ir_diff) > 0.1:
+            report_lines.append(
+                f"• Class imbalance: {name2} is {'more' if ir_diff > 0 else 'less'} imbalanced "
+                f"(Δ imbalance_ratio = {abs(ir_diff):.4f})"
+            )
+
+    # label entropy
+    if "entropy_bits" in target1 and "entropy_bits" in target2:
+        ent_diff = float(target2["entropy_bits"]) - float(target1["entropy_bits"])
+        if abs(ent_diff) > 0.05:
+            report_lines.append(
+                f"• Label entropy: {name2} has {'higher' if ent_diff > 0 else 'lower'} "
+                f"class-distribution entropy (Δ = {abs(ent_diff):.4f} bits)"
+            )
+
+    # discriminative power (F mean)
+    if "f_mean" in rel1 and "f_mean" in rel2:
+        fmean_diff = float(rel2["f_mean"]) - float(rel1["f_mean"])
+        if abs(fmean_diff) > 0.05:
+            report_lines.append(
+                f"• Discriminative features (F-mean): {name2} has "
+                f"{'more' if fmean_diff > 0 else 'less'} discriminative features "
+                f"on average (Δ = {abs(fmean_diff):.4f})"
+            )
+
+    # mutual information
+    if "mean" in mi1 and "mean" in mi2:
+        mimean_diff = float(mi2["mean"]) - float(mi1["mean"])
+        if abs(mimean_diff) > 0.01:
+            report_lines.append(
+                f"• Mutual information: {name2} has "
+                f"{'higher' if mimean_diff > 0 else 'lower'} average MI between features and labels "
+                f"(Δ = {abs(mimean_diff):.4f})"
+            )
+
+    report_lines.append("")
+    report_lines.append("=" * 80)
     return "\n".join(report_lines)

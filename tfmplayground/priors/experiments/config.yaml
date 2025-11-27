@@ -1,0 +1,60 @@
+# Configuration for regression comparison experiments
+
+# Data generation settings
+data_generation:
+  num_batches: 100
+  batch_size: 8
+  max_seq_len: 1024
+  max_features: 100
+  min_eval_pos: 10
+  device: "cpu"  # cpu or cuda
+  seed: 42
+
+# Available priors to experiment with
+available_priors:
+  regression:
+    ticl_gp:
+      lib: "ticl"
+      prior_type: "gp"
+      description: "TICL Gaussian Process prior"
+    
+    ticl_mlp:
+      lib: "ticl"
+      prior_type: "mlp"
+      description: "TICL Multi-Layer Perceptron prior"
+
+  classification:
+    tabicl:
+      lib: "tabicl"
+      prior_type: "tabicl"
+      description: "TabICL prior"
+
+    ticl_classification_adapter:
+      lib: "ticl"
+      prior_type: "classification_adapter"
+      description: "TICL Multi-Layer Perceptron prior"
+
+    ticl_boolean_conjunctions:
+      lib: "ticl"
+      prior_type: "boolean_conjunctions"
+      description: "TICL Boolean Conjunctions prior"
+
+    ticl_step_function:
+      lib: "ticl"
+      prior_type: "step_function"
+      description: "TICL Step Function prior"
+
+# Output settings
+output:
+  data_dir: "./results/data"
+  reports_dir: "./results/reports"
+  save_reports: true
+
+# Analysis settings
+analysis:
+  n_samples_correlation: 100
+  n_samples_mi: 100
+  n_samples_complexity: 100
+  n_samples_redundancy: 100
+  n_samples_noise: 100
+  feature_sample_size: 1000

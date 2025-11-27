@@ -1,8 +1,10 @@
 #!/bin/bash
-# Run script for regression comparison experiments
+# Run script for classification comparison experiments
+
+mode=$1 # Mode: classification, regression
 
 echo "=================================================="
-echo "Regression Comparison Experiments"
+echo "Comparison Experiments - Mode: $mode"
 echo "=================================================="
 echo ""
 
@@ -20,7 +22,7 @@ echo "This will generate synthetic data from selected priors."
 read -p "Run data generation? (y/n): " run_gen
 
 if [ "$run_gen" = "y" ] || [ "$run_gen" = "Y" ]; then
-    python 1_data_generation.py
+    python data_generation.py $mode
     if [ $? -ne 0 ]; then
         echo "Data generation failed!"
         exit 1
@@ -34,7 +36,7 @@ echo "This will analyze the generated data and create reports."
 read -p "Run data analysis? (y/n): " run_analysis
 
 if [ "$run_analysis" = "y" ] || [ "$run_analysis" = "Y" ]; then
-    python 2_run_analysis.py
+    python run_analysis.py $mode
     if [ $? -ne 0 ]; then
         echo "Data analysis failed!"
         exit 1
