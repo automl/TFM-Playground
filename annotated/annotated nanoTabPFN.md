@@ -158,7 +158,7 @@ Transformers excel at learning from examples within their input, enabling:
 Through in-context learning, transformers can:
 - Implicitly learn and execute dataset-specific prediction strategies
 - Adapt their "algorithm" based on the observed training examples
-- Implement gradient descent in their forward pass
+- Learn to approximate gradient descent-like updates 
 - Approximate Bayesian inference
 - Learn and execute complex algorithms (like TabPFN approximating Bayesian inference)
 
