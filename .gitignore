@@ -20,3 +20,6 @@ __pycache__/
 .DS_Store
 
 uv.lock
+
+tfmplayground/priors/experiments/results/
+tfmplayground/priors/experiments/*.png

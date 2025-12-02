@@ -13,8 +13,11 @@ import argparse
 import time
 import torch
 from torch import nn
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, r2_score
 import matplotlib.pyplot as plt
+import numpy as np
+import requests
+from pfns.bar_distribution import FullSupportBarDistribution
 import os
 import sys
 
@@ -22,15 +25,15 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from tfmplayground.callbacks import ConsoleLoggerCallback
-from tfmplayground.evaluation import get_openml_predictions, TOY_TASKS_CLASSIFICATION
-from tfmplayground.interface import NanoTabPFNClassifier
+from tfmplayground.evaluation import get_openml_predictions, TOY_TASKS_CLASSIFICATION, TOY_TASKS_REGRESSION
+from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, set_randomness_seed
 
 
-class AccuracyTrackerCallback(ConsoleLoggerCallback):
+class ClassificationTrackerCallback(ConsoleLoggerCallback):
     """Callback that tracks accuracy on toy tasks and stores the final accuracy and loss history."""
 
     def __init__(self, tasks, model_name="Model"):
@@ -63,6 +66,44 @@ class AccuracyTrackerCallback(ConsoleLoggerCallback):
         )
 
 
+
+
+class RegressionTrackerCallback(ConsoleLoggerCallback):
+    """Callback that tracks R2 on toy tasks and stores the final R2 and loss history."""
+
+    def __init__(self, tasks, model_name="Model"):
+        self.tasks = tasks
+        self.model_name = model_name
+        self.final_score = 0.0
+        self.device = get_default_device()
+        self.loss_history = []
+        self.score_history = []
+        self.epoch_history = []
+
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, dist=None, **kwargs):
+        # Use the full NanoTabPFNRegressor which handles the distribution
+        regressor = NanoTabPFNRegressor(model=model, dist=dist, device=self.device)
+        predictions = get_openml_predictions(
+            model=regressor, tasks=self.tasks, classification=False
+        )
+        scores = []
+        for dataset_name, (y_true, y_pred, _) in predictions.items():
+            scores.append(r2_score(y_true, y_pred))
+        avg_score = sum(scores) / len(scores)
+        self.final_score = avg_score
+
+        # Track history
+        self.epoch_history.append(epoch)
+        self.loss_history.append(loss)
+        self.score_history.append(avg_score)
+
+        print(
+            f"[{self.model_name}] epoch {epoch:5d} | time {epoch_time:5.2f}s | "
+            f"mean loss {loss:5.2f} | avg R2 {avg_score:.3f}",
+            flush=True,
+        )
+
+
 def train_model(
     prior_path: str,
     model_name: str,
@@ -71,6 +112,7 @@ def train_model(
     steps: int = 100,
     lr: float = 1e-4,
     device=None,
+    buckets_path: str = "checkpoints/nanotabpfn_regressor_buckets.pth",
 ):
     """
     Train a single nanoTabPFN model on the given prior.
@@ -103,23 +145,46 @@ def train_model(
         starting_index=0,
     )
 
+    # Define problem type
+    is_regression = prior.problem_type == "regression"
+
+    # Prepare criterion for regression (FullSupportBarDistribution)
+    if is_regression:
+        if not os.path.isfile(buckets_path):
+            print(f"Downloading bucket edges to {buckets_path}...")
+            os.makedirs(os.path.dirname(buckets_path), exist_ok=True)
+            response = requests.get(
+                "https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/nanotabpfn_regressor_buckets.pth"
+            )
+            with open(buckets_path, "wb") as f:
+                f.write(response.content)
+        
+        bucket_edges = torch.load(buckets_path, map_location=device)
+        criterion = FullSupportBarDistribution(bucket_edges).float().to(device)
+        num_outputs = criterion.num_bars
+    else:
+        criterion = nn.CrossEntropyLoss()
+        num_outputs = prior.max_num_classes if prior.max_num_classes else 1
+
     # Create model
     model = NanoTabPFNModel(
         num_attention_heads=6,
         embedding_size=192,
         mlp_hidden_size=768,
         num_layers=6,
-        num_outputs=prior.max_num_classes,
+        num_outputs=num_outputs,
     )
 
     # Count parameters
     param_count = sum(p.numel() for p in model.parameters())
 
-    # Define loss
-    criterion = nn.CrossEntropyLoss()
-
-    # Create callback to track accuracy
-    callback = AccuracyTrackerCallback(TOY_TASKS_CLASSIFICATION, model_name)
+    # Define callback based on problem type
+    if is_regression:
+        # criterion is already set to FullSupportBarDistribution
+        callback = RegressionTrackerCallback(TOY_TASKS_REGRESSION, model_name)
+    else:
+        # criterion is already set to CrossEntropyLoss
+        callback = ClassificationTrackerCallback(TOY_TASKS_CLASSIFICATION, model_name)
 
     # Train the model and track time
     train_start = time.time()
@@ -154,7 +219,7 @@ def train_model(
 
     return (
         trained_model,
-        callback.final_accuracy,
+        callback.final_score if is_regression else callback.final_accuracy,
         callback,
         train_time,
         inference_time,
@@ -163,7 +228,7 @@ def train_model(
 
 
 def plot_comparison(
-    callback1, callback2, prior1_name, prior2_name, save_path="comparison_plot.png"
+    callback1, callback2, prior1_name, prior2_name, save_path="comparison_plot.png", metric_name="Accuracy"
 ):
     """
     Create comparison plots for loss and accuracy curves.
@@ -201,9 +266,13 @@ def plot_comparison(
     ax1.grid(True, alpha=0.3)
 
     # Plot accuracy curves
+    # Plot accuracy/score curves
+    metric_history1 = callback1.score_history if hasattr(callback1, "score_history") else callback1.accuracy_history
+    metric_history2 = callback2.score_history if hasattr(callback2, "score_history") else callback2.accuracy_history
+    
     ax2.plot(
         callback1.epoch_history,
-        callback1.accuracy_history,
+        metric_history1,
         "b-o",
         label=f"Model 1: {prior1_name}",
         linewidth=2,
@@ -211,15 +280,15 @@ def plot_comparison(
     )
     ax2.plot(
         callback2.epoch_history,
-        callback2.accuracy_history,
+        metric_history2,
         "r-s",
         label=f"Model 2: {prior2_name}",
         linewidth=2,
         markersize=6,
     )
     ax2.set_xlabel("Epoch", fontsize=12)
-    ax2.set_ylabel("Accuracy", fontsize=12)
-    ax2.set_title("Validation Accuracy Comparison", fontsize=14, fontweight="bold")
+    ax2.set_ylabel(metric_name, fontsize=12)
+    ax2.set_title(f"Validation {metric_name} Comparison", fontsize=14, fontweight="bold")
     ax2.legend(fontsize=10)
     ax2.grid(True, alpha=0.3)
 
@@ -272,6 +341,13 @@ def main():
         help="Path to save the comparison plot",
     )
 
+    parser.add_argument(
+        "--buckets_path",
+        type=str,
+        default="checkpoints/nanotabpfn_regressor_buckets.pth",
+        help="Path to bucket edges for regression",
+    )
+    
     args = parser.parse_args()
 
     # Set random seed
@@ -291,6 +367,7 @@ def main():
             steps=args.steps,
             lr=args.lr,
             device=device,
+            buckets_path=args.buckets_path,
         )
     )
 
@@ -307,6 +384,7 @@ def main():
             steps=args.steps,
             lr=args.lr,
             device=device,
+            buckets_path=args.buckets_path,
         )
     )
 
@@ -316,14 +394,19 @@ def main():
     print(f"{'='*80}\n")
 
     print(f"Model 1: {os.path.basename(args.prior1)}")
-    print(f"  Final Accuracy: {accuracy1:.4f}")
+    # Determine metric name
+    is_regression = hasattr(callback1, "score_history")
+    metric_name = "R2 Score" if is_regression else "Accuracy"
+
+    print(f"Model 1: {os.path.basename(args.prior1)}")
+    print(f"  Final {metric_name}: {accuracy1:.4f}")
     print(f"  Final Loss: {callback1.loss_history[-1]:.4f}")
     print(f"  Training Time: {train_time1:.2f}s")
     print(f"  Inference Time: {inference_time1*1000:.2f}ms")
     print(f"  Parameters: {param_count1/1e6:.2f}M")
     print()
     print(f"Model 2: {os.path.basename(args.prior2)}")
-    print(f"  Final Accuracy: {accuracy2:.4f}")
+    print(f"  Final {metric_name}: {accuracy2:.4f}")
     print(f"  Final Loss: {callback2.loss_history[-1]:.4f}")
     print(f"  Training Time: {train_time2:.2f}s")
     print(f"  Inference Time: {inference_time2*1000:.2f}ms")
@@ -335,7 +418,7 @@ def main():
     accuracy_diff = accuracy1 - accuracy2
     better_accuracy = "Model 1" if accuracy_diff > 0 else "Model 2"
     print(
-        f"  Accuracy Difference: {abs(accuracy_diff):.4f} (Winner: {better_accuracy})"
+        f"  {metric_name} Difference: {abs(accuracy_diff):.4f} (Winner: {better_accuracy})"
     )
 
     train_speedup = train_time1 / train_time2
@@ -356,7 +439,7 @@ def main():
     # Create comparison plots
     prior1_name = os.path.basename(args.prior1).replace(".h5", "").replace("prior_", "")
     prior2_name = os.path.basename(args.prior2).replace(".h5", "").replace("prior_", "")
-    plot_comparison(callback1, callback2, prior1_name, prior2_name, args.plot_output)
+    plot_comparison(callback1, callback2, prior1_name, prior2_name, args.plot_output, metric_name=metric_name)
 
     return {
         "model1": {
@@ -364,7 +447,7 @@ def main():
             "accuracy": accuracy1,
             "model": model1,
             "loss_history": callback1.loss_history,
-            "accuracy_history": callback1.accuracy_history,
+            "accuracy_history": callback1.score_history if is_regression else callback1.accuracy_history,
             "train_time": train_time1,
             "inference_time": inference_time1,
             "param_count": param_count1,
@@ -374,7 +457,7 @@ def main():
             "accuracy": accuracy2,
             "model": model2,
             "loss_history": callback2.loss_history,
-            "accuracy_history": callback2.accuracy_history,
+            "accuracy_history": callback2.score_history if is_regression else callback2.accuracy_history,
             "train_time": train_time2,
             "inference_time": inference_time2,
             "param_count": param_count2,
