@@ -1,35 +1,13 @@
 """CLI runner for regression data analysis."""
 
 import os
-import re
 from pathlib import Path
 import sys
 from typing import Dict, List
 from itertools import combinations
-
-from utils import load_config
-from data_analysis import RegressionDataAnalyzer, compare_regression_priors, ClassificationDataAnalyzer, compare_classification_priors
-
-
-def discover_data_files(data_dir: str) -> Dict[str, str]:
-    """Discover generated data files in the data directory."""
-    if not os.path.exists(data_dir):
-        return {}
-    
-    files = {}
-    for filename in os.listdir(data_dir):
-        if filename.endswith('.h5') and filename.startswith('prior_'):
-            # extract prior name from filename: prior_<name>_<params>.h5
-            # remove 'prior_' prefix and '.h5' suffix
-            name_part = filename[6:-3]
-            
-            # prior name is everything before the first digit
-            match = re.match(r'^([a-zA-Z_]+)', name_part)
-            if match:
-                prior_name = match.group(1).rstrip('_')
-                files[prior_name] = os.path.join(data_dir, filename)
-    
-    return files
+from utils import load_config, discover_h5_files
+from regression.analyzer import RegressionDataAnalyzer, compare_regression_priors
+from classification.analyzer import ClassificationDataAnalyzer, compare_classification_priors
 
 
 def select_priors_for_analysis(available_files: Dict[str, str]) -> List[str]:
@@ -109,8 +87,8 @@ def main():
     
     config = load_config(str(Path(__file__).parent / "config.yaml"))
     
-    data_dir = config['output']['data_dir']
-    reports_dir = config['output']['reports_dir']
+    data_dir = Path(mode) /config['output']['data_dir']
+    reports_dir = Path(mode) /config['output']['reports_dir']
     save_reports = config['output']['save_reports']
     
     os.makedirs(reports_dir, exist_ok=True)
@@ -119,7 +97,7 @@ def main():
     print(f"{mode.upper()} DATA ANALYSIS")
     print("=" * 50)
     
-    available_files = discover_data_files(data_dir)
+    available_files = discover_h5_files(data_dir)
     
     if not available_files:
         print(f"\nNo data files found in {data_dir}")

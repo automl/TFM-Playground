@@ -142,11 +142,11 @@ def select_priors_interactive(available_priors: Dict) -> List[str]:
 
 def main():
     """Generate data for selected priors using configuration."""
-    mode = sys.argv[1]  # Mode: classification, regression
+    mode = sys.argv[1].lower()  # Mode: classification, regression
     
     config = load_config(str(Path(__file__).parent / "config.yaml"))
     available_priors = config['available_priors'][mode]
-    save_dir = config['output']['data_dir']
+    save_dir = Path(mode) / config["output"]["data_dir"]
     
     print("=" * 50)
     print("DATA GENERATION")

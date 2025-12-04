@@ -1,4 +1,4 @@
-# Configuration for regression comparison experiments
+# Configuration for prior comparison experiments
 
 # Data generation settings
 data_generation:
@@ -57,4 +57,4 @@ analysis:
   n_samples_complexity: 100
   n_samples_redundancy: 100
   n_samples_noise: 100
-  feature_sample_size: 1000
+  feature_sample_size: 100
