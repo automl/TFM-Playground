@@ -94,4 +94,39 @@ trained_model, loss = train(
 ```
 
 ### Creating your own datasets
-Check out the [tabularpriors](https://github.com/automl/tabularpriors/) repository to create your own data using publicly available priors.
+Check out [tfmplayground.priors](https://github.com/automl/TFM-Playground/tree/main/tfmplayground/priors) to create your own data using publicly available priors.
+
+You can use tfmplayground.priors as a command-line-tool to pre-generate data from a prior, e.g. via
+```
+python -m tfmplayground.priors --lib tabicl \
+       --num_batches 1000 --batch_size 4 \
+       --min_features 3 --max_features 3 \
+       --max_seq_len 50 --max_classes 3 \
+       --save_path tabicl_4k_50x3.h5
+```
+which can afterwards be loaded via
+```python
+from tfmplayground.priors.dataloader import PriorDumpDataLoader
+prior = PriorDumpDataLoader('tabicl_4k_50x3.h5', num_steps=20, batch_size=4, device='cpu')
+```
+You can also just let it create the data on-the-fly via:
+```python
+from tfmplayground.priors.dataloader import TabICLPriorDataLoader
+prior = TabICLPriorDataLoader(
+    num_steps=20,
+    batch_size=4,
+    num_datapoints_max=50,
+    min_features=3,
+    max_features=3,
+    max_num_classes=3,
+    device='cpu'
+)
+```
+You can check out `next(iter(prior))` if you want to see an example batch.
+
+Check out `visualization_demo.ipynb` for some more examples.
+
+### Supported Priors
+
+- [TabICL](https://github.com/soda-inria/tabicl) (Classification)
+- [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
