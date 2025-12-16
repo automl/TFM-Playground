@@ -2,6 +2,50 @@
 
 import torch
 
+# extensible prior registry: add new libraries here
+PRIOR_REGISTRY = {
+    "ticl": {
+        "priors": ["mlp", "gp", "classification_adapter", "boolean_conjunctions", "step_function"],
+        "classification_priors": ["classification_adapter", "boolean_conjunctions", "step_function"],
+        "composite_priors": ["classification_adapter"],
+        "default_prior": "mlp",
+    },
+    "tabicl": {
+        "priors": ["mlp_scm", "tree_scm", "mix_scm", "dummy"],
+        "classification_priors": ["mlp_scm", "tree_scm", "mix_scm", "dummy"],  # TabICL is classification-only
+        "composite_priors": [],
+        "default_prior": "mix_scm",
+    }
+}
+
+def get_available_libraries():
+    """Return list of available library names."""
+    return list(PRIOR_REGISTRY.keys())
+
+def get_priors_for_lib(lib: str):
+    """Return available priors for a given library."""
+    if lib not in PRIOR_REGISTRY:
+        raise ValueError(f"Unknown library: '{lib}'. Available: {', '.join(get_available_libraries())}")
+    return PRIOR_REGISTRY[lib]["priors"]
+
+def is_classification_prior(lib: str, prior_type: str):
+    """Check if a prior is a classification prior."""
+    if lib not in PRIOR_REGISTRY:
+        return False
+    return prior_type in PRIOR_REGISTRY[lib]["classification_priors"]
+
+def is_composite_prior(lib: str, prior_type: str):
+    """Check if a prior requires a base prior."""
+    if lib not in PRIOR_REGISTRY:
+        return False
+    return prior_type in PRIOR_REGISTRY[lib]["composite_priors"]
+
+def get_default_prior(lib: str):
+    """Get the default prior type for a library."""
+    if lib not in PRIOR_REGISTRY:
+        raise ValueError(f"Unknown library: '{lib}'. Available: {', '.join(get_available_libraries())}")
+    return PRIOR_REGISTRY[lib]["default_prior"]
+
 def get_ticl_prior_config(prior_type: str, max_num_classes: int = None) -> dict:
     """Return the default kwargs for MLPPrior, GPPrior, or classification priors."""
     

@@ -7,11 +7,43 @@ import numpy as np
 import torch
 from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
 
-from .config import get_ticl_prior_config
+from .config import get_ticl_prior_config, get_priors_for_lib, is_composite_prior
 
 
-def build_ticl_prior(prior_type: str, base_prior_type: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
-    """Builds a TICL prior based on the prior type string using the defaults in config.py."""
+def validate_prior_config(lib: str, prior_type: str = None, base_prior: str = None):
+    """Validate that prior_type is compatible with the selected library.
+    
+    Args:
+        lib: Library name (e.g., 'ticl', 'tabicl', 'realpfn')
+        prior_type: Type of prior to use (None to use dataloader defaults)
+        base_prior: Base prior for composite priors (None to use defaults)
+        
+    Raises:
+        ValueError: If prior_type is not compatible with the library.
+    """
+    # if prior_type is None, skip validation (dataloaders will use their defaults)
+    if prior_type is None:
+        return
+    
+    available_priors = get_priors_for_lib(lib)
+    
+    if prior_type not in available_priors:
+        raise ValueError(
+            f"Unknown {lib.upper()} prior: '{prior_type}'. "
+            f"Available {lib.upper()} priors: {', '.join(available_priors)}"
+        )
+    #note: there is no base_prior validation - dataloaders handle their own defaults
+
+
+
+def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
+    """Builds a TICL prior based on the prior type string using the defaults in config.py.
+    
+    Args:
+        prior_type: Type of TICL prior ('mlp', 'gp', 'classification_adapter', etc.)
+        base_prior: Base regression prior for composite priors (e.g., 'mlp' or 'gp' for classification_adapter)
+        max_num_classes: Maximum number of classes for classification priors
+    """
 
     cfg = get_ticl_prior_config(prior_type, max_num_classes)
     
@@ -20,11 +52,11 @@ def build_ticl_prior(prior_type: str, base_prior_type: str = None, max_num_class
     elif prior_type == "gp":
         return GPPrior(cfg)
     elif prior_type == "classification_adapter":
-        if base_prior_type is None:
-            base_prior_type = "mlp"  # default to MLP
+        if base_prior is None:
+            base_prior = "mlp"  # default to MLP
         # build the base regression prior
-        base_prior = build_ticl_prior(base_prior_type)
-        return ClassificationAdapterPrior(base_prior, **cfg)
+        base_prior_obj = build_ticl_prior(base_prior)
+        return ClassificationAdapterPrior(base_prior_obj, **cfg)
     elif prior_type == "boolean_conjunctions":
         return BooleanConjunctionPrior(hyperparameters=cfg)
     elif prior_type == "step_function":

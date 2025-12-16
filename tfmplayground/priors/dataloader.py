@@ -118,6 +118,7 @@ class TabICLPriorDataLoader(DataLoader):
         min_features (int): Minimum number of features in x.
         max_features (int): Maximum number of features in x.
         max_num_classes (int): Maximum number of classes (for classification tasks).
+        prior_type (str): Type of prior: 'mlp_scm', 'tree_scm', 'mix_scm' (default), or 'dummy'.
         device (torch.device): Target device for tensors.
     """
 
@@ -131,6 +132,7 @@ class TabICLPriorDataLoader(DataLoader):
         max_features: int,
         max_num_classes: int,
         device: torch.device,
+        prior_type: str = "mix_scm"
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -139,6 +141,7 @@ class TabICLPriorDataLoader(DataLoader):
         self.min_features = min_features
         self.max_features = max_features
         self.max_num_classes = max_num_classes
+        self.prior_type = prior_type
         self.device = device
 
         self.pd = TabICLPriorDataset(
@@ -149,6 +152,7 @@ class TabICLPriorDataLoader(DataLoader):
             max_classes=max_num_classes,
             min_seq_len=num_datapoints_min,
             max_seq_len=num_datapoints_max,
+            prior_type=prior_type,
         )
 
     def tabicl_to_ours(self, d):
