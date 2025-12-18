@@ -5,32 +5,32 @@ from typing import Union
 import h5py
 import numpy as np
 import torch
-from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
+# from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
 
 from .config import get_ticl_prior_config
 
 
-def build_ticl_prior(prior_type: str, base_prior_type: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
-    """Builds a TICL prior based on the prior type string using the defaults in config.py."""
+# def build_ticl_prior(prior_type: str, base_prior_type: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
+#     """Builds a TICL prior based on the prior type string using the defaults in config.py."""
 
-    cfg = get_ticl_prior_config(prior_type, max_num_classes)
+#     cfg = get_ticl_prior_config(prior_type, max_num_classes)
     
-    if prior_type == "mlp":
-        return MLPPrior(cfg)
-    elif prior_type == "gp":
-        return GPPrior(cfg)
-    elif prior_type == "classification_adapter":
-        if base_prior_type is None:
-            base_prior_type = "mlp"  # default to MLP
-        # build the base regression prior
-        base_prior = build_ticl_prior(base_prior_type)
-        return ClassificationAdapterPrior(base_prior, **cfg)
-    elif prior_type == "boolean_conjunctions":
-        return BooleanConjunctionPrior(hyperparameters=cfg)
-    elif prior_type == "step_function":
-        return StepFunctionPrior(cfg)
-    else:
-        raise ValueError(f"Unsupported TICL prior type: {prior_type}")
+#     if prior_type == "mlp":
+#         return MLPPrior(cfg)
+#     elif prior_type == "gp":
+#         return GPPrior(cfg)
+#     elif prior_type == "classification_adapter":
+#         if base_prior_type is None:
+#             base_prior_type = "mlp"  # default to MLP
+#         # build the base regression prior
+#         base_prior = build_ticl_prior(base_prior_type)
+#         return ClassificationAdapterPrior(base_prior, **cfg)
+#     elif prior_type == "boolean_conjunctions":
+#         return BooleanConjunctionPrior(hyperparameters=cfg)
+#     elif prior_type == "step_function":
+#         return StepFunctionPrior(cfg)
+#     else:
+#         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
 
 
 def dump_prior_to_h5(

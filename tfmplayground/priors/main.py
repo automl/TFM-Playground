@@ -43,6 +43,7 @@ def main():
         args.save_path = f"prior_{args.lib}{prior_name}_{args.num_batches}x{args.batch_size}_{args.max_seq_len}x{args.max_features}.h5"
 
     if args.lib == "ticl":
+        raise NotImplementedError("TICL not supported in this installation.")
         # determine if this is a classification prior
         is_classification_prior = args.prior_type in ["classification_adapter", "boolean_conjunctions", "step_function"]
         

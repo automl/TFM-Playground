@@ -5,17 +5,18 @@ from .dataloader import (
     PriorDataLoader,
     PriorDumpDataLoader,
     TabICLPriorDataLoader,
-    TICLPriorDataLoader,
+    # TICLPriorDataLoader,
 )
-from .utils import build_ticl_prior, dump_prior_to_h5
+# from .utils import build_ticl_prior, dump_prior_to_h5
+from .utils import dump_prior_to_h5
 
 __version__ = "0.0.1"
 __all__ = [
-    "get_ticl_prior_config",
+    # "get_ticl_prior_config",
     "PriorDataLoader", 
     "PriorDumpDataLoader",
     "TabICLPriorDataLoader",
-    "TICLPriorDataLoader",
-    "build_ticl_prior",
+    # "TICLPriorDataLoader",
+    # "build_ticl_prior",
     "dump_prior_to_h5",
 ]
