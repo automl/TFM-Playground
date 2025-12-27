@@ -1,20 +1,30 @@
-"""Configuration module for TICL priors."""
+"""Configuration module for all priors."""
 
 import torch
 
 # extensible prior registry: add new libraries here
+# regression_priors: supports regression
+# classification_priors: supports classification (max_classes>0)
+# composite_priors: requires base_prior parameter
 PRIOR_REGISTRY = {
     "ticl": {
-        "priors": ["mlp", "gp", "classification_adapter", "boolean_conjunctions", "step_function"],
+        "regression_priors": ["mlp", "gp"],
         "classification_priors": ["classification_adapter", "boolean_conjunctions", "step_function"],
         "composite_priors": ["classification_adapter"],
         "default_prior": "mlp",
     },
     "tabicl": {
-        "priors": ["mlp_scm", "tree_scm", "mix_scm", "dummy"],
-        "classification_priors": ["mlp_scm", "tree_scm", "mix_scm", "dummy"],  # TabICL is classification-only
+        "regression_priors": [],
+        "classification_priors": ["mlp_scm", "tree_scm", "mix_scm", "dummy"],
         "composite_priors": [],
         "default_prior": "mix_scm",
+    },
+    "tabpfn": { # supports both regression and classification infers from max_classes
+        #gp_mix is included in the library wrapper but lacks implementation so its not included here
+        "regression_priors": ["mlp", "gp", "prior_bag"],
+        "classification_priors": ["mlp", "gp", "prior_bag"],
+        "composite_priors": [],
+        "default_prior": "mlp",
     }
 }
 
@@ -23,22 +33,13 @@ def get_available_libraries():
     return list(PRIOR_REGISTRY.keys())
 
 def get_priors_for_lib(lib: str):
-    """Return available priors for a given library."""
+    """Return available priors for a given library (union of regression and classification priors)."""
     if lib not in PRIOR_REGISTRY:
         raise ValueError(f"Unknown library: '{lib}'. Available: {', '.join(get_available_libraries())}")
-    return PRIOR_REGISTRY[lib]["priors"]
-
-def is_classification_prior(lib: str, prior_type: str):
-    """Check if a prior is a classification prior."""
-    if lib not in PRIOR_REGISTRY:
-        return False
-    return prior_type in PRIOR_REGISTRY[lib]["classification_priors"]
-
-def is_composite_prior(lib: str, prior_type: str):
-    """Check if a prior requires a base prior."""
-    if lib not in PRIOR_REGISTRY:
-        return False
-    return prior_type in PRIOR_REGISTRY[lib]["composite_priors"]
+    
+    regression = set(PRIOR_REGISTRY[lib]["regression_priors"])
+    classification = set(PRIOR_REGISTRY[lib]["classification_priors"])
+    return sorted(regression | classification)
 
 def get_default_prior(lib: str):
     """Get the default prior type for a library."""
@@ -108,3 +109,42 @@ def get_ticl_prior_config(prior_type: str, max_num_classes: int = None) -> dict:
         }
     else:
         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
+
+
+def get_tabpfn_prior_config(prior_type: str, max_num_classes: int = None) -> dict:
+    """Return the default kwargs for TabPFN priors.
+    
+    Note: The external TabPFNPrior library supports many more parameters than shown here.
+    see tabpfn_prior.tabpfn_prior.TabPFNPriorDataLoader for the 
+    full list.
+    """
+    
+    if prior_type == "mlp":
+        return {
+            "sampling": "uniform",
+            "num_layers": 2,
+            "prior_mlp_hidden_dim": 64,
+            "noise_std": 0.1,
+            "prior_mlp_dropout_prob": 0.0,
+            "init_std": 1.0,
+            "random_feature_rotation": True,
+        }
+    elif prior_type == "gp":
+        return {
+            "sampling": "uniform",
+            "noise": 0.1,
+            "outputscale": 1.0,
+            "lengthscale": 0.2,
+            "normalize_by_used_features": True,
+        }
+    elif prior_type == "prior_bag":
+        # prior bag combines MLP and GP priors
+        mlp_config = get_tabpfn_prior_config("mlp", max_num_classes)
+        gp_config = get_tabpfn_prior_config("gp", max_num_classes)
+        return {
+            **mlp_config,
+            **gp_config,
+            "prior_bag_exp_weights_1": 2.0,
+        }
+    else:
+        raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")

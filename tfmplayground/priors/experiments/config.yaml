@@ -2,17 +2,22 @@
 
 # Data generation settings
 data_generation:
-  num_batches: 100
+  num_batches: 10
   batch_size: 8
-  max_seq_len: 1024
-  max_features: 100
+  max_seq_len: 100
+  max_features: 10
   min_eval_pos: 10
   device: "cpu"  # cpu or cuda
   seed: 42
+  max_classes_classification: 10  # for classification tasks (regression is always 0)
 
 # Available priors to experiment with
+# Note: TabPFN priors support both regression and classification
+#       TICL: mlp/gp are regression-only, others are classification-only
+#       TabICL: classification-only
 available_priors:
   regression:
+    # TICL regression priors
     ticl_gp:
       lib: "ticl"
       prior_type: "gp"
@@ -22,17 +27,45 @@ available_priors:
       lib: "ticl"
       prior_type: "mlp"
       description: "TICL Multi-Layer Perceptron prior"
+    
+    # TabPFN priors (also support classification)
+    tabpfn_mlp:
+      lib: "tabpfn"
+      prior_type: "mlp"
+      description: "TabPFN MLP prior"
+    
+    tabpfn_gp:
+      lib: "tabpfn"
+      prior_type: "gp"
+      description: "TabPFN Gaussian Process prior"
+    
+    tabpfn_prior_bag:
+      lib: "tabpfn"
+      prior_type: "prior_bag"
+      description: "TabPFN Prior Bag (ensemble)"
 
   classification:
-    tabicl:
+    # TabICL (classification-only)
+    tabicl_mlp_scm:
       lib: "tabicl"
-      prior_type: "tabicl"
-      description: "TabICL prior"
+      prior_type: "mlp_scm"
+      description: "TabICL MLP Structural Causal Model"
+    
+    tabicl_tree_scm:
+      lib: "tabicl"
+      prior_type: "tree_scm"
+      description: "TabICL Tree Structural Causal Model"
+    
+    tabicl_mix_scm:
+      lib: "tabicl"
+      prior_type: "mix_scm"
+      description: "TabICL Mix SCM prior (default, ensemble of MLP and Tree)"
 
+    # TICL classification priors
     ticl_classification_adapter:
       lib: "ticl"
       prior_type: "classification_adapter"
-      description: "TICL Multi-Layer Perceptron prior"
+      description: "TICL Classification Adapter with MLP/GP base"
 
     ticl_boolean_conjunctions:
       lib: "ticl"
@@ -43,6 +76,22 @@ available_priors:
       lib: "ticl"
       prior_type: "step_function"
       description: "TICL Step Function prior"
+    
+    # TabPFN priors (also support regression)
+    tabpfn_mlp:
+      lib: "tabpfn"
+      prior_type: "mlp"
+      description: "TabPFN MLP prior"
+    
+    tabpfn_gp:
+      lib: "tabpfn"
+      prior_type: "gp"
+      description: "TabPFN Gaussian Process prior"
+    
+    tabpfn_prior_bag:
+      lib: "tabpfn"
+      prior_type: "prior_bag"
+      description: "TabPFN Prior Bag (ensemble)"
 
 # Output settings
 output:

@@ -17,6 +17,7 @@ def generate_prior_data(
     prior_type: str,
     config: Dict,
     save_dir: str,
+    max_classes: int,
 ) -> str:
     """Generate synthetic data from a prior using the main CLI.
     
@@ -26,6 +27,7 @@ def generate_prior_data(
         prior_type: Prior type (e.g., 'gp', 'mlp')
         config: Configuration dictionary
         save_dir: Directory to save the HDF5 file
+        max_classes: Maximum number of classes (0 for regression, >0 for classification)
         
     Returns:
         Path to the generated HDF5 file
@@ -60,6 +62,7 @@ def generate_prior_data(
         sys.executable, "-m", "tfmplayground.priors",
         "--lib", lib,
         "--prior_type", prior_type,
+        "--max_classes", str(max_classes),
         "--num_batches", str(gen_config['num_batches']),
         "--batch_size", str(gen_config['batch_size']),
         "--max_seq_len", str(gen_config['max_seq_len']),
@@ -148,9 +151,13 @@ def main():
     available_priors = config['available_priors'][mode]
     save_dir = Path(mode) / config["output"]["data_dir"]
     
+    # set max_classes: 0 for regression, from config for classification
+    max_classes = 0 if mode == 'regression' else config['data_generation']['max_classes_classification']
+    
     print("=" * 50)
     print("DATA GENERATION")
     print("=" * 50)
+    print(f"Mode: {mode.upper()}")
     print(f"Output: {save_dir}")
     
     selected_priors = select_priors_interactive(available_priors)
@@ -168,6 +175,7 @@ def main():
             prior_type=prior_info['prior_type'],
             config=config,
             save_dir=save_dir,
+            max_classes=max_classes,
         )
         generated_files[prior_name] = file_path
     

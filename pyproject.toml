@@ -27,6 +27,7 @@ dependencies = [
     "numpy>=2.0.2",
     "tabicl @ git+https://github.com/soda-inria/tabicl@e88d1600701240fd353803bf1b73b5309b18d406",
     "ticl @ git+https://github.com/microsoft/ticl.git@main",
+    "tabpfn-v1-prior @ git+https://github.com/automl/tabpfn-v1-prior.git",
     "numba>=0.61.2",
     "interpret>=0.4.4",
     "mlflow>=3.1.4",

@@ -6,6 +6,8 @@ import h5py
 import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
+# import here for future use & cleaner imports it already handles type conversions
+from tabpfn_prior import TabPFNPriorDataLoader
 from torch.utils.data import DataLoader
 
 

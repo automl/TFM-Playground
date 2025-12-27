@@ -7,19 +7,19 @@ import numpy as np
 import torch
 from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
 
-from .config import get_ticl_prior_config, get_priors_for_lib, is_composite_prior
+from .config import get_ticl_prior_config, get_tabpfn_prior_config, get_priors_for_lib
 
 
-def validate_prior_config(lib: str, prior_type: str = None, base_prior: str = None):
+def validate_prior_config(lib: str, prior_type: str = None, max_classes: int = 0):
     """Validate that prior_type is compatible with the selected library.
     
     Args:
-        lib: Library name (e.g., 'ticl', 'tabicl', 'realpfn')
+        lib: Library name (e.g., 'ticl', 'tabicl', 'tabpfn')
         prior_type: Type of prior to use (None to use dataloader defaults)
-        base_prior: Base prior for composite priors (None to use defaults)
+        max_classes: Maximum number of classes (required > 0 for classification only libraries)
         
     Raises:
-        ValueError: If prior_type is not compatible with the library.
+        ValueError: If prior_type is not compatible with the library or max_classes is invalid.
     """
     # if prior_type is None, skip validation (dataloaders will use their defaults)
     if prior_type is None:
@@ -32,8 +32,14 @@ def validate_prior_config(lib: str, prior_type: str = None, base_prior: str = No
             f"Unknown {lib.upper()} prior: '{prior_type}'. "
             f"Available {lib.upper()} priors: {', '.join(available_priors)}"
         )
+    
+    # TabICL is classification-only, requires max_classes > 0
+    if lib == "tabicl" and max_classes <= 0:
+        raise ValueError(
+            f"TabICL is classification-only and requires --max_classes > 0. "
+            f"Current value: {max_classes}. Set --max_classes to a positive integer (e.g., 10)."
+        )
     #note: there is no base_prior validation - dataloaders handle their own defaults
-
 
 
 def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
@@ -63,6 +69,25 @@ def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: i
         return StepFunctionPrior(cfg)
     else:
         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
+
+
+def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
+    """Builds TabPFN prior configuration with appropriate settings for regression or classification.
+        
+    Args:
+        prior_type: Type of TabPFN prior ('mlp', 'gp', 'prior_bag')
+        max_classes: Maximum number of classes (0 for regression, >0 for classification)
+        
+    Returns:
+        dict with 'flexible', 'max_num_classes', and 'prior_config' keys
+    """
+    is_regression = max_classes == 0
+    
+    return {
+        'flexible': not is_regression,  # false for regression, true for classification
+        'max_num_classes': 2 if is_regression else max_classes,  # library requires >=2 regardless of regression or classification
+        'prior_config': get_tabpfn_prior_config(prior_type, max_classes),
+    }
 
 
 def dump_prior_to_h5(
