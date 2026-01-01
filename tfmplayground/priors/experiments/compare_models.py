@@ -320,13 +320,13 @@ def main():
     parser.add_argument(
         "--prior1",
         type=str,
-        default="./results/data/prior_ticl_classification_adapter_10x8_50x3.h5",
+        default=".classification/results/data/prior_ticl_classification_adapter_10x8_50x3.h5",
         help="Path to first prior file",
     )
     parser.add_argument(
         "--prior2",
         type=str,
-        default="./results/data/prior_tabicl_10x8_50x3.h5",
+        default=".classification/results/data/prior_tabicl_10x8_50x3.h5",
         help="Path to second prior file",
     )
     parser.add_argument(
