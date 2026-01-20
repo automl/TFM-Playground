@@ -15,7 +15,7 @@ from tfmplayground.utils import get_default_device
 def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,
           epochs: int, accumulate_gradients: int = 1, lr: float = 1e-4, device: torch.device = None,
           callbacks: list[Callback] = None, ckpt: Dict[str, torch.Tensor] = None, multi_gpu: bool = False,
-          run_name: str = 'nanoTFM'):
+          run_name: str = 'nanoTFM', workdir: str = '.'):
     """
     Trains our model on the given prior using the given criterion.
 
@@ -34,7 +34,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     Returns:
         (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
     """
-    work_dir = 'workdir/'+run_name
+    work_dir = os.path.join(workdir, run_name)
     os.makedirs(work_dir, exist_ok=True)
     if multi_gpu:
         model = nn.DataParallel(model)
