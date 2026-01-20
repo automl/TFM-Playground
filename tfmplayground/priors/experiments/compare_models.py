@@ -8,7 +8,7 @@ from matplotlib.ticker import MaxNLocator
 import requests
 import torch
 from pfns.bar_distribution import FullSupportBarDistribution
-from sklearn.metrics import accuracy_score, r2_score
+from sklearn.metrics import roc_auc_score, r2_score
 from torch import nn
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
@@ -41,7 +41,7 @@ class ClassificationTrackerCallback(ConsoleLoggerCallback):
         predictions = get_openml_predictions(model=classifier, tasks=self.tasks)
         scores = []
         for dataset_name, (y_true, y_pred, y_proba) in predictions.items():
-            scores.append(accuracy_score(y_true, y_pred))
+            scores.append(roc_auc_score(y_true, y_proba, multi_class="ovr"))
         avg_score = sum(scores) / len(scores)
         self.final_accuracy = avg_score
 
@@ -320,13 +320,13 @@ def main():
     parser.add_argument(
         "--prior1",
         type=str,
-        default=".classification/results/data/prior_ticl_classification_adapter_10x8_50x3.h5",
+        default="./classification/results/data/prior_ticl_boolean_conjunctions_1x8_1024x100.h5",
         help="Path to first prior file",
     )
     parser.add_argument(
         "--prior2",
         type=str,
-        default=".classification/results/data/prior_tabicl_10x8_50x3.h5",
+        default="./classification/results/data/prior_tabicl_10x8_50x3.h5",
         help="Path to second prior file",
     )
     parser.add_argument(
