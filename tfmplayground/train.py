@@ -59,8 +59,11 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             total_loss = 0.
             for i, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
-                data = (full_data['x'].to(device),
-                        full_data['y'][:, :single_eval_pos].to(device))
+                data = (
+                    full_data['x'].to(device),
+                    full_data['y'][:, :single_eval_pos].to(device),
+                    full_data['adj'].to(device),
+                )
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     continue
                 targets = full_data['target_y'].to(device)
@@ -69,7 +72,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     y_mean = data[1].mean(dim=1, keepdim=True)
                     y_std = data[1].std(dim=1, keepdim=True) + 1e-8
                     y_norm = (data[1] - y_mean) / y_std
-                    data = (data[0], y_norm)
+                    data = (data[0], y_norm, data[2])
 
                 output = model(data, single_eval_pos=single_eval_pos)
                 targets = targets[:, single_eval_pos:]
@@ -81,6 +84,9 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
 
                 losses = criterion(output, targets)
                 loss = losses.mean() / accumulate_gradients
+                if torch.isnan(loss):
+                    print('Loss is NaN, stopping training batch.')
+                    return full_data
                 loss.backward()
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
 
@@ -90,7 +96,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     optimizer.zero_grad()
 
             end_time = time.time()
-            mean_loss = total_loss / len(prior)
+            mean_loss: float = total_loss / len(prior)
             model.eval()
             optimizer.eval()
 

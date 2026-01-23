@@ -1,6 +1,6 @@
 """Data loading utilities for tabular priors."""
 
-from typing import Callable, Dict, Iterator, Union
+from typing import Any, Callable, Dict, Iterator, Union
 
 import h5py
 import torch
@@ -8,6 +8,7 @@ from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 # from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from torch.utils.data import DataLoader
 
+from gtdl.utils.adj import remove_axis
 
 class PriorDataLoader(DataLoader):
     """Generic DataLoader for synthetic data generation using a get_batch function.
@@ -68,7 +69,7 @@ class PriorDumpDataLoader(DataLoader):
                 self.max_num_classes = None
             self.problem_type = f["problem_type"][()].decode("utf-8")
             self.has_num_datapoints = "num_datapoints" in f
-            self.stored_max_seq_len = f["X"].shape[1]
+            _, self.stored_max_seq_len, self.stored_max_num_features = f["X"].shape
         self.device = device
         self.pointer = starting_index
 
@@ -86,6 +87,12 @@ class PriorDumpDataLoader(DataLoader):
 
                 x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])
                 y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])
+                adj = torch.from_numpy(f['adj'][self.pointer:end,])
+
+                if num_features != self.stored_max_num_features:
+                    # We cut down the padded features to the max number of features in **the current** batch. Therefore, we need to cut down the adjacency matrix accordingly. The features in adj are stored as (features | padded features | target node).
+                    adj = remove_axis(adj, list(range(num_features, adj.shape[1] - 1)))
+
                 single_eval_pos = f["single_eval_pos"][self.pointer : end]
 
                 self.pointer += self.batch_size
@@ -101,6 +108,7 @@ class PriorDumpDataLoader(DataLoader):
                     y=y.to(self.device),
                     target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
                     single_eval_pos=single_eval_pos[0].item(),
+                    adj=adj.to(self.device),
                 )
 
     def __len__(self):
@@ -131,6 +139,8 @@ class TabICLPriorDataLoader(DataLoader):
         max_features: int,
         max_num_classes: int,
         device: torch.device,
+        scm_fixed_hp: Dict[str, Any],
+        scm_sampled_hp: Dict[str, Any],
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -149,24 +159,36 @@ class TabICLPriorDataLoader(DataLoader):
             max_classes=max_num_classes,
             min_seq_len=num_datapoints_min,
             max_seq_len=num_datapoints_max,
+            scm_fixed_hp=scm_fixed_hp,
+            scm_sampled_hp=scm_sampled_hp,
         )
 
     def tabicl_to_ours(self, d):
-        x, y, active_features, seqlen, train_size = d
+        x, y, active_features, seqlen, train_size, adj, priors = d
+        if (active_features != active_features[0]).any():
+            return None # skip batches with varying active features for now
         active_features = active_features[
             0
         ].item()  # should be all the same since we use batch_size_per_gp=batch_size (not true in practice!)
         x = x[:, :, :active_features]
+        if (train_size != train_size[0]).any():
+            return None # skip batches with varying train sizes for now
         single_eval_pos = train_size[0].item()  # should be all the same since we use batch_size_per_gp=batch_size
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),
             target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
             single_eval_pos=single_eval_pos,
+            adj=adj.to(self.device),
+            priors=priors,
         )
 
     def __iter__(self):
-        return iter(self.tabicl_to_ours(next(self.pd)) for _ in range(self.num_steps))
+        # Quick ugly fix to avoid None batches, which come from varying active_features/train_size in TabICL's PriorDataset
+        # don't understand why that happens when batch_size_per_gp == batch_size
+        # return iter(self.tabicl_to_ours(next(self.pd)) for _ in range(self.num_steps))
+        generator  = (self.tabicl_to_ours(next(self.pd)) for _ in range(self.num_steps))
+        return (batch for batch in generator if batch is not None)
 
     def __len__(self):
         return self.num_steps

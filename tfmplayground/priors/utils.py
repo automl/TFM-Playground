@@ -64,6 +64,13 @@ def dump_prior_to_h5(
         dump_single_eval_pos = f.create_dataset(
             "single_eval_pos", shape=(0,), maxshape=(None,), chunks=(batch_size,), dtype="i4"
         )
+        max_nodes = max_features + 1  # +1 for the target node
+        dump_adj = f.create_dataset(
+            "adj",
+            shape=(0, max_nodes, max_nodes),
+            maxshape=(None, max_nodes, max_nodes),
+            chunks=(batch_size, max_nodes, max_nodes),
+        )
 
         if problem_type == "classification" and max_classes is not None:
             f.create_dataset("max_num_classes", data=np.array((max_classes,)), chunks=(1,))
@@ -76,6 +83,7 @@ def dump_prior_to_h5(
             single_eval_pos = e["single_eval_pos"]
             if isinstance(single_eval_pos, torch.Tensor):
                 single_eval_pos = single_eval_pos.item()
+            adj = e['adj'].to('cpu').numpy() 
 
             # pad x and y to the maximum sequence length and number of features needed for tabicl
             x_padded = np.pad(
@@ -97,3 +105,6 @@ def dump_prior_to_h5(
 
             dump_single_eval_pos.resize(dump_single_eval_pos.shape[0] + batch_size, axis=0)
             dump_single_eval_pos[-batch_size:] = single_eval_pos
+
+            dump_adj.resize(dump_adj.shape[0] + batch_size, axis=0) 
+            dump_adj[-batch_size:] = adj
