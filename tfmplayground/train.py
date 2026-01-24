@@ -58,7 +58,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             optimizer.train()
             total_loss = 0.
             num_valid_data = 0
-            for i, full_data in enumerate(prior):
+            num_accumulated = 0
+            for _, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
                 data = (full_data['x'].to(device),
                         full_data['y'][:, :single_eval_pos].to(device))
@@ -84,12 +85,18 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 losses = criterion(output, targets)
                 loss = losses.mean() / accumulate_gradients
                 loss.backward()
+                num_accumulated += 1
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
 
-                if (i + 1) % accumulate_gradients == 0:
+                if num_accumulated % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     optimizer.step()
                     optimizer.zero_grad()
+
+            if num_accumulated % accumulate_gradients != 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                optimizer.step()
+                optimizer.zero_grad()
 
             end_time = time.time()
             mean_loss = total_loss / max(num_valid_data, 1)
