@@ -57,12 +57,14 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             model.train()  # Turn on the train mode
             optimizer.train()
             total_loss = 0.
+            num_valid_data = 0
             for i, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
                 data = (full_data['x'].to(device),
                         full_data['y'][:, :single_eval_pos].to(device))
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     continue
+                num_valid_data += 1
                 targets = full_data['target_y'].to(device)
 
                 if regression_task:
@@ -90,7 +92,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     optimizer.zero_grad()
 
             end_time = time.time()
-            mean_loss = total_loss / len(prior)
+            mean_loss = total_loss / max(num_valid_data, 1)
             model.eval()
             optimizer.eval()
 
