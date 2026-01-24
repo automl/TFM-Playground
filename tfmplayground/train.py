@@ -79,10 +79,11 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     output = output.view(-1, output.shape[-1])
 
                 losses = criterion(output, targets)
-                loss = losses.mean() / accumulate_gradients
+                batch_loss = losses.mean()
+                loss = batch_loss / accumulate_gradients
                 loss.backward()
                 num_accumulated += 1
-                total_loss += loss.cpu().detach().item() * accumulate_gradients
+                total_loss += batch_loss.cpu().detach().item()
 
                 if num_accumulated % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
