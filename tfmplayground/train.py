@@ -49,15 +49,12 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     classification_task = isinstance(criterion, nn.CrossEntropyLoss)
     regression_task = not classification_task
 
-    assert prior.num_steps % accumulate_gradients == 0, 'num_steps must be divisible by accumulate_gradients'
-
     try:
         for epoch in range(ckpt['epoch'] + 1 if ckpt else 1, epochs + 1):
             epoch_start_time = time.time()
             model.train()  # Turn on the train mode
             optimizer.train()
             total_loss = 0.
-            num_valid_data = 0
             num_accumulated = 0
             for _, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
@@ -65,7 +62,6 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                         full_data['y'][:, :single_eval_pos].to(device))
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     continue
-                num_valid_data += 1
                 targets = full_data['target_y'].to(device)
 
                 if regression_task:
@@ -99,7 +95,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 optimizer.zero_grad()
 
             end_time = time.time()
-            mean_loss = total_loss / max(num_valid_data, 1)
+            mean_loss = total_loss / max(num_accumulated, 1)
             model.eval()
             optimizer.eval()
 
