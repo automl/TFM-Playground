@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+import logging
+import os
 
 
 class Callback(ABC):
@@ -60,7 +62,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 class WandbLoggerCallback(BaseLoggerCallback):
     """ Logger callback that logs epoch information to Weights & Biases. """
 
-    def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
+    def __init__(self, project: str, name: str = None, config: dict = None, tags: list[str] = None, log_dir: str = None):
         """
         Initializes a WandbLoggerCallback.
 
@@ -68,20 +70,24 @@ class WandbLoggerCallback(BaseLoggerCallback):
             project (str): The name of the wandb project.
             name (str, optional): The name of the run. Defaults to None.
             config (dict, optional): Configuration dictionary for the run. Defaults to None.
+            tags (list[str], optional): List of tags for the run. Defaults to None.
             log_dir (str, optional): Directory to save wandb logs. Defaults to None.
         """
         try:
             import wandb
             self.wandb = wandb  # store wandb module to avoid import if not used
+            if wandb.run is not None:
+                wandb.finish()
             wandb.init(
                 project=project,
                 name=name,
                 id=name,
                 config=config,
+                tags=tags,
                 dir=log_dir,
                 resume="allow"
             )
-        except ImportError:
+        except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
     def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
