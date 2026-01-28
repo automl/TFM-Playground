@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 
-from gtdl.utils import adj
+from gtfm.utils import adj
 
 
 class NanoTabPFNModel(nn.Module):

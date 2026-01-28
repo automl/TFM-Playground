@@ -8,7 +8,7 @@ from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 # from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from torch.utils.data import DataLoader
 
-from gtdl.utils.adj import remove_axis
+from gtfm.utils.adj import remove_axis
 
 class PriorDataLoader(DataLoader):
     """Generic DataLoader for synthetic data generation using a get_batch function.

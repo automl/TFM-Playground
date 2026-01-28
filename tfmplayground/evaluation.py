@@ -1,4 +1,5 @@
 import argparse
+from typing import Dict, Any
 
 import numpy as np
 import openml
@@ -87,6 +88,13 @@ def get_openml_predictions(
         if n_features > max_n_features or n_samples > max_n_samples:
             continue  # skip task, too big
 
+        # dataset_info: Dict[str, Any] ={
+        #     'task_id' : task.task_id,
+        #     'dataset_id' : task.dataset_id,
+        #     'task_type_id' : task.task_type_id,
+        #     'dataset_name' : dataset.name,
+        # }
+        # dataset_info.update(dataset.qualities)
         _, folds, _ = task.get_split_dimensions()
         tabarena_light = True
         if tabarena_light:
