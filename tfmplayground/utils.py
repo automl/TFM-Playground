@@ -3,7 +3,7 @@ import random
 import torch
 import numpy as np
 
-from pfns.bar_distribution import get_bucket_limits
+from pfns.model.bar_distribution import get_bucket_borders
 
 def set_randomness_seed(seed):
     random.seed(seed)
@@ -32,5 +32,5 @@ def make_global_bucket_edges(filename, n_buckets=100, device=get_default_device(
         raise ValueError(f"Too few target samples ({ys_concat.size}) to compute {n_buckets} buckets.")
 
     ys_tensor = torch.tensor(ys_concat, dtype=torch.float32, device=device)
-    global_bucket_edges = get_bucket_limits(n_buckets, ys=ys_tensor).to(device)
+    global_bucket_edges = get_bucket_borders(n_buckets, ys=ys_tensor).to(device)
     return global_bucket_edges

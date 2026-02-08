@@ -3,7 +3,7 @@ from torch import nn
 import time
 from torch.utils.data import DataLoader
 from typing import Dict
-from pfns.bar_distribution import FullSupportBarDistribution
+from pfns.model.bar_distribution import FullSupportBarDistribution
 import schedulefree
 import os
 
