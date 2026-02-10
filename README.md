@@ -130,3 +130,4 @@ Check out `visualization_demo.ipynb` for some more examples.
 
 - [TabICL](https://github.com/soda-inria/tabicl) (Classification)
 - [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
+
