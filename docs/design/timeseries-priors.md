@@ -18,6 +18,7 @@
 7. [Testing Strategy](#7-testing-strategy)
 8. [Open Questions](#8-open-questions)
 9. [References](#9-references)
+10. [Usage Guide](#10-usage-guide)
 
 ---
 
@@ -476,6 +477,156 @@ tfmplayground/priors/
 3. TFM-Playground Repo: https://github.com/automl/TFM-Playground
 4. TabICL Repo: https://github.com/soda-inria/tabicl
 5. Time Series Components: Hyndman & Athanasopoulos, "Forecasting: Principles and Practice"
+
+---
+
+## 10. Usage Guide
+
+### 10.1 Quick Start (CLI)
+
+Train a nanoTabPFN model on synthetic time series data:
+
+```bash
+# Basic training with mixed temporal patterns
+python pretrain_forecasting.py --epochs 100 --steps 50
+
+# Use a specific temporal pattern type
+python pretrain_forecasting.py --priortype ar --epochs 100
+
+# Use a predefined preset
+python pretrain_forecasting.py --preset seasonal_heavy --epochs 100
+
+# Custom configuration with shorter sequences
+python pretrain_forecasting.py \
+    --priortype mixed \
+    --minseqlen 32 \
+    --maxseqlen 128 \
+    --minfeatures 1 \
+    --maxfeatures 5 \
+    --epochs 500
+```
+
+### 10.2 Python API
+
+#### Using TimeSeriesPriorDataLoader
+
+```python
+import torch
+from tfmplayground.priors import TimeSeriesPriorDataLoader, DEFAULT_TS_FIXED_HP
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Create data loader
+loader = TimeSeriesPriorDataLoader(
+    num_steps=100,           # batches per epoch
+    batch_size=8,            # time series per batch
+    num_datapoints_min=50,   # min sequence length
+    num_datapoints_max=256,  # max sequence length
+    min_features=1,
+    max_features=10,
+    device=device,
+    prior_type="mixed",      # or: "trend", "seasonal", "ar", "random_walk"
+)
+
+# Iterate over batches
+for batch in loader:
+    x = batch["x"]                    # shape: (batch, seq_len, features)
+    y = batch["y"]                    # shape: (batch, seq_len)
+    target_y = batch["target_y"]      # shape: (batch, seq_len)
+    split_pos = batch["single_eval_pos"]  # int: train/test boundary
+    
+    # Training data: x[:, :split_pos, :], y[:, :split_pos]
+    # Test data:     x[:, split_pos:, :], target_y[:, split_pos:]
+```
+
+#### Using Lower-Level Components
+
+```python
+import torch
+from tfmplayground.priors.timeseries import (
+    TemporalXSampler,
+    TimeSeriesSCM,
+    ForecastPriorDataset,
+)
+
+device = torch.device("cpu")
+
+# Generate features with temporal patterns
+sampler = TemporalXSampler(
+    seq_len=100,
+    num_features=5,
+    device=device,
+    pattern_type="seasonal",
+)
+X = sampler.sample()  # shape: (100, 5)
+
+# Create (X, y) pairs with temporal causality
+scm = TimeSeriesSCM(
+    seq_len=100,
+    num_features=5,
+    device=device,
+    max_lags=3,
+    num_layers=1,
+)
+X, y = scm.generate(X)  # X: (100, 5+lags), y: (100,)
+
+# Full dataset generation
+dataset = ForecastPriorDataset(
+    batch_size=8,
+    min_seq_len=50,
+    max_seq_len=256,
+    min_features=1,
+    max_features=10,
+    device=device,
+    prior_type="mixed",
+)
+batch = dataset.get_batch()  # dict with x, y, target_y, single_eval_pos
+```
+
+### 10.3 Prior Type Reference
+
+| Prior Type | Description | Best For |
+|------------|-------------|----------|
+| `trend` | Linear/polynomial drift over time | Stock prices, growth metrics |
+| `seasonal` | Periodic oscillations | Sales, weather, energy demand |
+| `ar` | Autoregressive dependencies | Sensor data, signals |
+| `random_walk` | Cumulative random noise | Financial data, diffusion |
+| `mixed` | Random combination of above | General forecasting (default) |
+
+### 10.4 Preset Reference
+
+| Preset | Pattern Mix | Use Case |
+|--------|-------------|----------|
+| `trend_heavy` | 60% trend, 20% AR, 20% other | Long-term forecasting |
+| `seasonal_heavy` | 60% seasonal, 20% AR, 20% other | Cyclical data |
+| `ar_heavy` | 60% AR, 20% trend, 20% other | Short-term forecasting |
+| `balanced` | 25% each pattern type | General purpose |
+
+### 10.5 Configuration Options
+
+**Fixed Hyperparameters** (`DEFAULT_TS_FIXED_HP`):
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_lags` | 10 | Maximum lag features to create |
+| `min_train_ratio` | 0.5 | Minimum fraction for training |
+| `max_train_ratio` | 0.9 | Maximum fraction for training |
+| `normalize` | True | Normalize features |
+
+**Override defaults**:
+
+```python
+custom_hp = {
+    **DEFAULT_TS_FIXED_HP,
+    "max_lags": 5,
+    "min_train_ratio": 0.6,
+}
+
+loader = TimeSeriesPriorDataLoader(
+    ...,
+    fixed_hp=custom_hp,
+)
+```
 
 ---
 
