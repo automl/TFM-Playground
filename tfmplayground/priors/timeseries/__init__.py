@@ -12,12 +12,12 @@ Main components:
 from .temporal_sampler import TemporalXSampler
 from .timeseries_scm import TimeSeriesSCM
 from .forecast_dataset import ForecastPriorDataset
-from .config import DEFAULT_TS_FIXED_HP, DEFAULT_TS_SAMPLED_HP
+from .config import DEFAULT_TS_FIXED_HP, TS_PRIOR_PRESETS
 
 __all__ = [
     "TemporalXSampler",
     "TimeSeriesSCM",
     "ForecastPriorDataset",
     "DEFAULT_TS_FIXED_HP",
-    "DEFAULT_TS_SAMPLED_HP",
+    "TS_PRIOR_PRESETS",
 ]

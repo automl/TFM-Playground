@@ -17,7 +17,7 @@ from torch import Tensor
 from torch.utils.data import IterableDataset
 
 from .timeseries_scm import TimeSeriesSCM
-from .config import DEFAULT_TS_FIXED_HP, DEFAULT_TS_SAMPLED_HP
+from .config import DEFAULT_TS_FIXED_HP, TS_PRIOR_PRESETS
 
 
 class ForecastPriorDataset(IterableDataset):
@@ -61,6 +61,12 @@ class ForecastPriorDataset(IterableDataset):
     max_lags : int, default=5
         Maximum number of lag features per base feature.
     
+    prior_type : str, default="mix_ts"
+        Type of temporal patterns: "ar", "trend", "seasonal", or "mix_ts".
+    
+    fixed_hp : dict, optional
+        Override default fixed hyperparameters.
+    
     device : str, default="cpu"
         Device to place tensors on.
     
@@ -74,30 +80,41 @@ class ForecastPriorDataset(IterableDataset):
     
     def __init__(
         self,
-        batch_size: int = 256,
-        batch_size_per_gp: int = 4,
-        min_features: int = 2,
-        max_features: int = 100,
+        batch_size: Optional[int] = None,
+        batch_size_per_gp: Optional[int] = None,
+        min_features: Optional[int] = None,
+        max_features: Optional[int] = None,
         min_seq_len: Optional[int] = None,
-        max_seq_len: int = 1024,
-        min_train_ratio: float = 0.5,
-        max_train_ratio: float = 0.9,
-        include_lags: bool = True,
-        max_lags: int = 5,
+        max_seq_len: Optional[int] = None,
+        min_train_ratio: Optional[float] = None,
+        max_train_ratio: Optional[float] = None,
+        include_lags: Optional[bool] = None,
+        max_lags: Optional[int] = None,
+        prior_type: str = "mix_ts",
+        fixed_hp: Optional[Dict[str, Any]] = None,
         device: str = "cpu",
     ):
         super().__init__()
-        self.batch_size = batch_size
-        self.batch_size_per_gp = batch_size_per_gp
-        self.min_features = min_features
-        self.max_features = max_features
-        self.min_seq_len = min_seq_len
-        self.max_seq_len = max_seq_len
-        self.min_train_ratio = min_train_ratio
-        self.max_train_ratio = max_train_ratio
-        self.include_lags = include_lags
-        self.max_lags = max_lags
+        
+        # Merge provided fixed_hp with defaults
+        hp = {**DEFAULT_TS_FIXED_HP, **(fixed_hp or {})}
+        
+        # Use provided values or fall back to config defaults
+        self.batch_size = batch_size if batch_size is not None else hp.get("batch_size", 256)
+        self.batch_size_per_gp = batch_size_per_gp if batch_size_per_gp is not None else hp.get("batch_size_per_gp", 4)
+        self.min_features = min_features if min_features is not None else hp.get("min_features", 2)
+        self.max_features = max_features if max_features is not None else hp.get("max_features", 100)
+        self.min_seq_len = min_seq_len if min_seq_len is not None else hp.get("min_seq_len", 50)
+        self.max_seq_len = max_seq_len if max_seq_len is not None else hp.get("max_seq_len", 1024)
+        self.min_train_ratio = min_train_ratio if min_train_ratio is not None else hp.get("min_train_ratio", 0.5)
+        self.max_train_ratio = max_train_ratio if max_train_ratio is not None else hp.get("max_train_ratio", 0.9)
+        self.include_lags = include_lags if include_lags is not None else hp.get("include_lags", True)
+        self.max_lags = max_lags if max_lags is not None else hp.get("max_lags", 5)
+        self.prior_type = prior_type
         self.device = device
+        
+        # Load preset if using a specific prior type
+        self.preset = TS_PRIOR_PRESETS.get(prior_type, {})
     
     def get_batch(self, batch_size: Optional[int] = None) -> Dict[str, Union[Tensor, int]]:
         """Generate a batch of synthetic time series datasets.
@@ -261,13 +278,23 @@ class ForecastPriorDataset(IterableDataset):
         """Sample hyperparameters shared within a group.
         
         Groups share the same temporal pattern type (trending, seasonal, etc.)
+        If a preset is set (via prior_type), uses those fixed values.
         
         Returns
         -------
         hp : dict
             Group-level hyperparameters.
         """
-        # Decide on temporal pattern mix for this group
+        # If using a preset (ar, trend, seasonal), use fixed values
+        if self.preset:
+            return {
+                "pattern_type": self.prior_type,
+                "trend_prob": self.preset.get("trend_prob", 0.3),
+                "seasonal_prob": self.preset.get("seasonal_prob", 0.3),
+                "ar_prob": self.preset.get("ar_prob", 0.5),
+            }
+        
+        # Otherwise (mix_ts), randomly sample pattern type
         pattern_type = random.choice(["trending", "seasonal", "ar_heavy", "mixed"])
         
         if pattern_type == "trending":
@@ -331,10 +358,11 @@ class ForecastPriorDataset(IterableDataset):
     def __repr__(self) -> str:
         return (
             f"ForecastPriorDataset(\n"
+            f"  prior_type={self.prior_type},\n"
             f"  batch_size={self.batch_size},\n"
             f"  batch_size_per_gp={self.batch_size_per_gp},\n"
             f"  features={self.min_features}-{self.max_features},\n"
-            f"  seq_len={self.min_seq_len or 'None'}-{self.max_seq_len},\n"
+            f"  seq_len={self.min_seq_len}-{self.max_seq_len},\n"
             f"  train_ratio={self.min_train_ratio}-{self.max_train_ratio},\n"
             f"  include_lags={self.include_lags},\n"
             f"  max_lags={self.max_lags},\n"
