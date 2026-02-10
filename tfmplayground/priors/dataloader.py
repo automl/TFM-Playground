@@ -1,6 +1,6 @@
 """Data loading utilities for tabular priors."""
 
-from typing import Callable, Dict, Iterator, Union
+from typing import Callable, Dict, Iterator, Optional, Union
 
 import h5py
 import torch
@@ -9,6 +9,8 @@ from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 # import here for future use & cleaner imports/it already handles type conversions
 from tabpfn_prior import TabPFNPriorDataLoader
 from torch.utils.data import DataLoader
+
+from tfmplayground.priors.timeseries import ForecastPriorDataset, DEFAULT_TS_FIXED_HP
 
 
 class PriorDataLoader(DataLoader):
@@ -231,4 +233,70 @@ class TICLPriorDataLoader(DataLoader):
         return (self.ticl_to_ours(batch) for batch in self.pd)
 
     def __len__(self):
+        return self.num_steps
+
+
+class TimeSeriesPriorDataLoader(DataLoader):
+    """DataLoader sampling synthetic time series data from ForecastPriorDataset.
+
+    Generates data with temporal patterns (trends, seasonality, AR processes)
+    and enforces temporal train/test splits for forecasting tasks.
+
+    Args:
+        num_steps (int): Number of batches to generate per epoch.
+        batch_size (int): Number of time series per batch.
+        num_datapoints_min (int): Minimum sequence length per time series.
+        num_datapoints_max (int): Maximum sequence length per time series.
+        min_features (int): Minimum number of features.
+        max_features (int): Maximum number of features.
+        device (torch.device): Target device for tensors.
+        prior_type (str): Type of temporal pattern: 'trend', 'seasonal', 'ar',
+            'random_walk', or 'mixed' (default).
+        fixed_hp (dict, optional): Fixed hyperparameters. Defaults to DEFAULT_TS_FIXED_HP.
+    """
+
+    def __init__(
+        self,
+        num_steps: int,
+        batch_size: int,
+        num_datapoints_min: int,
+        num_datapoints_max: int,
+        min_features: int,
+        max_features: int,
+        device: torch.device,
+        prior_type: str = "mixed",
+        fixed_hp: Optional[Dict] = None,
+    ):
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.num_datapoints_min = num_datapoints_min
+        self.num_datapoints_max = num_datapoints_max
+        self.min_features = min_features
+        self.max_features = max_features
+        self.device = device
+        self.prior_type = prior_type
+        self.fixed_hp = fixed_hp if fixed_hp is not None else DEFAULT_TS_FIXED_HP
+
+        self.pd = ForecastPriorDataset(
+            batch_size=batch_size,
+            min_seq_len=num_datapoints_min,
+            max_seq_len=num_datapoints_max,
+            min_features=min_features,
+            max_features=max_features,
+            device=device,
+            prior_type=prior_type,
+            fixed_hp=self.fixed_hp,
+        )
+
+    def __iter__(self) -> Iterator[Dict[str, Union[torch.Tensor, int]]]:
+        for _ in range(self.num_steps):
+            batch = self.pd.get_batch()
+            yield dict(
+                x=batch["x"].to(self.device),
+                y=batch["y"].to(self.device),
+                target_y=batch["target_y"].to(self.device),
+                single_eval_pos=batch["single_eval_pos"],
+            )
+
+    def __len__(self) -> int:
         return self.num_steps
