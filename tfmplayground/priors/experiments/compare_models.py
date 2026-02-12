@@ -3,8 +3,6 @@ import os
 import sys
 import time
 
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 import requests
 import torch
 from pfns.bar_distribution import FullSupportBarDistribution
@@ -22,32 +20,48 @@ from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, set_randomness_seed
+from visualization_utils import (
+    plot_comparison_multi,
+    plot_all_decision_boundaries,
+    plot_all_regression_predictions,
+)
 
 
 class ClassificationTrackerCallback(ConsoleLoggerCallback):
     """Callback that tracks accuracy on toy tasks and stores the final accuracy and loss history."""
 
-    def __init__(self, tasks, model_name="Model"):
+    def __init__(self, tasks, model_name="Model", eval_every: int = 1):
         self.tasks = tasks
         self.model_name = model_name
+        self.eval_every = max(1, int(eval_every))
         self.final_accuracy = 0.0
         self.device = get_default_device()
         self.loss_history = []
-        self.accuracy_history = []
+        self.accuracy_history = []  # may contain None for skipped epochs
         self.epoch_history = []
 
     def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+        # Always track loss per epoch
+        self.epoch_history.append(epoch)
+        self.loss_history.append(loss)
+
+        # Optionally skip expensive evaluation
+        if (epoch % self.eval_every) != 0:
+            self.accuracy_history.append(None)
+            print(
+                f"[{self.model_name}] epoch {epoch:5d} | time {epoch_time:5.2f}s | "
+                f"mean loss {loss:5.2f} | eval skipped (every {self.eval_every})",
+                flush=True,
+            )
+            return
+
         classifier = NanoTabPFNClassifier(model, self.device)
         predictions = get_openml_predictions(model=classifier, tasks=self.tasks)
         scores = []
         for dataset_name, (y_true, y_pred, y_proba) in predictions.items():
             scores.append(roc_auc_score(y_true, y_proba, multi_class="ovr"))
-        avg_score = sum(scores) / len(scores)
+        avg_score = sum(scores) / len(scores) if len(scores) else float("nan")
         self.final_accuracy = avg_score
-
-        # Track history
-        self.epoch_history.append(epoch)
-        self.loss_history.append(loss)
         self.accuracy_history.append(avg_score)
 
         print(
@@ -60,18 +74,33 @@ class ClassificationTrackerCallback(ConsoleLoggerCallback):
 class RegressionTrackerCallback(ConsoleLoggerCallback):
     """Callback that tracks R2 on toy tasks and stores the final R2 and loss history."""
 
-    def __init__(self, tasks, model_name="Model"):
+    def __init__(self, tasks, model_name="Model", eval_every: int = 1):
         self.tasks = tasks
         self.model_name = model_name
+        self.eval_every = max(1, int(eval_every))
         self.final_score = 0.0
         self.device = get_default_device()
         self.loss_history = []
-        self.score_history = []
+        self.score_history = []  # may contain None for skipped epochs
         self.epoch_history = []
 
     def on_epoch_end(
         self, epoch: int, epoch_time: float, loss: float, model, dist=None, **kwargs
     ):
+        # Always track loss per epoch
+        self.epoch_history.append(epoch)
+        self.loss_history.append(loss)
+
+        # Optionally skip expensive evaluation
+        if (epoch % self.eval_every) != 0:
+            self.score_history.append(None)
+            print(
+                f"[{self.model_name}] epoch {epoch:5d} | time {epoch_time:5.2f}s | "
+                f"mean loss {loss:5.2f} | eval skipped (every {self.eval_every})",
+                flush=True,
+            )
+            return
+
         # Use the full NanoTabPFNRegressor which handles the distribution
         regressor = NanoTabPFNRegressor(model=model, dist=dist, device=self.device)
         predictions = get_openml_predictions(
@@ -80,12 +109,8 @@ class RegressionTrackerCallback(ConsoleLoggerCallback):
         scores = []
         for dataset_name, (y_true, y_pred, _) in predictions.items():
             scores.append(r2_score(y_true, y_pred))
-        avg_score = sum(scores) / len(scores)
+        avg_score = sum(scores) / len(scores) if len(scores) else float("nan")
         self.final_score = avg_score
-
-        # Track history
-        self.epoch_history.append(epoch)
-        self.loss_history.append(loss)
         self.score_history.append(avg_score)
 
         print(
@@ -103,6 +128,8 @@ def train_model(
     steps: int = 100,
     lr: float = 1e-4,
     device=None,
+    eval_every: int = 1,
+    tasks=None,
     buckets_path: str = "checkpoints/nanotabpfn_regressor_buckets.pth",
 ):
     """
@@ -171,11 +198,11 @@ def train_model(
 
     # Define callback based on problem type
     if is_regression:
-        # criterion is already set to FullSupportBarDistribution
-        callback = RegressionTrackerCallback(TOY_TASKS_REGRESSION, model_name)
+        use_tasks = tasks if tasks is not None else TOY_TASKS_REGRESSION
+        callback = RegressionTrackerCallback(use_tasks, model_name, eval_every=eval_every)
     else:
-        # criterion is already set to CrossEntropyLoss
-        callback = ClassificationTrackerCallback(TOY_TASKS_CLASSIFICATION, model_name)
+        use_tasks = tasks if tasks is not None else TOY_TASKS_CLASSIFICATION
+        callback = ClassificationTrackerCallback(use_tasks, model_name, eval_every=eval_every)
 
     # Train the model and track time
     train_start = time.time()
@@ -218,116 +245,15 @@ def train_model(
     )
 
 
-def plot_comparison(
-    callback1,
-    callback2,
-    prior1_name,
-    prior2_name,
-    save_path="comparison_plot.png",
-    metric_name="Accuracy",
-):
-    """
-    Create comparison plots for loss and accuracy curves.
-
-    Args:
-        callback1: First model's callback with history
-        callback2: Second model's callback with history
-        prior1_name: Name of first prior (for legend)
-        prior2_name: Name of second prior (for legend)
-        save_path: Path to save the plot
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-
-    # Plot loss curves
-    ax1.plot(
-        callback1.epoch_history,
-        callback1.loss_history,
-        "b-o",
-        label=f"Model 1: {prior1_name}",
-        linewidth=2,
-        markersize=6,
-    )
-    ax1.plot(
-        callback2.epoch_history,
-        callback2.loss_history,
-        "r-s",
-        label=f"Model 2: {prior2_name}",
-        linewidth=2,
-        markersize=6,
-    )
-    ax1.set_xlabel("Epoch", fontsize=12)
-    ax1.set_ylabel("Loss", fontsize=12)
-    ax1.set_title("Training Loss Comparison", fontsize=14, fontweight="bold")
-    ax1.legend(fontsize=10)
-    ax1.grid(True, alpha=0.3)
-
-    # Plot accuracy curves
-    # Plot accuracy/score curves
-    metric_history1 = (
-        callback1.score_history
-        if hasattr(callback1, "score_history")
-        else callback1.accuracy_history
-    )
-    metric_history2 = (
-        callback2.score_history
-        if hasattr(callback2, "score_history")
-        else callback2.accuracy_history
-    )
-
-    ax2.plot(
-        callback1.epoch_history,
-        metric_history1,
-        "b-o",
-        label=f"Model 1: {prior1_name}",
-        linewidth=2,
-        markersize=6,
-    )
-    ax2.plot(
-        callback2.epoch_history,
-        metric_history2,
-        "r-s",
-        label=f"Model 2: {prior2_name}",
-        linewidth=2,
-        markersize=6,
-    )
-    ax2.set_xlabel("Epoch", fontsize=12)
-    ax2.set_ylabel(metric_name, fontsize=12)
-    ax2.set_title(
-        f"Validation {metric_name} Comparison", fontsize=14, fontweight="bold"
-    )
-    ax2.legend(fontsize=10)
-    ax2.grid(True, alpha=0.3)
-    
-    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax2.xaxis.set_major_locator(MaxNLocator(integer=True))
-    
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    print(f"\n📊 Comparison plot saved to: {save_path}")
-
-    try:
-        plt.show()
-    except:
-        pass
-
-    plt.close()
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Train and compare two nanoTabPFN models on different classification priors"
+        description="Train and compare nanoTabPFN models on multiple priors"
     )
     parser.add_argument(
-        "--prior1",
-        type=str,
-        default="./classification/results/data/prior_ticl_boolean_conjunctions_1x8_1024x100.h5",
-        help="Path to first prior file",
-    )
-    parser.add_argument(
-        "--prior2",
-        type=str,
-        default="./classification/results/data/prior_tabicl_10x8_50x3.h5",
-        help="Path to second prior file",
+        "--prior",
+        action="append",
+        default=[],
+        help="Path to a prior .h5 file. Repeat this flag to provide multiple priors.",
     )
     parser.add_argument(
         "--epochs", type=int, default=3, help="Number of epochs to train each model"
@@ -355,8 +281,25 @@ def main():
         default="checkpoints/nanotabpfn_regressor_buckets.pth",
         help="Path to bucket edges for regression",
     )
+    parser.add_argument(
+        "--eval_every",
+        type=int,
+        default=1,
+        help="Evaluate toy tasks every N epochs (default: 1)",
+    )
+    parser.add_argument(
+        "--toy_tasks_subset",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Optional subset of OpenML task IDs to evaluate on (space-separated)",
+    )
 
     args = parser.parse_args()
+
+    priors = args.prior
+    if priors is None or len(priors) < 2:
+        raise ValueError("Please provide at least two --prior arguments.")
 
     # Set random seed
     set_randomness_seed(args.seed)
@@ -365,128 +308,136 @@ def main():
     device = get_default_device()
     print(f"Using device: {device}\n")
 
-    # Train first model
-    model1, accuracy1, callback1, train_time1, inference_time1, param_count1 = (
-        train_model(
-            prior_path=args.prior1,
-            model_name="Model 1",
+    # Determine which toy tasks to use
+    subset = set(args.toy_tasks_subset) if args.toy_tasks_subset else None
+    cls_tasks = [t for t in TOY_TASKS_CLASSIFICATION if (subset is None or t in subset)]
+    reg_tasks = [t for t in TOY_TASKS_REGRESSION if (subset is None or t in subset)]
+
+    run_records = []
+    callbacks = []
+    prior_names = []
+
+    expected_problem_type = None
+    is_regression = None
+
+    for idx, prior_path in enumerate(priors, start=1):
+        # Probe prior to determine problem type and enforce consistency
+        prior_probe = PriorDumpDataLoader(
+            filename=prior_path,
+            num_steps=1,
+            batch_size=1,
+            device=device,
+            starting_index=0,
+        )
+        this_problem_type = prior_probe.problem_type
+        this_is_regression = this_problem_type == "regression"
+
+        if expected_problem_type is None:
+            expected_problem_type = this_problem_type
+            is_regression = this_is_regression
+        elif this_problem_type != expected_problem_type:
+            raise ValueError(
+                f"Mixed problem types are not allowed. Expected {expected_problem_type} but got {this_problem_type} for {prior_path}."
+            )
+
+        use_tasks = reg_tasks if is_regression else cls_tasks
+
+        # Reset seed for fair comparison
+        set_randomness_seed(args.seed)
+
+        model_name = f"Model {idx}"
+        trained_model, metric, callback, train_time, inference_time, param_count = train_model(
+            prior_path=prior_path,
+            model_name=model_name,
             epochs=args.epochs,
             batch_size=args.batch_size,
             steps=args.steps,
             lr=args.lr,
             device=device,
+            eval_every=args.eval_every,
+            tasks=use_tasks,
             buckets_path=args.buckets_path,
         )
-    )
 
-    # Reset seed for fair comparison
-    set_randomness_seed(args.seed)
+        pname = os.path.basename(prior_path).replace(".h5", "").replace("prior_", "")
+        prior_names.append(pname)
+        callbacks.append(callback)
 
-    # Train second model
-    model2, accuracy2, callback2, train_time2, inference_time2, param_count2 = (
-        train_model(
-            prior_path=args.prior2,
-            model_name="Model 2",
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            steps=args.steps,
-            lr=args.lr,
-            device=device,
-            buckets_path=args.buckets_path,
+        run_records.append(
+            {
+                "index": idx,
+                "model_name": model_name,
+                "prior": prior_path,
+                "prior_name": pname,
+                "metric": metric,
+                "loss_history": callback.loss_history,
+                "metric_history": (
+                    callback.score_history if is_regression else callback.accuracy_history
+                ),
+                "train_time": train_time,
+                "inference_time": inference_time,
+                "param_count": param_count,
+                "model": trained_model,
+            }
         )
-    )
 
-    # Print comparison results
+    metric_name = "R2 Score" if is_regression else "Accuracy"
+
     print(f"\n{'='*80}")
     print("FINAL COMPARISON RESULTS")
     print(f"{'='*80}\n")
 
-    print(f"Model 1: {os.path.basename(args.prior1)}")
-    # Determine metric name
-    is_regression = hasattr(callback1, "score_history")
-    metric_name = "R2 Score" if is_regression else "Accuracy"
+    sorted_runs = sorted(run_records, key=lambda r: r["metric"], reverse=True)
+    winner = sorted_runs[0]["model_name"] if sorted_runs else None
 
-    print(f"Model 1: {os.path.basename(args.prior1)}")
-    print(f"  Final {metric_name}: {accuracy1:.4f}")
-    print(f"  Final Loss: {callback1.loss_history[-1]:.4f}")
-    print(f"  Training Time: {train_time1:.2f}s")
-    print(f"  Inference Time: {inference_time1*1000:.2f}ms")
-    print(f"  Parameters: {param_count1/1e6:.2f}M")
-    print()
-    print(f"Model 2: {os.path.basename(args.prior2)}")
-    print(f"  Final {metric_name}: {accuracy2:.4f}")
-    print(f"  Final Loss: {callback2.loss_history[-1]:.4f}")
-    print(f"  Training Time: {train_time2:.2f}s")
-    print(f"  Inference Time: {inference_time2*1000:.2f}ms")
-    print(f"  Parameters: {param_count2/1e6:.2f}M")
-    print()
+    print("Leaderboard (sorted by final metric):")
+    for rank, r in enumerate(sorted_runs, start=1):
+        print(
+            f"  {rank:2d}. {r['model_name']}: {r['prior_name']} | "
+            f"{metric_name}: {r['metric']:.4f} | "
+            f"Train: {r['train_time']:.2f}s | "
+            f"Infer: {r['inference_time']*1000:.2f}ms | "
+            f"Params: {r['param_count']/1e6:.2f}M"
+        )
 
-    # Performance comparisons
-    print("Performance Comparison:")
-    accuracy_diff = accuracy1 - accuracy2
-    better_accuracy = "Model 1" if accuracy_diff > 0 else "Model 2"
-    print(
-        f"  {metric_name} Difference: {abs(accuracy_diff):.4f} (Winner: {better_accuracy})"
-    )
-
-    train_speedup = train_time1 / train_time2
-    faster_train = "Model 2" if train_speedup > 1 else "Model 1"
-    print(f"  Training Speedup: {abs(train_speedup):.2f}x (Faster: {faster_train})")
-
-    inference_speedup = inference_time1 / inference_time2
-    faster_inference = "Model 2" if inference_speedup > 1 else "Model 1"
-    print(
-        f"  Inference Speedup: {abs(inference_speedup):.2f}x (Faster: {faster_inference})"
-    )
-
-    param_ratio = param_count1 / param_count2
-    smaller_model = "Model 2" if param_ratio > 1 else "Model 1"
-    print(f"  Parameter Ratio: {abs(param_ratio):.2f}x (Smaller: {smaller_model})")
+    print(f"\nWinner: {winner}")
     print(f"\n{'='*80}\n")
 
-    # Create comparison plots
-    prior1_name = os.path.basename(args.prior1).replace(".h5", "").replace("prior_", "")
-    prior2_name = os.path.basename(args.prior2).replace(".h5", "").replace("prior_", "")
-    plot_comparison(
-        callback1,
-        callback2,
-        prior1_name,
-        prior2_name,
-        args.plot_output,
+    plot_comparison_multi(
+        callbacks=callbacks,
+        prior_names=prior_names,
+        save_path=args.plot_output,
         metric_name=metric_name,
     )
 
+    # Plot decision boundaries for classification tasks only
+    if not is_regression:
+        decision_boundary_output = args.plot_output.replace(".png", "_decision_boundaries.png")
+        plot_all_decision_boundaries(
+            run_records,
+            datasets=["moons", "circles"],
+            n_samples=200,
+            noise=0.2,
+            seed=args.seed,
+            output_path=decision_boundary_output,
+        )
+    else:
+        # Plot regression predictions for regression tasks
+        regression_output = args.plot_output.replace(".png", "_regression_predictions.png")
+        plot_all_regression_predictions(
+            run_records,
+            datasets=["sinusoidal", "linear", "step"],
+            n_samples=100,
+            noise=0.1,
+            seed=args.seed,
+            output_path=regression_output,
+        )
+
     return {
-        "model1": {
-            "prior": args.prior1,
-            "accuracy": accuracy1,
-            "model": model1,
-            "loss_history": callback1.loss_history,
-            "accuracy_history": (
-                callback1.score_history if is_regression else callback1.accuracy_history
-            ),
-            "train_time": train_time1,
-            "inference_time": inference_time1,
-            "param_count": param_count1,
-        },
-        "model2": {
-            "prior": args.prior2,
-            "accuracy": accuracy2,
-            "model": model2,
-            "loss_history": callback2.loss_history,
-            "accuracy_history": (
-                callback2.score_history if is_regression else callback2.accuracy_history
-            ),
-            "train_time": train_time2,
-            "inference_time": inference_time2,
-            "param_count": param_count2,
-        },
-        "winner": better_accuracy,
-        "performance": {
-            "train_speedup": train_speedup,
-            "inference_speedup": inference_speedup,
-            "param_ratio": param_ratio,
-        },
+        "problem_type": expected_problem_type,
+        "metric_name": metric_name,
+        "winner": winner,
+        "runs": run_records,
     }
 
 
