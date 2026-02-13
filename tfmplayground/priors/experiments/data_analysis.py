@@ -214,21 +214,35 @@ class DataAnalyzer(ABC):
             
             # compute the correlation matrix
             try:
+                # Drop constant (zero-variance) columns to avoid divide-by-zero warnings in corrcoef
+                std = np.nanstd(X_sample, axis=0)
+                non_constant = std > 0
+                X_nc = X_sample[:, non_constant]
+
+                # Need at least two non-constant features to compute pairwise correlations
+                if X_nc.shape[1] < 2:
+                    continue
+
                 # this is of shape n_features x n_features
-                corr_matrix = np.corrcoef(X_sample.T)
-                
+                corr_matrix = np.corrcoef(X_nc.T)
+
                 # get upper triangle (excluding the diagonal aka correlation of feature with itself)
                 mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
                 correlations = corr_matrix[mask]
                 # now it has unique feature pair correlations flattened into a 1D array
-                
+
+                # filter out nan/inf correlations (can still happen in degenerate edge cases)
+                correlations = correlations[np.isfinite(correlations)]
+                if correlations.size == 0:
+                    continue
+
                 all_corr.extend(correlations)
-                
+
                 # measure the high correlation pairs if corr coefficient is > 0.8
                 high_corr = np.abs(correlations) > 0.8
                 # collect the number of highly correlated pairs
                 high_corr_pair_counts.append(high_corr.sum())
-            except:
+            except Exception:
                 continue
         
         if len(all_corr) > 0:

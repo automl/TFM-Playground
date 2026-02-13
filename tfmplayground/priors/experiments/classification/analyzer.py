@@ -130,8 +130,15 @@ class ClassificationDataAnalyzer(DataAnalyzer):
                 continue
 
             try:
-                f_vals, p_vals = f_classif(X_sample, y_sample)
-                # aggregate F scores only; p-values are often extreme for big n
+                # drop constant (zero-variance) features
+                var = np.nanvar(X_sample, axis=0)
+                non_constant = var > 0
+
+                if non_constant.sum() < 1:
+                    continue
+
+                X_nc = X_sample[:, non_constant]
+                f_vals, p_vals = f_classif(X_nc, y_sample)
                 f_scores.extend(f_vals)
             except Exception:
                 continue
