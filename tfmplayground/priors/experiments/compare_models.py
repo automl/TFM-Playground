@@ -12,9 +12,11 @@ from torch import nn
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from tfmplayground.callbacks import ConsoleLoggerCallback
-from tfmplayground.evaluation import (TOY_TASKS_CLASSIFICATION,
-                                      TOY_TASKS_REGRESSION,
-                                      get_openml_predictions)
+from tfmplayground.evaluation import (
+    TOY_TASKS_CLASSIFICATION,
+    TOY_TASKS_REGRESSION,
+    get_openml_predictions,
+)
 from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
@@ -24,6 +26,8 @@ from visualization_utils import (
     plot_comparison_multi,
     plot_all_decision_boundaries,
     plot_all_regression_predictions,
+    plot_per_task_comparison,
+    plot_time_budget_metrics,
 )
 
 
@@ -38,6 +42,7 @@ class ClassificationTrackerCallback(ConsoleLoggerCallback):
         self.device = get_default_device()
         self.loss_history = []
         self.accuracy_history = []  # may contain None for skipped epochs
+        self.task_scores = {}
         self.epoch_history = []
 
     def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
@@ -59,7 +64,11 @@ class ClassificationTrackerCallback(ConsoleLoggerCallback):
         predictions = get_openml_predictions(model=classifier, tasks=self.tasks)
         scores = []
         for dataset_name, (y_true, y_pred, y_proba) in predictions.items():
-            scores.append(roc_auc_score(y_true, y_proba, multi_class="ovr"))
+            score = roc_auc_score(y_true, y_proba, multi_class="ovr")
+            scores.append(score)
+            if dataset_name not in self.task_scores:
+                self.task_scores[dataset_name] = []
+            self.task_scores[dataset_name].append(score)
         avg_score = sum(scores) / len(scores) if len(scores) else float("nan")
         self.final_accuracy = avg_score
         self.accuracy_history.append(avg_score)
@@ -82,6 +91,7 @@ class RegressionTrackerCallback(ConsoleLoggerCallback):
         self.device = get_default_device()
         self.loss_history = []
         self.score_history = []  # may contain None for skipped epochs
+        self.task_scores = {}
         self.epoch_history = []
 
     def on_epoch_end(
@@ -108,7 +118,11 @@ class RegressionTrackerCallback(ConsoleLoggerCallback):
         )
         scores = []
         for dataset_name, (y_true, y_pred, _) in predictions.items():
-            scores.append(r2_score(y_true, y_pred))
+            score = r2_score(y_true, y_pred)
+            scores.append(score)
+            if dataset_name not in self.task_scores:
+                self.task_scores[dataset_name] = []
+            self.task_scores[dataset_name].append(score)
         avg_score = sum(scores) / len(scores) if len(scores) else float("nan")
         self.final_score = avg_score
         self.score_history.append(avg_score)
@@ -199,10 +213,14 @@ def train_model(
     # Define callback based on problem type
     if is_regression:
         use_tasks = tasks if tasks is not None else TOY_TASKS_REGRESSION
-        callback = RegressionTrackerCallback(use_tasks, model_name, eval_every=eval_every)
+        callback = RegressionTrackerCallback(
+            use_tasks, model_name, eval_every=eval_every
+        )
     else:
         use_tasks = tasks if tasks is not None else TOY_TASKS_CLASSIFICATION
-        callback = ClassificationTrackerCallback(use_tasks, model_name, eval_every=eval_every)
+        callback = ClassificationTrackerCallback(
+            use_tasks, model_name, eval_every=eval_every
+        )
 
     # Train the model and track time
     train_start = time.time()
@@ -346,17 +364,19 @@ def main():
         set_randomness_seed(args.seed)
 
         model_name = f"Model {idx}"
-        trained_model, metric, callback, train_time, inference_time, param_count = train_model(
-            prior_path=prior_path,
-            model_name=model_name,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            steps=args.steps,
-            lr=args.lr,
-            device=device,
-            eval_every=args.eval_every,
-            tasks=use_tasks,
-            buckets_path=args.buckets_path,
+        trained_model, metric, callback, train_time, inference_time, param_count = (
+            train_model(
+                prior_path=prior_path,
+                model_name=model_name,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                steps=args.steps,
+                lr=args.lr,
+                device=device,
+                eval_every=args.eval_every,
+                tasks=use_tasks,
+                buckets_path=args.buckets_path,
+            )
         )
 
         pname = os.path.basename(prior_path).replace(".h5", "").replace("prior_", "")
@@ -372,8 +392,11 @@ def main():
                 "metric": metric,
                 "loss_history": callback.loss_history,
                 "metric_history": (
-                    callback.score_history if is_regression else callback.accuracy_history
+                    callback.score_history
+                    if is_regression
+                    else callback.accuracy_history
                 ),
+                "per_task_scores": callback.task_scores,
                 "train_time": train_time,
                 "inference_time": inference_time,
                 "param_count": param_count,
@@ -410,9 +433,24 @@ def main():
         metric_name=metric_name,
     )
 
+    per_task_output = args.plot_output.replace(".png", "_per_task.png")
+    plot_per_task_comparison(
+        run_records,
+        output_path=per_task_output,
+        metric_name=metric_name,
+    )
+
+    plot_time_budget_metrics(
+        run_records,
+        metric_name=metric_name,
+        output_prefix=os.path.splitext(args.plot_output)[0],
+    )
+
     # Plot decision boundaries for classification tasks only
     if not is_regression:
-        decision_boundary_output = args.plot_output.replace(".png", "_decision_boundaries.png")
+        decision_boundary_output = args.plot_output.replace(
+            ".png", "_decision_boundaries.png"
+        )
         plot_all_decision_boundaries(
             run_records,
             datasets=["moons", "circles"],
@@ -423,7 +461,9 @@ def main():
         )
     else:
         # Plot regression predictions for regression tasks
-        regression_output = args.plot_output.replace(".png", "_regression_predictions.png")
+        regression_output = args.plot_output.replace(
+            ".png", "_regression_predictions.png"
+        )
         plot_all_regression_predictions(
             run_records,
             datasets=["sinusoidal", "linear", "step"],
