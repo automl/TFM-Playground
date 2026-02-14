@@ -49,6 +49,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     classification_task = isinstance(criterion, nn.CrossEntropyLoss)
     regression_task = not classification_task
 
+    assert accumulate_gradients > 0, 'accumulate_gradients must be > 0'
+
     try:
         for epoch in range(ckpt['epoch'] + 1 if ckpt else 1, epochs + 1):
             epoch_start_time = time.time()
