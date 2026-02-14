@@ -90,7 +90,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 if num_accumulated % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     optimizer.step()
-                    optimizer.zero_grad()
+                    optimizer.zero_grad(set_to_none=True)
 
             if num_accumulated % accumulate_gradients != 0:
                 remainder = num_accumulated % accumulate_gradients
@@ -100,7 +100,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                         param.grad.mul_(scale)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 optimizer.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
             end_time = time.time()
             mean_loss = total_loss / max(num_accumulated, 1)
