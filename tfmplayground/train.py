@@ -93,6 +93,11 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     optimizer.zero_grad()
 
             if num_accumulated % accumulate_gradients != 0:
+                remainder = num_accumulated % accumulate_gradients
+                scale = accumulate_gradients / remainder
+                for param in model.parameters():
+                    if param.grad is not None:
+                        param.grad.mul_(scale)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 optimizer.step()
                 optimizer.zero_grad()
