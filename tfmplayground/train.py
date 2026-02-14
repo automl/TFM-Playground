@@ -59,21 +59,20 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             total_loss = 0.
             num_accumulated = 0
             for _, full_data in enumerate(prior):
-                single_eval_pos = full_data['single_eval_pos']
-                data = (full_data['x'].to(device),
-                        full_data['y'][:, :single_eval_pos].to(device))
-                if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
+                sep = full_data['single_eval_pos']
+                x = full_data['x'].to(device)
+                y = full_data['y'][:, :sep].to(device)
+                targets = full_data['target_y'][:, sep:].to(device)
+
+                if (torch.isnan(x).any() or torch.isnan(y).any()):
                     continue
-                targets = full_data['target_y'].to(device)
 
                 if regression_task:
-                    y_mean = data[1].mean(dim=1, keepdim=True)
-                    y_std = data[1].std(dim=1, keepdim=True) + 1e-8
-                    y_norm = (data[1] - y_mean) / y_std
-                    data = (data[0], y_norm)
+                    y_mean = y.mean(dim=1, keepdim=True)
+                    y_std = y.std(dim=1, keepdim=True) + 1e-8
+                    y = (y - y_mean) / y_std
 
-                output = model(data, single_eval_pos=single_eval_pos)
-                targets = targets[:, single_eval_pos:]
+                output = model((x, y), single_eval_pos=sep)
                 if regression_task:
                     targets = (targets - y_mean) / y_std
                 if classification_task:
