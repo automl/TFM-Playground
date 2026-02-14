@@ -1,0 +1,17 @@
+{
+    "cc18": {
+        "description": "CC18 benchmark suite for classification",
+        "eval_dataset_ids": [],
+        "eval_task_ids": []
+    },
+    "ctr23": {
+        "description": "CTR23 benchmark suite for regression",
+        "eval_dataset_ids": [],
+        "eval_task_ids": []
+    },
+    "realpfn_eval": {
+        "description": "RealPFN evaluation datasets",
+        "eval_dataset_ids": [],
+        "eval_task_ids": []
+    }
+}

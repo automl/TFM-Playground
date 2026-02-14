@@ -7,11 +7,12 @@ import numpy as np
 import torch
 
 from .dataloader import TabICLPriorDataLoader, TICLPriorDataLoader, TabPFNPriorDataLoader
+from .real_data.episode_generator import RealDataPriorDataLoader
 from .utils import build_ticl_prior, build_tabpfn_prior, dump_prior_to_h5
 
 def main():
     parser = argparse.ArgumentParser(description="Dump prior data (TICL, TabICL, or TabPFN) into HDF5 format.")
-    parser.add_argument("--lib", type=str, required=True, choices=["ticl", "tabicl", "tabpfn"], help="Which library to use for the prior.")
+    parser.add_argument("--lib", type=str, required=True, choices=["ticl", "tabicl", "tabpfn", "real"], help="Which library to use for the prior.")
     parser.add_argument("--save_path", type=str, required=False, help="Path to save the HDF5 file.")
     parser.add_argument("--num_batches", type=int, default=100, help="Number of batches to dump.")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for dumping.")
@@ -26,6 +27,11 @@ def main():
     parser.add_argument("--max_classes", type=int, default=0, help="Maximum number of classes. Set to 0 for regression, >0 for classification.")
     parser.add_argument("--np_seed", type=int, default=None, help="Random seed for NumPy.")
     parser.add_argument("--torch_seed", type=int, default=None, help="Random seed for PyTorch.")
+    # real data prior args
+    parser.add_argument("--cache_dir", type=str, default=None, help="Path to cached .npz datasets (required for --lib real).")
+    parser.add_argument("--train_pool", type=str, default=None, help="“Path to training pool file. In mode=only, use the pool that matches task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. In mode=mixed, you can use train_pool_all.txt.”")
+    parser.add_argument("--mode", type=str, default="only", choices=["only", "mixed"], help="Sampling mode: 'only' uses original target, 'mixed' allows any column matching task type.")
+    parser.add_argument("--fallback_pool", type=str, default=None, help="“Optional fallback pool used only in mode=mixed. Should match task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. If omitted and no suitable column is found, episode generation raises an error.”")
 
     args = parser.parse_args()
 
@@ -63,6 +69,24 @@ def main():
             num_features=args.max_features,
             device=device,
             **tabpfn_config,
+        )
+    elif args.lib == "real":
+        if not args.cache_dir or not args.train_pool:
+            parser.error("--cache_dir and --train_pool are required for --lib real")
+        
+        prior = RealDataPriorDataLoader(
+            cache_dir=args.cache_dir,
+            train_pool_file=args.train_pool,
+            num_steps=args.num_batches,
+            batch_size=1, # enforce batch_size=1 for real data prior
+            min_seq_len=args.min_seq_len or 64,
+            max_seq_len=args.max_seq_len,
+            max_features=args.max_features,
+            device=device,
+            task_type=problem_type,
+            mode=args.mode,
+            base_seed=args.np_seed,
+            fallback_pool_file=args.fallback_pool,
         )
     else:  # tabicl
         prior = TabICLPriorDataLoader(
