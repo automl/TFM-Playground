@@ -369,12 +369,16 @@ class TabICLPriorDataLoader(DataLoader):
         x, y, active_features, seqlen, train_size, adj, priors = d
         density = torch.tensor([p.density for p in priors])
         if (active_features != active_features[0]).any():
+            raise ValueError("Varying active features within a batch is not supported. "
+                             "Please ensure that the TabICLPriorDataset is configured to generate batches with a consistent number of active features.")
             return None # skip batches with varying active features for now
         active_features = active_features[
             0
         ].item()  # should be all the same since we use batch_size_per_gp=batch_size (not true in practice!)
         x = x[:, :, :active_features]
         if (train_size != train_size[0]).any():
+            raise ValueError("Varying train sizes within a batch is not supported. "
+                             "Please ensure that the TabICLPriorDataset is configured to generate batches with a consistent train size.")   
             return None # skip batches with varying train sizes for now
         single_eval_pos = train_size[0].item()  # should be all the same since we use batch_size_per_gp=batch_size
         return dict(
