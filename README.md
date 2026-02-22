@@ -131,3 +131,81 @@ Check out `prior_visualization.ipynb` for some more examples.
 
 - [TabICL](https://github.com/soda-inria/tabicl) (Classification)
 - [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
+
+### Time Series Priors for Forecasting
+
+We introduce **time series priors** that generate synthetic data with temporal patterns, designed to improve model performance on forecasting tasks.
+
+#### Why Time Series Priors?
+
+Existing priors (TabICL, TICL) generate i.i.d. tabular data — rows are independent with no temporal structure. This is suboptimal for forecasting where:
+- Data has **trends** (systematic drift over time)
+- Data has **seasonality** (repeating patterns)
+- Data has **autocorrelation** (past values predict future)
+
+Our time series priors expose the model to these patterns during pretraining.
+
+#### Quick Start
+
+Train a model on time series priors:
+```bash
+python pretrain_forecasting.py --epochs 100 --steps 50 --batchsize 4
+```
+
+Evaluate on synthetic forecasting data:
+```bash
+python eval_forecasting.py --model nanotabpfn_forecasting_weights.pth
+```
+
+#### Temporal Pattern Types
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| `trend` | Linear/polynomial drift | Stock prices, growth |
+| `seasonal` | Periodic oscillations | Sales, weather |
+| `ar` | Autoregressive dependencies | Sensor data |
+| `random_walk` | Cumulative noise | Financial data |
+| `mixed` | Random combination (default) | General forecasting |
+
+```bash
+# Train with specific pattern type
+python pretrain_forecasting.py --priortype seasonal --epochs 100
+
+# Use a preset
+python pretrain_forecasting.py --preset ar --epochs 100
+```
+
+#### Python API
+
+```python
+from tfmplayground.priors import TimeSeriesPriorDataLoader
+
+loader = TimeSeriesPriorDataLoader(
+    num_steps=100,
+    batch_size=8,
+    num_datapoints_min=50,
+    num_datapoints_max=256,
+    min_features=1,
+    max_features=10,
+    device=device,
+    prior_type="mixed",
+)
+
+for batch in loader:
+    x = batch["x"]           # (batch, seq_len, features)
+    y = batch["y"]           # (batch, seq_len)
+    split = batch["single_eval_pos"]  # temporal train/test boundary
+```
+
+#### Key Differences from Standard Priors
+
+| Aspect | TabICL/TICL | Time Series Priors |
+|--------|-------------|-------------------|
+| Row independence | i.i.d. | Temporally correlated |
+| Train/test split | Random | Temporal (past→future) |
+| Patterns | None | Trends, seasonality, AR |
+| Use case | Classification/regression | Forecasting |
+
+#### Design Document
+
+See `docs/design/timeseries-priors.md` for detailed architecture and implementation notes.
