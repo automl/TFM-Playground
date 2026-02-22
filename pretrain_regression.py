@@ -38,7 +38,7 @@ ckpt = None
 if args.loadcheckpoint:
     ckpt = torch.load(args.loadcheckpoint)
 
-prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
+prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps * (ckpt["epoch"] if ckpt else 0))
 
 model = NanoTabPFNModel(
     num_attention_heads=args.heads,
@@ -60,9 +60,10 @@ torch.save(
 )
 
 if ckpt:
-    model.load_state_dict(ckpt['model'])
+    model.load_state_dict(ckpt["model"])
 
 dist = FullSupportBarDistribution(bucket_edges)
+
 
 class EvaluationLoggerCallback(ConsoleLoggerCallback):
     def __init__(self, tasks):
@@ -75,22 +76,11 @@ class EvaluationLoggerCallback(ConsoleLoggerCallback):
         for dataset_name, (y_true, y_pred, _) in predictions.items():
             scores.append(r2_score(y_true, y_pred))
         avg_score = sum(scores) / len(scores)
-        print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg r2 score {avg_score:.3f}',
-              flush=True)
+        print(f"epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg r2 score {avg_score:.3f}", flush=True)
 
 
 callbacks = [EvaluationLoggerCallback(TOY_TASKS_REGRESSION)]
 
-trained_model, loss = train(
-    model=model,
-    prior=prior,
-    criterion=dist,
-    epochs=args.epochs,
-    accumulate_gradients=args.accumulate,
-    lr=args.lr,
-    device=device,
-    callbacks=callbacks,
-    ckpt=ckpt
-)
+trained_model, loss = train(model=model, prior=prior, criterion=dist, epochs=args.epochs, accumulate_gradients=args.accumulate, lr=args.lr, device=device, callbacks=callbacks, ckpt=ckpt)
 
-torch.save(trained_model.to('cpu').state_dict(), args.saveweights)
+torch.save(trained_model.to("cpu").state_dict(), args.saveweights)

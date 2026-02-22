@@ -9,6 +9,7 @@ import torch
 from .dataloader import TabICLPriorDataLoader, TICLPriorDataLoader, TabPFNPriorDataLoader
 from .utils import build_ticl_prior, build_tabpfn_prior, dump_prior_to_h5
 
+
 def main():
     parser = argparse.ArgumentParser(description="Dump prior data (TICL, TabICL, or TabPFN) into HDF5 format.")
     parser.add_argument("--lib", type=str, required=True, choices=["ticl", "tabicl", "tabpfn"], help="Which library to use for the prior.")

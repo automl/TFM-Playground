@@ -36,7 +36,7 @@ ckpt = None
 if args.loadcheckpoint:
     ckpt = torch.load(args.loadcheckpoint)
 
-prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
+prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps * (ckpt["epoch"] if ckpt else 0))
 
 criterion = nn.CrossEntropyLoss()
 
@@ -49,7 +49,8 @@ model = NanoTabPFNModel(
 )
 
 if ckpt:
-    model.load_state_dict(ckpt['model'])
+    model.load_state_dict(ckpt["model"])
+
 
 class ToyEvaluationLoggerCallback(ConsoleLoggerCallback):
     def __init__(self, tasks):
@@ -62,8 +63,8 @@ class ToyEvaluationLoggerCallback(ConsoleLoggerCallback):
         for dataset_name, (y_true, y_pred, y_proba) in predictions.items():
             scores.append(accuracy_score(y_true, y_pred))
         avg_score = sum(scores) / len(scores)
-        print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg accuracy {avg_score:.3f}',
-              flush=True)
+        print(f"epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg accuracy {avg_score:.3f}", flush=True)
+
 
 class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
     def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
@@ -74,30 +75,13 @@ class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
         predictions = get_openml_predictions(model=classifier, classification=True, tasks=TABARENA_TASKS)
         scores = []
         for dataset_name, (y_true, y_pred, y_proba) in predictions.items():
-            scores.append(roc_auc_score(y_true, y_proba, multi_class='ovr'))
+            scores.append(roc_auc_score(y_true, y_proba, multi_class="ovr"))
         avg_score = sum(scores) / len(scores)
-        self.wandb.log({
-            'epoch': epoch,
-            'epoch_time': epoch_time,
-            'mean_loss': loss,
-            'tabarena_avg_roc_auc': avg_score
-        })
-        print(f'epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg roc auc {avg_score:.3f}',
-              flush=True)
+        self.wandb.log({"epoch": epoch, "epoch_time": epoch_time, "mean_loss": loss, "tabarena_avg_roc_auc": avg_score})
+        print(f"epoch {epoch:5d} | time {epoch_time:5.2f}s | mean loss {loss:5.2f} | avg roc auc {avg_score:.3f}", flush=True)
 
-#callbacks = [ProductionEvaluationLoggerCallback('nanoTFM', args.runname)]
+
+# callbacks = [ProductionEvaluationLoggerCallback('nanoTFM', args.runname)]
 callbacks = [ToyEvaluationLoggerCallback(TOY_TASKS_CLASSIFICATION)]
 
-trained_model, loss = train(
-    model=model,
-    prior=prior,
-    criterion=criterion,
-    epochs=args.epochs,
-    accumulate_gradients=args.accumulate,
-    lr=args.lr,
-    device=device,
-    callbacks=callbacks,
-    ckpt=ckpt,
-    multi_gpu=args.multigpu,
-    run_name=args.runname
-)
+trained_model, loss = train(model=model, prior=prior, criterion=criterion, epochs=args.epochs, accumulate_gradients=args.accumulate, lr=args.lr, device=device, callbacks=callbacks, ckpt=ckpt, multi_gpu=args.multigpu, run_name=args.runname)

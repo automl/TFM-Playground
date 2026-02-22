@@ -6,6 +6,7 @@ import h5py
 import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
+
 # import here for future use & cleaner imports/it already handles type conversions
 from tabpfn_prior import TabPFNPriorDataLoader
 from torch.utils.data import DataLoader
@@ -40,10 +41,7 @@ class PriorDataLoader(DataLoader):
         self.device = device
 
     def __iter__(self) -> Iterator[Dict[str, Union[torch.Tensor, int]]]:
-        return iter(
-            self.get_batch_function(self.batch_size, self.num_datapoints_max, self.num_features)
-            for _ in range(self.num_steps)
-        )
+        return iter(self.get_batch_function(self.batch_size, self.num_datapoints_max, self.num_features) for _ in range(self.num_steps))
 
     def __len__(self) -> int:
         return self.num_steps
@@ -58,12 +56,13 @@ class PriorDumpDataLoader(DataLoader):
         batch_size (int): Batch size.
         device (torch.device): Device to load tensors onto.
     """
+
     def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
         with h5py.File(self.filename, "r") as f:
-            self.num_datapoints_max = f['X'].shape[0]
+            self.num_datapoints_max = f["X"].shape[0]
             if "max_num_classes" in f:
                 self.max_num_classes = f["max_num_classes"][0]
             else:
@@ -81,13 +80,13 @@ class PriorDumpDataLoader(DataLoader):
 
                 num_features = f["num_features"][self.pointer : end].max()
                 if self.has_num_datapoints:
-                    num_datapoints_batch = f["num_datapoints"][self.pointer:end]
+                    num_datapoints_batch = f["num_datapoints"][self.pointer : end]
                     max_seq_in_batch = int(num_datapoints_batch.max())
                 else:
                     max_seq_in_batch = int(self.stored_max_seq_len)
 
-                x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])
-                y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])
+                x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])
+                y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])
                 single_eval_pos = f["single_eval_pos"][self.pointer : end]
 
                 self.pointer += self.batch_size
@@ -159,9 +158,7 @@ class TabICLPriorDataLoader(DataLoader):
 
     def tabicl_to_ours(self, d):
         x, y, active_features, seqlen, train_size = d
-        active_features = active_features[
-            0
-        ].item()  # should be all the same since we use batch_size_per_gp=batch_size (not true in practice!)
+        active_features = active_features[0].item()  # should be all the same since we use batch_size_per_gp=batch_size (not true in practice!)
         x = x[:, :, :active_features]
         single_eval_pos = train_size[0].item()  # should be all the same since we use batch_size_per_gp=batch_size
         return dict(

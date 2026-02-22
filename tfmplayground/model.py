@@ -10,7 +10,7 @@ from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 
 class NanoTabPFNModel(nn.Module):
     def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int):
-        """ Initializes the feature/target encoder, transformer stack and decoder """
+        """Initializes the feature/target encoder, transformer stack and decoder"""
         super().__init__()
         self.embedding_size = embedding_size
         self.num_attention_heads = num_attention_heads
@@ -85,7 +85,7 @@ class NanoTabPFNModel(nn.Module):
 # handle variable number of features in here?
 class FeatureEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """ Creates the linear layer that we will use to embed our features. """
+        """Creates the linear layer that we will use to embed our features."""
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
@@ -104,14 +104,14 @@ class FeatureEncoder(nn.Module):
         x = x.unsqueeze(-1)
         mean = torch.mean(x[:, :single_eval_pos], dim=1, keepdims=True)
         std = torch.std(x[:, :single_eval_pos], dim=1, keepdims=True) + 1e-8
-        x = (x-mean)/std
+        x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)
 
 
 class TargetEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """ Creates the linear layer that we will use to embed our targets. """
+        """Creates the linear layer that we will use to embed our targets."""
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
@@ -128,7 +128,7 @@ class TargetEncoder(nn.Module):
         """
         # nan padding & nan handler instead?
         mean = torch.mean(y_train, axis=1, keepdim=True)
-        padding = mean.repeat(1, num_rows-y_train.shape[1], 1)
+        padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
         y = y.unsqueeze(-1)
         return self.linear_layer(y)
@@ -136,7 +136,7 @@ class TargetEncoder(nn.Module):
 
 class TransformerEncoderStack(nn.Module):
     def __init__(self, num_layers: int, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int):
-        """ Instantiates num_layers many Transformer Blocks and stores them in a list so we can use them in the forward """
+        """Instantiates num_layers many Transformer Blocks and stores them in a list so we can use them in the forward"""
         super().__init__()
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
@@ -166,9 +166,7 @@ class TransformerEncoderLayer(nn.Module):
     Modified version of older version of https://github.com/pytorch/pytorch/blob/v2.6.0/torch/nn/modules/transformer.py#L630
     """
 
-    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
-                 layer_norm_eps: float = 1e-5, batch_first: bool = True,
-                 device=None, dtype=None):
+    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int, layer_norm_eps: float = 1e-5, batch_first: bool = True, device=None, dtype=None):
         super().__init__()
         self.self_attention_between_datapoints = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         self.self_attention_between_features = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
@@ -196,31 +194,37 @@ class TransformerEncoderLayer(nn.Module):
         """
         batch_size, rows_size, col_size, embedding_size = src.shape
         # attention between features
-        src = src.reshape(batch_size*rows_size, col_size, embedding_size)
+        src = src.reshape(batch_size * rows_size, col_size, embedding_size)
+
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
             return self.self_attention_between_features(x, x, x)[0] + x
+
         src = feature_attention(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm1(src)
         # attention between datapoints
         src = src.transpose(1, 2)
-        src = src.reshape(batch_size*col_size, rows_size, embedding_size)
+        src = src.reshape(batch_size * col_size, rows_size, embedding_size)
+
         @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
             x_left = self.self_attention_between_datapoints(x[:, :single_eval_position], x[:, :single_eval_position], x[:, :single_eval_position])[0]
             # test data attends to the training data
             x_right = self.self_attention_between_datapoints(x[:, single_eval_position:], x[:, :single_eval_position], x[:, :single_eval_position])[0]
             return torch.cat([x_left, x_right], dim=1) + x
+
         src = datapoint_attention(src)
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
         src = src.transpose(2, 1)
         src = self.norm2(src)
         # MLP after attention
         src = src.reshape(-1, embedding_size)
+
         @memory_chunking(num_mem_chunks)
         def mlp(x):
             return self.linear2(F.gelu(self.linear1(x))) + x
+
         src = mlp(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm3(src)
@@ -235,25 +239,27 @@ def memory_chunking(num_mem_chunks: int) -> callable:
         num_mem_chunks: (int) Number of chunks to split the input into, higher values use less memory but are slower.
                           Needs to be set to 1 during training to disable chunking and get correct gradients.
     """
+
     def decorator(func: Callable[[torch.Tensor], torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
         def wrapper(x: torch.Tensor) -> torch.Tensor:
             if num_mem_chunks <= 1 or x.shape[0] == 0:
                 return func(x)
             elif torch.is_grad_enabled():
-                warnings.warn("Memory chunking is disabled since gradient computation is enabled to avoid incorrect gradients. "
-                              "Please use `with torch.no_grad():` during inference to enable chunking.")
+                warnings.warn("Memory chunking is disabled since gradient computation is enabled to avoid incorrect gradients. Please use `with torch.no_grad():` during inference to enable chunking.")
                 return func(x)
             chunk_size = max(1, math.ceil(x.shape[0] / num_mem_chunks))
             for x_split in torch.split(x, split_size_or_sections=chunk_size, dim=0):
-                x_split[:] = func(x_split) # in-place modification to save memory, will cause wrong gradients if used during training
+                x_split[:] = func(x_split)  # in-place modification to save memory, will cause wrong gradients if used during training
             return x
+
         return wrapper
+
     return decorator
 
 
 class Decoder(nn.Module):
     def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int):
-        """ Initializes the linear layers for use in the forward """
+        """Initializes the linear layers for use in the forward"""
         super().__init__()
         self.linear1 = nn.Linear(embedding_size, mlp_hidden_size)
         self.linear2 = nn.Linear(mlp_hidden_size, num_outputs)

@@ -5,16 +5,21 @@ import numpy as np
 
 from pfns.bar_distribution import get_bucket_limits
 
+
 def set_randomness_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+
 def get_default_device():
-    device = 'cpu'
-    if torch.backends.mps.is_available(): device = 'mps'
-    if torch.cuda.is_available(): device = 'cuda'
+    device = "cpu"
+    if torch.backends.mps.is_available():
+        device = "mps"
+    if torch.cuda.is_available():
+        device = "cuda"
     return device
+
 
 def make_global_bucket_edges(filename, n_buckets=100, device=get_default_device(), max_y=5_000_000):
     with h5py.File(filename, "r") as f:
