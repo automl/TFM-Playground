@@ -36,7 +36,13 @@ ckpt = None
 if args.loadcheckpoint:
     ckpt = torch.load(args.loadcheckpoint)
 
-prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps * (ckpt["epoch"] if ckpt else 0))
+prior = PriorDumpDataLoader(
+    filename=args.priordump,
+    num_steps=args.steps,
+    batch_size=args.batchsize,
+    device=device,
+    starting_index=args.steps * (ckpt["epoch"] if ckpt else 0),
+)
 
 criterion = nn.CrossEntropyLoss()
 
@@ -84,4 +90,16 @@ class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
 # callbacks = [ProductionEvaluationLoggerCallback('nanoTFM', args.runname)]
 callbacks = [ToyEvaluationLoggerCallback(TOY_TASKS_CLASSIFICATION)]
 
-trained_model, loss = train(model=model, prior=prior, criterion=criterion, epochs=args.epochs, accumulate_gradients=args.accumulate, lr=args.lr, device=device, callbacks=callbacks, ckpt=ckpt, multi_gpu=args.multigpu, run_name=args.runname)
+trained_model, loss = train(
+    model=model,
+    prior=prior,
+    criterion=criterion,
+    epochs=args.epochs,
+    accumulate_gradients=args.accumulate,
+    lr=args.lr,
+    device=device,
+    callbacks=callbacks,
+    ckpt=ckpt,
+    multi_gpu=args.multigpu,
+    run_name=args.runname,
+)

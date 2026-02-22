@@ -52,7 +52,12 @@ def get_ticl_prior_config(prior_type: str) -> dict:
             "feature_curriculum": False,
         }
     elif prior_type == "boolean_conjunctions":
-        return {"max_rank": 20, "max_fraction_uninformative": 0.3, "p_uninformative": 0.3, "verbose": False}
+        return {
+            "max_rank": 20,
+            "max_fraction_uninformative": 0.3,
+            "p_uninformative": 0.3,
+            "verbose": False,
+        }
     elif prior_type == "step_function":
         return {
             "max_steps": 1,

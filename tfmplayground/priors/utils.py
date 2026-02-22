@@ -70,7 +70,15 @@ def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
     }
 
 
-def dump_prior_to_h5(prior, max_classes: int, batch_size: int, save_path: str, problem_type: str, max_seq_len: int, max_features: int):
+def dump_prior_to_h5(
+    prior,
+    max_classes: int,
+    batch_size: int,
+    save_path: str,
+    problem_type: str,
+    max_seq_len: int,
+    max_features: int,
+):
     """Dumps synthetic prior data into an HDF5 file for later training."""
 
     with h5py.File(save_path, "w") as f:
