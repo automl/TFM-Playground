@@ -37,7 +37,7 @@ print("Accuracy", accuracy_score(y_test, predictions))
 ### Our Code
 
 `tfmplayground/model.py` contains the implementation of the architecture in less than 250 lines of code. `tfmplayground/train.py` implements a simple training loop in under 100 lines and `tfmplayground/priors.py` implements a dataloader that allows you to load a dump pre-generated from a prior.
-We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
+We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own `get_batch` function.
 
 ### Pretrain your own small nanoTabPFN
 First we download 100k pre-generated datasets with 50 datapoints, 3 features and up to 3 classes each from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5).
@@ -159,13 +159,13 @@ python eval_forecasting.py --model nanotabpfn_forecasting_weights.pth
 
 #### Temporal Pattern Types
 
-| Type | Description | Use Case |
-|------|-------------|----------|
-| `trend` | Linear/polynomial drift | Stock prices, growth |
-| `seasonal` | Periodic oscillations | Sales, weather |
-| `ar` | Autoregressive dependencies | Sensor data |
-| `random_walk` | Cumulative noise | Financial data |
-| `mixed` | Random combination (default) | General forecasting |
+| Type          | Description                  |
+|---------------|------------------------------|
+| `trend`       | Linear/polynomial drift      | 
+| `seasonal`    | Periodic oscillations        | 
+| `ar`          | Autoregressive dependencies  | 
+| `random_walk` | Cumulative noise             |
+| `mixed`       | Random combination (default) | 
 
 ```bash
 # Train with specific pattern type
@@ -199,13 +199,11 @@ for batch in loader:
 
 #### Key Differences from Standard Priors
 
-| Aspect | TabICL/TICL | Time Series Priors |
-|--------|-------------|-------------------|
-| Row independence | i.i.d. | Temporally correlated |
-| Train/test split | Random | Temporal (past→future) |
-| Patterns | None | Trends, seasonality, AR |
-| Use case | Classification/regression | Forecasting |
+| Aspect           | TabICL/TICL               | Time Series Priors      |
+|------------------|---------------------------|-------------------------|
+| Row independence | i.i.d.                    | Temporally correlated   |
+| Train/test split | Random                    | Temporal (past→future)  |
+| Patterns         | None                      | Trends, seasonality, AR |
+| Use case         | Classification/regression | Forecasting             |
 
-#### Design Document
 
-See `docs/design/timeseries-priors.md` for detailed architecture and implementation notes.
