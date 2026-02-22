@@ -42,3 +42,8 @@ Issues = "https://github.com/automl/TFM-Playground/issues"
 
 [tool.setuptools]
 packages = { find = { include = ["tfmplayground"] } }
+
+[tool.ruff]
+line-length = 254
+[tool.ruff.lint]
+ignore = ["E741"]
