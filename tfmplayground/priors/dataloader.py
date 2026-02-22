@@ -7,7 +7,7 @@ import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 
 # import here for future use & cleaner imports/it already handles type conversions
-from tabpfn_prior import TabPFNPriorDataLoader
+from tabpfn_prior import TabPFNPriorDataLoader as TabPFNPriorDataLoader
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from torch.utils.data import DataLoader
 

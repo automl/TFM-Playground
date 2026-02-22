@@ -77,7 +77,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
 
             self.wandb = wandb  # store wandb module to avoid import if not used
             wandb.init(project=project, name=name, id=name, config=config, dir=log_dir, resume="allow")
-        except ImportError:
+        except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
     def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
