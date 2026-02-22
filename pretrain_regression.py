@@ -5,12 +5,12 @@ from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.metrics import r2_score
 
 from tfmplayground.callbacks import ConsoleLoggerCallback
-from tfmplayground.evaluation import get_openml_predictions, TOY_TASKS_REGRESSION
+from tfmplayground.evaluation import TOY_TASKS_REGRESSION, get_openml_predictions
 from tfmplayground.interface import NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
-from tfmplayground.utils import get_default_device, set_randomness_seed, make_global_bucket_edges
+from tfmplayground.utils import get_default_device, make_global_bucket_edges, set_randomness_seed
 
 parser = argparse.ArgumentParser()
 

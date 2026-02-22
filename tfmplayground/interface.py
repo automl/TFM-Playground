@@ -9,7 +9,7 @@ from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OrdinalEncoder, FunctionTransformer
+from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device

@@ -1,11 +1,11 @@
 import math
 import warnings
-from typing import Tuple, Callable
+from typing import Callable, Tuple
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
+from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
 
 class NanoTabPFNModel(nn.Module):

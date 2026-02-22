@@ -5,10 +5,10 @@ from typing import Union
 import h5py
 import numpy as np
 import torch
-from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
+from ticl.priors import BooleanConjunctionPrior, ClassificationAdapterPrior, GPPrior, MLPPrior, StepFunctionPrior
 from tqdm import tqdm
 
-from .config import get_ticl_prior_config, get_tabpfn_prior_config
+from .config import get_tabpfn_prior_config, get_ticl_prior_config
 
 
 def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
