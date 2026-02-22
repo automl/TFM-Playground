@@ -93,7 +93,7 @@ class PriorDumpDataLoader(DataLoader):
                 if self.pointer >= f["X"].shape[0]:
                     print(
                         """Finished iteration over all stored datasets! """
-                        """Will start reusing the same data with different splits now."""
+                        """Will start reusing the same data with different splits now.""",
                     )
                     self.pointer = 0
 
