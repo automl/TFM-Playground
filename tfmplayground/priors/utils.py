@@ -246,6 +246,9 @@ def slice_h5_by_density(
     """
     if input_path == output_path:
         raise ValueError("input_path and output_path must be different")
+    
+    min_density = np.float32(min_density)
+    max_density = np.float32(max_density)
 
     if not (0 <= max_density <= 1):
         raise ValueError(f"max_density must be between 0 and 1, got {max_density}")
@@ -265,9 +268,16 @@ def slice_h5_by_density(
                 f"'{input_path}' is not sorted by density. "
                 "Run sort_h5_by_density first."
             )
+        
+        if min_density == 0.:
+            start_idx = 0
+        else:
+            start_idx = int(np.searchsorted(all_densities, min_density, side="left"))
 
-        start_idx = int(np.searchsorted(all_densities, min_density, side="left"))
-        end_idx = int(np.searchsorted(all_densities, max_density, side="right"))
+        if max_density == 1.:
+            end_idx = len(all_densities)
+        else:
+            end_idx = int(np.searchsorted(all_densities, max_density, side="right"))
 
         if start_idx >= end_idx:
             raise ValueError(
