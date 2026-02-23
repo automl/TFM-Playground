@@ -38,8 +38,9 @@ def get_openml_predictions(
         *,
         model: NanoTabPFNRegressor | NanoTabPFNClassifier,
         tasks: list[int] | str = "tabarena-v0.1",
-        max_n_features: int = 500,
-        max_n_samples: int = 10_000,
+        max_n_features: int | None = 500,
+        max_n_samples: int | None = 10_000,
+        max_n_classes: int | None = None,
         classification: bool | None = None,
         cache_directory: str | None = None,
 ):
@@ -54,6 +55,7 @@ def get_openml_predictions(
         tasks (list[int] | str, optional): A list of OpenML task IDs or the name of a benchmark suite.
         max_n_features (int, optional): Maximum number of features allowed for a task. Tasks exceeding this limit are skipped.
         max_n_samples (int, optional): Maximum number of instances allowed for a task. Tasks exceeding this limit are skipped.
+        max_n_classes (int, optional): Maximum number of classes allowed for a classification task. Tasks exceeding this limit are skipped.
         classification (bool | None, optional): Whether the model is a classifier (True) or regressor (False). If None, it is inferred from the model type.
         cache_directory (str | None, optional): Directory to save OpenML data. If None, default cache path is used.
     Returns:
@@ -85,16 +87,15 @@ def get_openml_predictions(
 
         n_features = dataset.qualities["NumberOfFeatures"]
         n_samples = dataset.qualities["NumberOfInstances"]
-        if n_features > max_n_features or n_samples > max_n_samples:
-            continue  # skip task, too big
+        n_classes = dataset.qualities["NumberOfClasses"]
 
-        # dataset_info: Dict[str, Any] ={
-        #     'task_id' : task.task_id,
-        #     'dataset_id' : task.dataset_id,
-        #     'task_type_id' : task.task_type_id,
-        #     'dataset_name' : dataset.name,
-        # }
-        # dataset_info.update(dataset.qualities)
+        if (
+            (max_n_features is not None and n_features > max_n_features)
+            or (max_n_samples is not None and n_samples > max_n_samples)
+            or (max_n_classes is not None and n_classes > max_n_classes)
+        ):
+            continue  # skip task
+        
         _, folds, _ = task.get_split_dimensions()
         tabarena_light = True
         if tabarena_light:

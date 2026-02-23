@@ -88,6 +88,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     print('Loss is NaN, stopping training batch.')
                     return full_data
                 loss.backward()
+                del output, targets, losses, loss, data, full_data
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
 
                 if (i + 1) % accumulate_gradients == 0:
