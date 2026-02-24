@@ -43,6 +43,7 @@ def get_openml_predictions(
         max_n_classes: int | None = None,
         classification: bool | None = None,
         cache_directory: str | None = None,
+        tabarena_light: bool = True,
 ):
     """
     Evaluates a model on a set of OpenML tasks and returns predictions.
@@ -58,6 +59,7 @@ def get_openml_predictions(
         max_n_classes (int, optional): Maximum number of classes allowed for a classification task. Tasks exceeding this limit are skipped.
         classification (bool | None, optional): Whether the model is a classifier (True) or regressor (False). If None, it is inferred from the model type.
         cache_directory (str | None, optional): Directory to save OpenML data. If None, default cache path is used.
+        tabarena_light (bool, optional): If True, uses a single repeat and single fold. If False, uses 10-repeat 3-fold CV for datasets with <2500 samples, and 3-repeat 3-fold CV otherwise. Defaults to True.
     Returns:
         dict: A dictionary where keys are dataset names and values are tuples of (true targets, predicted labels, predicted probabilities).
     """
@@ -96,45 +98,50 @@ def get_openml_predictions(
         ):
             continue  # skip task
         
-        _, folds, _ = task.get_split_dimensions()
-        tabarena_light = True
         if tabarena_light:
-            folds = 1 # code supports multiple folds but tabarena_light only has one
-        repeat = 0 # code only supports one repeat
-        targets = []
-        predictions = []
-        probabilities = []
-        for fold in range(folds):
-            X, y, categorical_indicator, attribute_names = dataset.get_data(
-                target=task.target_name, dataset_format="dataframe"
-            )
-            train_indices, test_indices = task.get_train_test_split_indices(
-                fold=fold, repeat=repeat
-            )
-            X_train = X.iloc[train_indices].to_numpy()
-            y_train = y.iloc[train_indices].to_numpy()
-            X_test = X.iloc[test_indices].to_numpy()
-            y_test = y.iloc[test_indices].to_numpy()
+            n_repeats, n_folds = 1, 1
+        elif n_samples < 2500:
+            n_repeats, n_folds = 10, 3
+        else:
+            n_repeats, n_folds = 3, 3
 
-            if classification:
-                label_encoder = LabelEncoder()
-                y_train = label_encoder.fit_transform(y_train)
-                y_test = label_encoder.transform(y_test)
-            targets.append(y_test)
+        for repeat in range(n_repeats):
+            for fold in range(n_folds):
+                targets = []
+                predictions = []
+                probabilities = []
+                X, y, categorical_indicator, attribute_names = dataset.get_data(
+                    target=task.target_name, dataset_format="dataframe"
+                )
+                train_indices, test_indices = task.get_train_test_split_indices(
+                    fold=fold, repeat=repeat
+                )
+                X_train = X.iloc[train_indices].to_numpy()
+                y_train = y.iloc[train_indices].to_numpy()
+                X_test = X.iloc[test_indices].to_numpy()
+                y_test = y.iloc[test_indices].to_numpy()
 
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            predictions.append(y_pred)
-            if classification:
-                y_proba = model.predict_proba(X_test)
-                if y_proba.shape[1] == 2:  # binary classification
-                    y_proba = y_proba[:, 1]
-                probabilities.append(y_proba)
+                if classification:
+                    label_encoder = LabelEncoder()
+                    y_train = label_encoder.fit_transform(y_train)
+                    y_test = label_encoder.transform(y_test)
+                targets.append(y_test)
 
-        y_pred = np.concatenate(predictions, axis=0)
-        targets = np.concatenate(targets, axis=0)
-        probabilities = np.concatenate(probabilities, axis=0) if len(probabilities) > 0 else None
-        dataset_predictions[str(dataset.name)] = (targets, y_pred, probabilities)
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                predictions.append(y_pred)
+                if classification:
+                    y_proba = model.predict_proba(X_test)
+                    if y_proba.shape[1] == 2:  # binary classification
+                        y_proba = y_proba[:, 1]
+                    probabilities.append(y_proba)
+
+                y_pred = np.concatenate(predictions, axis=0)
+                targets = np.concatenate(targets, axis=0)
+                probabilities = np.concatenate(probabilities, axis=0) if len(probabilities) > 0 else None
+        
+                dataset_key = f"{dataset.name}/repeat{repeat}/fold{fold}"
+                dataset_predictions[dataset_key] = (targets, y_pred, probabilities)
     return dataset_predictions
 
 
