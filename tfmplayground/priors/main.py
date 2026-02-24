@@ -73,12 +73,12 @@ def main():
     elif args.lib == "real":
         if not args.cache_dir or not args.train_pool:
             parser.error("--cache_dir and --train_pool are required for --lib real")
-        
+        real_batch_size = 1  # enforce batch_size=1 for real data prior
         prior = RealDataPriorDataLoader(
             cache_dir=args.cache_dir,
             train_pool_file=args.train_pool,
             num_steps=args.num_batches,
-            batch_size=1, # enforce batch_size=1 for real data prior
+            batch_size= real_batch_size,
             min_seq_len=args.min_seq_len or 64,
             max_seq_len=args.max_seq_len,
             max_features=args.max_features,
@@ -88,6 +88,7 @@ def main():
             base_seed=args.np_seed,
             fallback_pool_file=args.fallback_pool,
         )
+        args.batch_size = real_batch_size  # override batch size for dumping
     else:  # tabicl
         prior = TabICLPriorDataLoader(
             num_steps=args.num_batches,

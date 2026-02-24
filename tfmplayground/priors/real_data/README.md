@@ -50,12 +50,12 @@ This writes:
 
 ## Phase 3: Generate Real Prior Data
 
-Run through `tfmplayground.priors.main` with `--lib real`.
+Run through `tfmplayground.priors` with `--lib real`.
 
 ### Classification, original-target only
 
 ```bash
-python -m tfmplayground.priors.main \
+python -m tfmplayground.priors \
   --lib real \
   --prior_type mlp \
   --max_classes 10 \
@@ -67,7 +67,7 @@ python -m tfmplayground.priors.main \
 ### Regression, original-target only
 
 ```bash
-python -m tfmplayground.priors.main \
+python -m tfmplayground.priors \
   --lib real \
   --prior_type mlp \
   --max_classes 0 \
@@ -81,7 +81,7 @@ python -m tfmplayground.priors.main \
 Use this when you want to sample target columns from broad datasets (`train_pool_all.txt`) while keeping episode task type fixed.
 
 ```bash
-python -m tfmplayground.priors.main \
+python -m tfmplayground.priors \
   --lib real \
   --prior_type mlp \
   --max_classes 0 \

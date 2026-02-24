@@ -40,6 +40,7 @@ import argparse
 import hashlib
 import json
 import time
+import warnings
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -104,14 +105,17 @@ def compute_column_statistics(data: np.ndarray) -> dict:
     variances = np.nanvar(data, axis=0).tolist()
 
     # skewness and kurtosis calculation
+    # suppress overflow/precision warnings — the inf/nan fallback below handles bad values
     skewness = []
     kurtosis = []
     for i in range(data.shape[1]):
         col = data[:, i]
         col = col[~np.isnan(col)]
         if len(col) > 2:
-            skewness.append(float(stats.skew(col)))
-            kurtosis.append(float(stats.kurtosis(col)))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                skewness.append(float(stats.skew(col)))
+                kurtosis.append(float(stats.kurtosis(col)))
         else:
             skewness.append(0.0)
             kurtosis.append(0.0)
@@ -231,8 +235,13 @@ def load_openml_dataset(dataset_id: int):
         download_features_meta_data=True
     )
 
+    # handle multi-target datasets by picking the first target
+    target_attr = dataset.default_target_attribute
+    if target_attr and "," in target_attr:
+        target_attr = target_attr.split(",")[0].strip()
+
     X, y, _, _ = dataset.get_data(
-        target=dataset.default_target_attribute,
+        target=target_attr,
         dataset_format="dataframe"
     )
 
