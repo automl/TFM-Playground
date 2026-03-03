@@ -7,7 +7,7 @@ import numpy as np
 from scipy import stats
 from sklearn.feature_selection import mutual_info_regression
 
-from tfmplayground.priors.experiments.data_analysis import DataAnalyzer
+from tfmplayground.priors.experiments.base_analyzer import DataAnalyzer
 
 
 class RegressionDataAnalyzer(DataAnalyzer):

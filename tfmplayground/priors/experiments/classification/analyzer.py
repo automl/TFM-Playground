@@ -6,7 +6,7 @@ from typing import Dict, Any
 import numpy as np
 from sklearn.feature_selection import mutual_info_classif, f_classif
 
-from tfmplayground.priors.experiments.data_analysis import DataAnalyzer
+from tfmplayground.priors.experiments.base_analyzer import DataAnalyzer
 
 
 class ClassificationDataAnalyzer(DataAnalyzer):

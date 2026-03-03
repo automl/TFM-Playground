@@ -22,7 +22,7 @@ echo "This will generate synthetic data from selected priors."
 read -p "Run data generation? (y/n): " run_gen
 
 if [ "$run_gen" = "y" ] || [ "$run_gen" = "Y" ]; then
-    python data_generation.py $mode
+    python generate_data.py $mode
     if [ $? -ne 0 ]; then
         echo "Data generation failed!"
         exit 1
@@ -36,7 +36,7 @@ echo "This will analyze the generated data and create reports."
 read -p "Run data analysis? (y/n): " run_analysis
 
 if [ "$run_analysis" = "y" ] || [ "$run_analysis" = "Y" ]; then
-    python run_analysis.py $mode
+    python analyze_priors.py $mode
     if [ $? -ne 0 ]; then
         echo "Data analysis failed!"
         exit 1

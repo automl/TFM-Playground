@@ -91,7 +91,7 @@ def load_multiple_analyzers(
     if not discovered_files:
         raise ValueError(
             f"No prior data files found in {data_dir}. "
-            "Generate some data first using data_generation.py"
+            "Generate some data first using generate_data.py"
         )
 
     if verbose:
@@ -202,46 +202,3 @@ def apply_plot_style():
     finally:
         plt.rcParams.update(original_rc)
 
-
-def save_figure(
-    fig: plt.Figure,
-    filename: str,
-    output_dir: str = "./results/figures",
-) -> str:
-    """Save figure as PNG.
-
-    Args:
-        fig: Matplotlib figure.
-        filename: Filename without extension.
-        output_dir: Output directory.
-
-    Returns:
-        Path to saved file.
-    """
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    filepath = output_path / f"{filename}.png"
-    fig.savefig(filepath, dpi=300, bbox_inches="tight")
-
-    return str(filepath)
-
-
-def save_all_figures(
-    figures: List[Tuple[plt.Figure, str]],
-    output_dir: str = "./results/figures",
-) -> None:
-    """Save multiple figures.
-
-    Args:
-        figures: List of (figure, filename) tuples.
-        output_dir: Output directory.
-    """
-    print(f"\nSaving {len(figures)} figure(s) to {output_dir}")
-
-    for fig, filename in figures:
-        try:
-            save_figure(fig, filename, output_dir)
-            print(f"   [OK] {filename}")
-        except Exception as e:  # noqa: BLE001
-            print(f"   [WARNING] {filename} - FAILED: {e}")

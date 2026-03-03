@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 from typing import Dict, List
 from itertools import combinations
-from utils import load_config, discover_h5_files
+from utils.general import load_config, discover_h5_files
 from regression.analyzer import RegressionDataAnalyzer, compare_regression_priors
 from classification.analyzer import ClassificationDataAnalyzer, compare_classification_priors
 
@@ -101,7 +101,7 @@ def main():
     
     if not available_files:
         print(f"\nNo data files found in {data_dir}")
-        print("Please run data generation first (data_generation.py)")
+        print("Please run data generation first (generate_data.py)")
         return
     
     selected_priors = select_priors_for_analysis(available_files)

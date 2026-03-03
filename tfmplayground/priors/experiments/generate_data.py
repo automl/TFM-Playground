@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List
 
-from utils import load_config
+from utils.general import load_config
 
 
 def generate_prior_data(
