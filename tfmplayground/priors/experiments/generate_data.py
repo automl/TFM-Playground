@@ -2,6 +2,7 @@
 This script uses the main tfmplayground.priors library with configuration from config.yaml.
 """
 
+import argparse
 import os
 import sys
 import subprocess
@@ -172,10 +173,45 @@ def select_priors_interactive(available_priors: Dict) -> List[str]:
             print(f"Invalid input. Please enter numbers between 1 and {len(prior_list)} or 'all'.")
 
 
+def resolve_priors(priors_arg: List[str], available_priors: Dict) -> List[str]:
+    """Resolve --priors CLI argument to a list of prior names."""
+    if priors_arg == ["all"]:
+        return list(available_priors.keys())
+
+    unknown = [p for p in priors_arg if p not in available_priors]
+    if unknown:
+        print(f"ERROR: Unknown prior(s): {unknown}")
+        print(f"Available: {list(available_priors.keys())}")
+        sys.exit(1)
+    return priors_arg
+
+
 def main():
     """Generate data for selected priors using configuration."""
-    mode = sys.argv[1].lower()  # Mode: classification, regression
-    
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic data from configurable priors"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["classification", "regression"],
+        required=True,
+        help="Task type: classification or regression",
+    )
+    parser.add_argument(
+        "--priors",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "Prior(s) to generate (non-interactive). "
+            "Use 'all' for every prior, or list names e.g. 'ticl_gp tabpfn_mlp'"
+            "Leave it empty for interactive selection."
+        ),
+    )
+    args = parser.parse_args()
+
+    mode = args.mode
     config = load_config(str(Path(__file__).parent / "config.yaml"))
     available_priors = config['available_priors'][mode]
     save_dir = Path(mode) / config["output"]["data_dir"]
@@ -189,7 +225,12 @@ def main():
     print(f"Mode: {mode.upper()}")
     print(f"Output: {save_dir}")
     
-    selected_priors = select_priors_interactive(available_priors)
+    # non-interactive when --priors is given, interactive otherwise
+    if args.priors is not None:
+        selected_priors = resolve_priors(args.priors, available_priors)
+        print(f"\nSelected priors: {selected_priors}")
+    else:
+        selected_priors = select_priors_interactive(available_priors)
     
     print("\n" + "=" * 50)
     print("GENERATING DATA")

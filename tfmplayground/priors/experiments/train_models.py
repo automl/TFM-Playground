@@ -78,6 +78,35 @@ def _select_priors_interactively(problem_type: str):
             return selected  # return list of (name, path) tuples
 
 
+def _resolve_priors_noninteractive(problem_type: str, priors_arg: list):
+    """Resolve --priors CLI argument to a list of (name, path) tuples.
+
+    Returns:
+        List of (name, path) tuples matching the requested priors.
+    """
+
+    data_dir = os.path.join(os.path.dirname(__file__), problem_type, "results", "data")
+    available = discover_h5_files(data_dir)
+
+    if not available:
+        print(f"No .h5 files found in {data_dir}")
+        print("Run generate_data.py first to generate prior files.")
+        sys.exit(1)
+
+    if priors_arg == ["all"]:
+        selected = list(available.items())
+    else:
+        unknown = [p for p in priors_arg if p not in available]
+        if unknown:
+            print(f"ERROR: Unknown prior(s): {unknown}")
+            print(f"Available: {list(available.keys())}")
+            sys.exit(1)
+        selected = [(name, available[name]) for name in priors_arg]
+
+    print(f"\nSelected priors: {[n for n, _ in selected]}")
+    return selected
+
+
 def _save_trained_model(
     output_dir,
     model,
@@ -202,6 +231,17 @@ def main():
         default=None,
         help="Base dir for saved models (default: <problem_type>/results/trained_models/)",
     )
+    parser.add_argument(
+        "--priors",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "Prior(s) to train."
+            "Use 'all' for every discovered prior, or list names e.g. 'ticl_gp tabpfn_mlp'. "
+            "Leave it empty for interactive selection."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -211,8 +251,11 @@ def main():
             os.path.dirname(__file__), args.problem_type, "results", "trained_models"
         )
 
-    # Select priors interactively
-    selected_priors = _select_priors_interactively(args.problem_type)
+    # Select priors: non-interactively when --priors is given, interactive otherwise
+    if args.priors is not None:
+        selected_priors = _resolve_priors_noninteractive(args.problem_type, args.priors)
+    else:
+        selected_priors = _select_priors_interactively(args.problem_type)
 
     # Set random seed
     set_randomness_seed(args.seed)

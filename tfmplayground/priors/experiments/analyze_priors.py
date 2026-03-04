@@ -1,5 +1,6 @@
 """CLI runner for regression data analysis."""
 
+import argparse
 import os
 from pathlib import Path
 import sys
@@ -82,8 +83,17 @@ def select_analysis_mode() -> str:
 
 def main():
     """Run interactive analysis CLI."""
-    
-    mode = sys.argv[1]  # Mode: classification, regression
+    parser = argparse.ArgumentParser(description="Analyze generated prior data")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["classification", "regression"],
+        required=True,
+        help="Task type: classification or regression",
+    )
+    args = parser.parse_args()
+
+    mode = args.mode
     
     config = load_config(str(Path(__file__).parent / "config.yaml"))
     

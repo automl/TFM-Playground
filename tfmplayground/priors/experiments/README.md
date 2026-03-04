@@ -21,6 +21,39 @@ sh run.sh regression
 
 You will be prompted to choose from available priors and whether you want analysis and comparison analysis.
 
+### Non-interactive / SLURM mode
+
+All scripts accept `--priors` to bypass interactive prompts.
+
+**Data generation** — pick exactly which priors to generate:
+
+```bash
+# All priors
+python generate_data.py --mode regression --priors all
+
+# Specific priors
+python generate_data.py --mode regression --priors ticl_gp ticl_mlp tabpfn_mlp
+```
+
+**Training** — pick exactly which priors to train on:
+
+```bash
+# All available priors
+python train_models.py --problem_type regression --priors all --epochs 50 --steps 100
+
+# Specific priors (great for SLURM job arrays)
+python train_models.py --problem_type regression --priors ticl_gp --epochs 50
+```
+
+**Via run.sh** — pass `--priors` after the mode:
+
+```bash
+# Non-interactive data generation (analysis step stays interactive)
+sh run.sh regression --priors ticl_gp ticl_mlp tabpfn_mlp
+```
+
+> **Note:** Omitting `--priors` from any command keeps the original interactive behavior.
+
 ## Compare trained models
 
 Use the comparison script to run a side-by-side analysis using saved priors.
