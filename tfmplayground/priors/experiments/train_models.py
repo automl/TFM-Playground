@@ -19,7 +19,7 @@ from utils.training import (
     _json_safe,
     train_model,
 )
-from utils.general import discover_h5_files
+from utils.general import discover_h5_files, load_config
 
 from tfmplayground.evaluation import TOY_TASKS_CLASSIFICATION, TOY_TASKS_REGRESSION
 from tfmplayground.priors import PriorDumpDataLoader
@@ -189,6 +189,9 @@ def _save_trained_model(
 
 
 def main():
+    config = load_config(os.path.join(os.path.dirname(__file__), "config.yaml"))
+    train_cfg = config["training"]
+
     parser = argparse.ArgumentParser(
         description="Train nanoTabPFN models on selected priors and save to disk"
     )
@@ -200,29 +203,29 @@ def main():
         help="Problem type. Picks priors from <problem_type>/results/data/.",
     )
     parser.add_argument(
-        "--epochs", type=int, default=3, help="Number of epochs to train each model"
+        "--epochs", type=int, default=train_cfg["epochs"], help="Number of epochs to train each model"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=1, help="Batch size for training"
+        "--batch_size", type=int, default=train_cfg["batch_size"], help="Batch size for training"
     )
     parser.add_argument(
-        "--steps", type=int, default=5, help="Number of steps per epoch"
+        "--steps", type=int, default=train_cfg["steps"], help="Number of steps per epoch"
     )
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=train_cfg["lr"], help="Learning rate")
     parser.add_argument(
         "--accumulate_gradients",
         type=int,
-        default=1,
-        help="Number of gradients to accumulate before updating weights (default: 1)",
+        default=train_cfg["accumulate_gradients"],
+        help="Number of gradients to accumulate before updating weights",
     )
     parser.add_argument(
-        "--seed", type=int, default=2402, help="Random seed for reproducibility"
+        "--seed", type=int, default=train_cfg["seed"], help="Random seed for reproducibility"
     )
     parser.add_argument(
         "--eval_every",
         type=int,
-        default=1,
-        help="Evaluate toy tasks every N epochs (default: 1)",
+        default=train_cfg["eval_every"],
+        help="Evaluate toy tasks every N epochs",
     )
     parser.add_argument(
         "--toy_tasks_subset",
@@ -315,6 +318,10 @@ def main():
                 eval_every=args.eval_every,
                 tasks=use_tasks,
                 accumulate_gradients=args.accumulate_gradients,
+                num_attention_heads=config["model"]["num_attention_heads"],
+                embedding_size=config["model"]["embedding_size"],
+                mlp_hidden_size=config["model"]["mlp_hidden_size"],
+                num_layers=config["model"]["num_layers"],
             )
         )
 

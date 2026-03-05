@@ -32,6 +32,7 @@ from utils.visualization import (
     plot_per_task_comparison,
     plot_time_budget_metrics,
 )
+from utils.general import load_config
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
 
@@ -169,6 +170,8 @@ def _rebuild_callback(metadata: dict):
 
 
 def main():
+    config = load_config(os.path.join(os.path.dirname(__file__), "config.yaml"))
+
     parser = argparse.ArgumentParser(
         description="Compare previously trained nanoTabPFN models"
     )
@@ -198,7 +201,7 @@ def main():
         help="Path to save detailed comparison metrics JSON (auto-generated if not set)",
     )
     parser.add_argument(
-        "--seed", type=int, default=2402, help="Random seed (for decision boundary / regression toy plots)"
+        "--seed", type=int, default=config["training"]["seed"], help="Random seed (for decision boundary / regression toy plots)"
     )
 
     args = parser.parse_args()
@@ -341,6 +344,7 @@ def main():
     )
 
     # Plot decision boundaries or regression predictions
+    visual_cfg = config["visualization"]
     if not is_regression:
         decision_boundary_output = args.plot_output.replace(
             ".png", "_decision_boundaries.png"
@@ -348,8 +352,8 @@ def main():
         plot_all_decision_boundaries(
             run_records,
             datasets=["moons", "circles"],
-            n_samples=200,
-            noise=0.2,
+            n_samples=visual_cfg["classification_toy_samples"],
+            noise=visual_cfg["classification_toy_noise"],
             seed=args.seed,
             output_path=decision_boundary_output,
         )
@@ -360,8 +364,8 @@ def main():
         plot_all_regression_predictions(
             run_records,
             datasets=["sinusoidal", "linear", "step"],
-            n_samples=100,
-            noise=0.1,
+            n_samples=visual_cfg["regression_toy_samples"],
+            noise=visual_cfg["regression_toy_noise"],
             seed=args.seed,
             output_path=regression_output,
         )

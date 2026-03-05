@@ -141,3 +141,27 @@ analysis:
   n_samples_redundancy: 100
   n_samples_noise: 100
   feature_sample_size: 100
+
+# Model Architecture
+model:
+  num_attention_heads: 4
+  embedding_size: 128
+  mlp_hidden_size: 512
+  num_layers: 6
+
+# Training Hyperparameters
+training:
+  epochs: 3
+  batch_size: 1
+  steps: 5
+  lr: 0.0001
+  accumulate_gradients: 1
+  seed: 2402
+  eval_every: 1
+
+# Visualization Settings
+visualization:
+  classification_toy_samples: 200
+  classification_toy_noise: 0.2
+  regression_toy_samples: 100
+  regression_toy_noise: 0.1

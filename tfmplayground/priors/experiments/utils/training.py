@@ -42,6 +42,10 @@ def train_model(
     tasks=None,
     n_buckets: int = 100,
     accumulate_gradients: int = 1,
+    num_attention_heads: int = 4,
+    embedding_size: int = 128,
+    mlp_hidden_size: int = 512,
+    num_layers: int = 6,
 ):
     """
     Train a single nanoTabPFN model on the given prior.
@@ -99,12 +103,12 @@ def train_model(
         criterion = nn.CrossEntropyLoss()
         num_outputs = prior.max_num_classes if prior.max_num_classes else 1
 
-    # Create model
+
     model = NanoTabPFNModel(
-        num_attention_heads=6,
-        embedding_size=192,
-        mlp_hidden_size=768,
-        num_layers=6,
+        num_attention_heads=num_attention_heads,
+        embedding_size=embedding_size,
+        mlp_hidden_size=mlp_hidden_size,
+        num_layers=num_layers,
         num_outputs=num_outputs,
     )
 
