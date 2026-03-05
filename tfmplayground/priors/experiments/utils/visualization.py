@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.ticker import MaxNLocator
 import numpy as np
-import requests
-import torch
-from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.datasets import make_moons, make_circles
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import roc_auc_score, root_mean_squared_error
@@ -603,25 +600,14 @@ def generate_toy_regression_dataset(name, n_samples=100, noise=0.1, random_state
 
 
 def plot_regression_prediction(
-    model, X_train, X_test, y_train, y_test, ax, title="Model", device=None
+    model, X_train, X_test, y_train, y_test, ax, title="Model", device=None, dist=None
 ):
     """Plot regression predictions with prediction curve."""
     if device is None:
         device = get_default_device()
 
-    # Load bucket edges if needed
-    buckets_path = "checkpoints/nanotabpfn_regressor_buckets.pth"
-    if not os.path.isfile(buckets_path):
-        print(f"Downloading bucket edges to {buckets_path}...")
-        os.makedirs(os.path.dirname(buckets_path), exist_ok=True)
-        response = requests.get(
-            "https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/nanotabpfn_regressor_buckets.pth"
-        )
-        with open(buckets_path, "wb") as f:
-            f.write(response.content)
-
-    bucket_edges = torch.load(buckets_path, map_location=device)
-    dist = FullSupportBarDistribution(bucket_edges).float().to(device)
+    if dist is None:
+        raise ValueError("A distribution (dist) must be provided for the regressor.")
 
     regressor = NanoTabPFNRegressor(model, dist=dist, device=device)
     regressor.fit(X_train, y_train)
@@ -798,6 +784,7 @@ def plot_all_regression_predictions(
         # Plot TabPFN models
         for model_idx, record in enumerate(run_records):
             model = record["model"]
+            dist = record.get("dist")
             prior_name = record["prior_name"]
 
             if dataset_idx == 0:
@@ -807,7 +794,7 @@ def plot_all_regression_predictions(
 
             ax = axes[dataset_idx, model_idx + len(baseline_models)]
             plot_regression_prediction(
-                model, X_train, X_test, y_train, y_test, ax, title=title, device=device
+                model, X_train, X_test, y_train, y_test, ax, title=title, device=device, dist=dist
             )
 
             if model_idx == 0 and len(baseline_models) == 0:
