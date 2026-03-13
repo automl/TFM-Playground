@@ -7,7 +7,6 @@ from pfns.bar_distribution import FullSupportBarDistribution
 import schedulefree
 import os
 
-from gtfm.trainer.callbacks import ProductionEvaluationLoggerCallback
 from tfmplayground.callbacks import Callback
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
@@ -117,7 +116,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             torch.save(training_state, work_dir+'/latest_checkpoint.pth')
 
             for callback in callbacks:
-                tabearena_light = False if (isinstance(callback, ProductionEvaluationLoggerCallback) and epoch == epochs) else True
+                tabearena_light = False if (epoch == epochs) else True
                 if type(criterion) is FullSupportBarDistribution:
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion, tabarena_light=tabearena_light)
                 else:

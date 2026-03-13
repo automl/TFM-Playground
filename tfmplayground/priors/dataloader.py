@@ -1,14 +1,18 @@
 """Data loading utilities for tabular priors."""
 
+import os
 from typing import Any, Callable, Dict, Iterator, Union
 
 import h5py
 import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 # from ticl.dataloader import PriorDataLoader as TICLPriorDataset
+from gcfm.priordata_processing.Datasets.ObservationalDataset import ObservationalDataset as GCFMPriorDataset
 from torch.utils.data import DataLoader
+import networkx as nx
 
-from gtfm.utils.adj import remove_axis
+from gtfm.graph.torch_moral import calculate_density
+from gtfm.utils.adj import move_axis, remove_axis
 
 class PriorDataLoader(DataLoader):
     """Generic DataLoader for synthetic data generation using a get_batch function.
@@ -57,7 +61,7 @@ class PriorDumpDataLoader(DataLoader):
         batch_size (int): Batch size.
         device (torch.device): Device to load tensors onto.
     """
-    def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
+    def __init__(self, filename, num_steps, batch_size, device, problem_type: str = None, starting_index=0):
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -68,6 +72,7 @@ class PriorDumpDataLoader(DataLoader):
             else:
                 self.max_num_classes = None
             self.problem_type = f["problem_type"][()].decode("utf-8")
+            if problem_type is not None: assert problem_type == self.problem_type
             self.has_num_datapoints = "num_datapoints" in f
             _, self.stored_max_seq_len, self.stored_max_num_features = f["X"].shape
         self.device = device
@@ -252,3 +257,161 @@ class TICLPriorDataLoader(DataLoader):
 
     def __len__(self):
         return self.num_steps
+
+class GCFMDataLoader(DataLoader):
+    """DataLoader sampling synthetic prior data from GCFM's PriorDataLoader.
+
+    Each iteration of GCFM's PriorDataset yields a single sample, so this
+    DataLoader draws `batch_size` individual samples and stacks them into
+    a batched dict per step.
+
+    Args:
+        config (Dict[str, Any]): GCFM configuration containing 'scm_config',
+            'preprocessing_config', and 'dataset_config'.
+        batch_size (int): Number of functions sampled per batch.
+        num_steps (int): Number of batches per epoch.
+        device (torch.device): Target device for tensors.
+    """
+
+    STACK_KEYS = {"x", "y", "adj", "density"}
+
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        batch_size: int,
+        num_steps: int,
+        device: torch.device,
+        extra_checks: bool = True,
+    ):
+        self.batch_size = batch_size
+        self.num_steps = num_steps
+        self.device = device
+        self._global_idx = 0
+        self.extra_checks = extra_checks
+
+        self.pd = GCFMPriorDataset(
+            scm_config=config["scm_config"],
+            preprocessing_config=config["preprocessing_config"],
+            dataset_config=config["dataset_config"],
+            seed=None,
+        )
+
+    def gcfm_to_ours(self, sample):
+        """Convert a single GCFM sample to our dict format."""
+        x_train, y_train, x_test, y_test, graph_info, dataset_info = sample
+
+        x = torch.cat([x_train, x_test], dim=0)
+        y = torch.cat([y_train, y_test], dim=0).squeeze(-1)
+        adj = graph_info["moral_matrix_padded"] 
+        density = graph_info["moral_density"]
+        
+        scm = graph_info["scm"]
+        processor = graph_info["processor"]
+
+        if self.extra_checks:
+            ordered_nodes: list[int] = processor.kept_feature_indices + [processor.selected_target_feature]
+            p = len(ordered_nodes)
+
+            adj1 = move_axis(adj, src=adj.shape[0]-1, dst = processor.selected_target_feature)[:p, :p]
+            adj2 = nx.adjacency_matrix(nx.moral_graph(scm.dag.g), nodelist=ordered_nodes).todense() 
+
+        return dict(
+            x=x,
+            y=y,
+            adj=adj,
+            density=density,
+            single_eval_pos=dataset_info["number_train_samples"],
+            scm=scm,
+            processor=processor,
+        )
+
+    def _collate(self, dicts):
+        """Stack a list of single-sample dicts into a batched dict."""
+        single_eval_positions = [d["single_eval_pos"] for d in dicts]
+        if len(set(single_eval_positions)) > 1:
+            raise ValueError("Varying train sizes within a batch is not supported.")
+
+        batch = {
+            k: torch.stack([d[k] for d in dicts]).to(self.device)
+            for k in self.STACK_KEYS
+        }
+        batch["target_y"] = batch["y"]  # downstream compatibility
+        batch["single_eval_pos"] = single_eval_positions[0]
+        batch["scm"] = [d["scm"] for d in dicts]
+        batch["processor"] = [d["processor"] for d in dicts]
+
+        return batch
+
+    def __iter__(self):
+        def generate():
+            for _ in range(self.num_steps):
+                samples = [
+                    self.gcfm_to_ours(self.pd[self._global_idx + i])
+                    for i in range(self.batch_size)
+                ]
+                self._global_idx += self.batch_size
+                batch = self._collate(samples)
+                if batch is not None:
+                    yield batch
+
+        return generate()
+
+    def __len__(self):
+        return self.num_steps
+
+
+# class GCFMDataLoader(DataLoader):
+#     """DataLoader sampling synthetic prior data from GCFM's PriorDataLoader.
+
+#     Args:
+#         prior (Any): A GCFM prior object supporting get_batch.
+#         num_steps (int): Number of batches per epoch.
+#         batch_size (int): Number of functions sampled per batch.
+#         num_datapoints_max (int): Number of datapoints sampled per function.
+#         num_features (int): Dimensionality of x vectors.
+#         device (torch.device): Target device for tensors.
+#     """
+
+#     def __init__(
+#         self,
+#         config: Dict[str, Any],
+#         batch_size: int,
+#         num_steps: int,
+#         device: torch.device,
+#     ):
+#         self.batch_size = batch_size
+#         self.num_steps = num_steps
+#         self.device = device
+
+#         self.pd = GCFMPriorDataset(
+#             scm_config = config['scm_config'],
+#             preprocessing_config = config['preprocessing_config'],
+#             dataset_config = config['dataset_config'],
+#             seed = None,
+#         )
+
+#     def gcfm_to_ours(self, d):
+#         x_train, y_train, x_test, y_test, graph_info, dataset_info = d
+
+#         x = torch.cat([x_train, x_test], dim=0)
+#         y = torch.cat([y_train, y_test], dim=0)
+#         single_eval_pos = dataset_info['number_train_samples']
+#         adj = graph_info['moral_matrix'] # select moral_matrix instead of adj_matrix
+#         density = calculate_density(adj)
+
+#         return dict(
+#             x=x.to(self.device),
+#             y=y.to(self.device),
+#             target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
+#             single_eval_pos=single_eval_pos,
+#             adj=adj.to(self.device),
+#             density=density.to(self.device),
+#         )
+    
+
+
+#     def __iter__(self):
+#         return iter(self.gcfm_to_ours(next(self.pd)) for _ in range(self.num_steps))
+
+#     def __len__(self):
+#         return self.num_steps

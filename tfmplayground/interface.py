@@ -139,11 +139,13 @@ class NanoTabPFNRegressor():
             model = 'checkpoints/nanotabpfn_regressor.pth'
             dist = 'checkpoints/nanotabpfn_regressor_buckets.pth'
             if not os.path.isfile(model):
+                raise ValueError('Model should be specified to NanoTabPFNRegressor')
                 print('No cached model found, downloading model checkpoint.')
                 response = requests.get('https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/nanotabpfn_regressor.pth')
                 with open(model, 'wb') as f:
                     f.write(response.content)
             if not os.path.isfile(dist):
+                raise ValueError('Bucket edges should be specified to NanoTabPFNRegressor')
                 print('No cached bucket edges found, downloading bucket edges.')
                 response = requests.get('https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/nanotabpfn_regressor_buckets.pth')
                 with open(dist, 'wb') as f:
@@ -182,11 +184,14 @@ class NanoTabPFNRegressor():
         X = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train_n
 
+        attn_mask = None # TODO: implement attention mask for classifier fit/predict. Currently only in forward.
+
+
         with torch.no_grad():
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device).unsqueeze(0)
             y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-            logits = self.model((X_tensor, y_tensor), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(0)
+            logits = self.model((X_tensor, y_tensor, attn_mask), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(0)
             preds_n = self.dist.mean(logits)
             preds = preds_n * self.y_train_std + self.y_train_mean
 

@@ -84,7 +84,7 @@ def dump_prior_to_h5(
         f.create_dataset("original_batch_size", data=np.array((batch_size,)), chunks=(1,))
         f.create_dataset("problem_type", data=problem_type, dtype=h5py.string_dtype())
 
-        for batch_idx, e in enumerate(prior):
+        for batch_idx, e in tqdm(enumerate(prior), total=len(prior)):
             x = e["x"].to("cpu").numpy()
             y = e["y"].to("cpu").numpy()
             single_eval_pos = e["single_eval_pos"]
