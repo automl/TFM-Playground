@@ -5,14 +5,14 @@ import pandas as pd
 import requests
 import torch
 import torch.nn.functional as F
-from pfns.model.bar_distribution import FullSupportBarDistribution
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder, FunctionTransformer
 
 from tfmplayground.model import NanoTabPFNModel
-from tfmplayground.utils import get_default_device
+from tfmplayground.utils import FullSupportBarDistribution, get_default_device
+
 
 def init_model_from_state_dict_file(file_path):
     """

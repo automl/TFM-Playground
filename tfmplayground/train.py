@@ -3,13 +3,12 @@ from torch import nn
 import time
 from torch.utils.data import DataLoader
 from typing import Dict
-from pfns.model.bar_distribution import FullSupportBarDistribution
 import schedulefree
 import os
 
 from tfmplayground.callbacks import Callback
 from tfmplayground.model import NanoTabPFNModel
-from tfmplayground.utils import get_default_device
+from tfmplayground.utils import FullSupportBarDistribution, get_default_device
 
 
 def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,

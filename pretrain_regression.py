@@ -1,7 +1,6 @@
 import argparse
 
 import torch
-from pfns.model.bar_distribution import FullSupportBarDistribution
 from sklearn.metrics import r2_score
 
 from tfmplayground.callbacks import ConsoleLoggerCallback
@@ -10,7 +9,7 @@ from tfmplayground.interface import NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
-from tfmplayground.utils import get_default_device, set_randomness_seed, make_global_bucket_edges
+from tfmplayground.utils import FullSupportBarDistribution, get_default_device, set_randomness_seed, make_global_bucket_edges
 
 parser = argparse.ArgumentParser()
 
