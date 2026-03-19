@@ -61,7 +61,7 @@ class PriorDumpDataLoader(DataLoader):
         batch_size (int): Batch size.
         device (torch.device): Device to load tensors onto.
     """
-    def __init__(self, filename, num_steps, batch_size, device, problem_type: str = None, starting_index=0):
+    def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -72,7 +72,6 @@ class PriorDumpDataLoader(DataLoader):
             else:
                 self.max_num_classes = None
             self.problem_type = f["problem_type"][()].decode("utf-8")
-            if problem_type is not None: assert problem_type == self.problem_type
             self.has_num_datapoints = "num_datapoints" in f
             _, self.stored_max_seq_len, self.stored_max_num_features = f["X"].shape
         self.device = device
