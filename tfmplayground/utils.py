@@ -85,7 +85,7 @@ class BarDistribution(nn.Module):
         borders = borders.contiguous()
         self.register_buffer("borders", borders)
         if torch.any(self.bar_widths <= 0):
-            raise ValueError("borders must be strictly increasing)")
+            raise ValueError("borders must be strictly increasing")
 
         self.ignore_nan_targets = ignore_nan_targets
 
