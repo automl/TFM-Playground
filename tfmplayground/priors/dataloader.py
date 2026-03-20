@@ -65,7 +65,7 @@ class PriorDumpDataLoader(DataLoader):
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
-        with h5py.File(self.filename, "r") as f:
+        with h5py.File(self.filename, "r", swmr=True) as f:
             self.num_datapoints_max = f['X'].shape[0]
             if "max_num_classes" in f:
                 self.max_num_classes = f["max_num_classes"][0]
@@ -78,7 +78,7 @@ class PriorDumpDataLoader(DataLoader):
         self.pointer = starting_index
 
     def __iter__(self):
-        with h5py.File(self.filename, "r") as f:
+        with h5py.File(self.filename, "r", swmr=True) as f:
             for _ in range(self.num_steps):
                 end = self.pointer + self.batch_size
 
