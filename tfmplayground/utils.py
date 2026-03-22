@@ -145,8 +145,8 @@ class FullSupportBarDistribution(BarDistribution):
         """
         device = desired_quantile_value_at_p.device
         dtype = desired_quantile_value_at_p.dtype
-        standart_halfnormal = torch.distributions.HalfNormal(torch.tensor(1.0, device=device, dtype=dtype))
-        quantile_value_at_p = standart_halfnormal.icdf(torch.tensor(p, device=device, dtype=dtype))
+        standard_halfnormal = torch.distributions.HalfNormal(torch.tensor(1.0, device=device, dtype=dtype))
+        quantile_value_at_p = standard_halfnormal.icdf(torch.tensor(p, device=device, dtype=dtype))
         scale = desired_quantile_value_at_p / quantile_value_at_p
         scaled_halfnormal = torch.distributions.HalfNormal(scale)
         return scaled_halfnormal
