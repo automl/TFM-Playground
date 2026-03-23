@@ -78,15 +78,12 @@ class BarDistribution(nn.Module):
         super().__init__()
 
         borders = torch.as_tensor(borders)
-        if borders.ndim != 1:
-            raise ValueError("borders != 1d")
+        assert borders.ndim == 1, "borders != 1d"
         if not torch.is_floating_point(borders):
             borders = borders.to(torch.get_default_dtype())
         borders = borders.contiguous()
         self.register_buffer("borders", borders)
-        if torch.any(self.bar_widths <= 0):
-            raise ValueError("borders must be strictly increasing")
-
+        assert (self.bar_widths > 0).all(), "borders must be strictly increasing" # does not allow zero sized buckets
         self.ignore_nan_targets = ignore_nan_targets
 
     @property
@@ -103,16 +100,15 @@ class BarDistribution(nn.Module):
         """
         ignore_mask = torch.isnan(y)
         if ignore_mask.any():
-            if not self.ignore_nan_targets:
-                raise ValueError("nan in y while ignore_nan_targets=False")
-            y[ignore_mask] = self.borders[0]
+            assert self.ignore_nan_targets, "nan in y while ignore_nan_targets=False"
+            y[ignore_mask] = self.borders[0] # just a default value, will be ignored later
         return ignore_mask
 
     def map_to_bar_indices(self, y):
         """
         maps each y to its corresponding bar index
         """
-        indices = torch.searchsorted(self.borders, y, right=False) - 1
+        indices = torch.searchsorted(self.borders, y) - 1
         indices = indices.clamp(0, self.num_bars - 1)
         return indices
 
@@ -135,8 +131,8 @@ class FullSupportBarDistribution(BarDistribution):
 
     def __init__(self, borders: torch.Tensor, *, ignore_nan_targets: bool = True):
         super().__init__(borders, ignore_nan_targets=ignore_nan_targets)
-        if torch.any(self.bar_widths[[0, -1]] <= 0):
-            raise ValueError("half normal tails need first and last bar widths > 0")
+        assert self.bar_widths[0] > 0, "half normal tail needs first bar width > 0"
+        assert self.bar_widths[-1] > 0, "half normal tail needs last bar width > 0"
 
     @staticmethod
     def halfnormal_with_p_weight_before(desired_quantile_value_at_p, p = 0.5):
@@ -155,8 +151,7 @@ class FullSupportBarDistribution(BarDistribution):
         """
         negative log likelihood of y given logits
         """
-        if logits.shape[-1] != self.num_bars:
-            raise ValueError("logits last dimension shape != num bars")
+        assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
         y = torch.as_tensor(y, device=logits.device, dtype=logits.dtype)
         y = y.clone().reshape(*logits.shape[:-1])
@@ -194,8 +189,7 @@ class FullSupportBarDistribution(BarDistribution):
         """
         calculates the expected value of the distribution given logits
         """
-        if logits.shape[-1] != self.num_bars:
-            raise ValueError("logits last dimension shape != num bars")
+        assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
         probs = torch.softmax(logits.to(torch.float32), dim=-1).to(logits.dtype)
 
