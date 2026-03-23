@@ -74,7 +74,7 @@ class BarDistribution(nn.Module):
     inspired by pfns.model.bar_distribution BarDistribution
     """
 
-    def __init__(self, borders, *, ignore_nan_targets = True):
+    def __init__(self, borders, *, ignore_nan_targets=True):
         super().__init__()
 
         borders = torch.as_tensor(borders)
@@ -83,7 +83,7 @@ class BarDistribution(nn.Module):
             borders = borders.to(torch.get_default_dtype())
         borders = borders.contiguous()
         self.register_buffer("borders", borders)
-        assert (self.bar_widths > 0).all(), "borders must be strictly increasing" # does not allow zero sized buckets
+        assert (self.bar_widths > 0).all(), "borders must be strictly increasing"  # does not allow zero sized buckets
         self.ignore_nan_targets = ignore_nan_targets
 
     @property
@@ -101,7 +101,7 @@ class BarDistribution(nn.Module):
         ignore_mask = torch.isnan(y)
         if ignore_mask.any():
             assert self.ignore_nan_targets, "nan in y while ignore_nan_targets=False"
-            y[ignore_mask] = self.borders[0] # just a default value, will be ignored later
+            y[ignore_mask] = self.borders[0]  # just a default value, will be ignored later
         return ignore_mask
 
     def map_to_bar_indices(self, y):
@@ -135,7 +135,7 @@ class FullSupportBarDistribution(BarDistribution):
         assert self.bar_widths[-1] > 0, "half normal tail needs last bar width > 0"
 
     @staticmethod
-    def halfnormal_with_p_weight_before(desired_quantile_value_at_p, p = 0.5):
+    def halfnormal_with_p_weight_before(desired_quantile_value_at_p, p=0.5):
         """
         scales the half normal distribution so that the p weight is before the desired value
         """
