@@ -76,15 +76,18 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     y_norm = (data[1] - y_mean) / y_std
                     data = (data[0], y_norm, data[2])
 
-                output = model(data, single_eval_pos=single_eval_pos)
-                targets = targets[:, single_eval_pos:]
-                if regression_task:
-                    targets = (targets - y_mean) / y_std
-                if classification_task:
-                    targets = targets.reshape((-1,)).to(torch.long)
-                    output = output.view(-1, output.shape[-1])
+                use_amp = device.type == "cuda"
+                autocast_ctx = torch.autocast(device_type=device.type, dtype=torch.bfloat16) if use_amp else torch.nullcontext()
+                with autocast_ctx:
+                    output = model(data, single_eval_pos=single_eval_pos)
+                    targets = targets[:, single_eval_pos:]
+                    if regression_task:
+                        targets = (targets - y_mean) / y_std
+                    if classification_task:
+                        targets = targets.reshape((-1,)).to(torch.long)
+                        output = output.view(-1, output.shape[-1])
 
-                losses = criterion(output, targets)
+                    losses = criterion(output, targets)
                 loss = losses.mean() / accumulate_gradients
                 if torch.isnan(loss):
                     print('Loss is NaN, stopping training batch.')
@@ -123,6 +126,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion, tabarena_light=tabearena_light)
                 else:
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), tabarena_light=tabearena_light)
+        callback.on_train_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion if type(criterion) is FullSupportBarDistribution else None, tabarena_light=False)
     except KeyboardInterrupt:
         pass
     finally:
