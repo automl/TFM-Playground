@@ -44,6 +44,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
         device = get_default_device()
     model.to(device)
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
+    # Adam as opitmizer isnteaf of AdamW
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.0)
     if ckpt:
         optimizer.load_state_dict(ckpt['optimizer'])
     classification_task = isinstance(criterion, nn.CrossEntropyLoss)

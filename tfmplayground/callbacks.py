@@ -87,6 +87,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
                 dir=log_dir,
                 resume="allow"
             )
+            print(f"Wandb run initialized: {wandb.run.name} ({wandb.run.id})")
         except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
