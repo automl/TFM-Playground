@@ -76,7 +76,6 @@ class BarDistribution(nn.Module):
 
     def __init__(self, borders, *, ignore_nan_targets=True):
         super().__init__()
-
         borders = torch.as_tensor(borders)
         assert borders.ndim == 1, "borders != 1d"
         if not torch.is_floating_point(borders):
@@ -147,11 +146,8 @@ class FullSupportBarDistribution(BarDistribution):
 
         y = torch.as_tensor(y)
         y = y.clone().reshape(*logits.shape[:-1])
-
         ignore_mask = self.ignore_init(y)  # alters y
-
         y_bar_indices = self.map_to_bar_indices(y)
-
         scaled_log_probs = self.compute_scaled_log_probs(logits)
         gathered_scaled_log_probs = scaled_log_probs.gather(-1, y_bar_indices.unsqueeze(-1)).squeeze(-1)
 
