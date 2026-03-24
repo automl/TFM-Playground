@@ -130,8 +130,6 @@ class FullSupportBarDistribution(BarDistribution):
 
     def __init__(self, borders: torch.Tensor, *, ignore_nan_targets: bool = True):
         super().__init__(borders, ignore_nan_targets=ignore_nan_targets)
-        assert self.bar_widths[0] > 0, "half normal tail needs first bar width > 0"
-        assert self.bar_widths[-1] > 0, "half normal tail needs last bar width > 0"
 
     @staticmethod
     def halfnormal_with_p_weight_before(desired_quantile_value_at_p, p=0.5):
