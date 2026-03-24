@@ -93,7 +93,7 @@ class BarDistribution(nn.Module):
     def num_bars(self):
         return self.borders.numel() - 1
 
-    def ignore_init(self, y):
+    def _ignore_init(self, y):
         """
         makes ignore mask for nan targets and alters y (will be ignored later)
         """
@@ -103,7 +103,7 @@ class BarDistribution(nn.Module):
             y[ignore_mask] = self.borders[0]  # just a default value, will be ignored later
         return ignore_mask
 
-    def map_to_bar_indices(self, y):
+    def _map_to_bar_indices(self, y):
         """
         maps each y to its corresponding bar index
         """
@@ -111,7 +111,7 @@ class BarDistribution(nn.Module):
         indices = indices.clamp(0, self.num_bars - 1)
         return indices
 
-    def compute_scaled_log_probs(self, logits):
+    def _compute_scaled_log_probs(self, logits):
         """
         log prob density
         """
@@ -128,7 +128,7 @@ class FullSupportBarDistribution(BarDistribution):
         super().__init__(borders, ignore_nan_targets=ignore_nan_targets)
 
     @staticmethod
-    def halfnormal_with_p_weight_before(desired_quantile_value_at_p, p=0.5):
+    def _halfnormal_with_p_weight_before(desired_quantile_value_at_p, p=0.5):
         """
         scales the half normal distribution so that the p weight is before the desired value
         """
@@ -145,13 +145,13 @@ class FullSupportBarDistribution(BarDistribution):
         assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
         y = torch.as_tensor(y).clone().reshape(*logits.shape[:-1])
-        ignore_mask = self.ignore_init(y)  # alters y
-        y_bar_indices = self.map_to_bar_indices(y)
-        scaled_log_probs = self.compute_scaled_log_probs(logits)
+        ignore_mask = self._ignore_init(y)  # alters y
+        y_bar_indices = self._map_to_bar_indices(y)
+        scaled_log_probs = self._compute_scaled_log_probs(logits)
         gathered_scaled_log_probs = scaled_log_probs.gather(-1, y_bar_indices.unsqueeze(-1)).squeeze(-1)
 
-        left_tail = self.halfnormal_with_p_weight_before(self.bar_widths[0])
-        right_tail = self.halfnormal_with_p_weight_before(self.bar_widths[-1])
+        left_tail = self._halfnormal_with_p_weight_before(self.bar_widths[0])
+        right_tail = self._halfnormal_with_p_weight_before(self.bar_widths[-1])
 
         left_mask = y_bar_indices == 0
         if left_mask.any():
@@ -175,8 +175,8 @@ class FullSupportBarDistribution(BarDistribution):
 
         probs = torch.softmax(logits, dim=-1)
 
-        left_tail = self.halfnormal_with_p_weight_before(self.bar_widths[0])
-        right_tail = self.halfnormal_with_p_weight_before(self.bar_widths[-1])
+        left_tail = self._halfnormal_with_p_weight_before(self.bar_widths[0])
+        right_tail = self._halfnormal_with_p_weight_before(self.bar_widths[-1])
 
         bar_means = self.borders[:-1] + self.bar_widths / 2
         bar_means = bar_means.clone()
