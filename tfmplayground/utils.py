@@ -116,9 +116,8 @@ class BarDistribution(nn.Module):
         """
         log prob density
         """
-        widths = self.bar_widths.to(logits.device, logits.dtype)
         log_probs = torch.log_softmax(logits, dim=-1)
-        log_widths = torch.log(widths)
+        log_widths = torch.log(self.bar_widths)
         scaled_log_probs = log_probs - log_widths
         return scaled_log_probs
 
@@ -139,10 +138,8 @@ class FullSupportBarDistribution(BarDistribution):
         """
         scales the half normal distribution so that the p weight is before the desired value
         """
-        device = desired_quantile_value_at_p.device
-        dtype = desired_quantile_value_at_p.dtype
-        standard_halfnormal = torch.distributions.HalfNormal(torch.tensor(1.0, device=device, dtype=dtype))
-        quantile_value_at_p = standard_halfnormal.icdf(torch.tensor(p, device=device, dtype=dtype))
+        standard_halfnormal = torch.distributions.HalfNormal(torch.tensor(1.0))
+        quantile_value_at_p = standard_halfnormal.icdf(torch.tensor(p))
         scale = desired_quantile_value_at_p / quantile_value_at_p
         scaled_halfnormal = torch.distributions.HalfNormal(scale)
         return scaled_halfnormal
@@ -153,7 +150,7 @@ class FullSupportBarDistribution(BarDistribution):
         """
         assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
-        y = torch.as_tensor(y, device=logits.device, dtype=logits.dtype)
+        y = torch.as_tensor(y)
         y = y.clone().reshape(*logits.shape[:-1])
 
         ignore_mask = self.ignore_init(y)  # alters y
@@ -163,20 +160,18 @@ class FullSupportBarDistribution(BarDistribution):
         scaled_log_probs = self.compute_scaled_log_probs(logits)
         gathered_scaled_log_probs = scaled_log_probs.gather(-1, y_bar_indices.unsqueeze(-1)).squeeze(-1)
 
-        bar_widths = self.bar_widths.to(logits.device, logits.dtype)
-        borders = self.borders.to(logits.device, logits.dtype)
-        left_tail = self.halfnormal_with_p_weight_before(bar_widths[0])
-        right_tail = self.halfnormal_with_p_weight_before(bar_widths[-1])
+        left_tail = self.halfnormal_with_p_weight_before(self.bar_widths[0])
+        right_tail = self.halfnormal_with_p_weight_before(self.bar_widths[-1])
 
         left_mask = y_bar_indices == 0
         if left_mask.any():
-            distances = (borders[1] - y[left_mask]).clamp(min=1e-8)
-            gathered_scaled_log_probs[left_mask] += left_tail.log_prob(distances) + torch.log(bar_widths[0])
+            distances = (self.borders[1] - y[left_mask]).clamp(min=1e-8)
+            gathered_scaled_log_probs[left_mask] += left_tail.log_prob(distances) + torch.log(self.bar_widths[0])
 
         right_mask = y_bar_indices == self.num_bars - 1
         if right_mask.any():
-            distances = (y[right_mask] - borders[-2]).clamp(min=1e-8)
-            gathered_scaled_log_probs[right_mask] += right_tail.log_prob(distances) + torch.log(bar_widths[-1])
+            distances = (y[right_mask] - self.borders[-2]).clamp(min=1e-8)
+            gathered_scaled_log_probs[right_mask] += right_tail.log_prob(distances) + torch.log(self.bar_widths[-1])
 
         nll = -gathered_scaled_log_probs
 
@@ -191,17 +186,14 @@ class FullSupportBarDistribution(BarDistribution):
         """
         assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
-        probs = torch.softmax(logits.to(torch.float32), dim=-1).to(logits.dtype)
+        probs = torch.softmax(logits, dim=-1)
 
-        bar_widths = self.bar_widths.to(logits.device, logits.dtype)
-        borders = self.borders.to(logits.device, logits.dtype)
-        left_tail = self.halfnormal_with_p_weight_before(bar_widths[0])
-        right_tail = self.halfnormal_with_p_weight_before(bar_widths[-1])
+        left_tail = self.halfnormal_with_p_weight_before(self.bar_widths[0])
+        right_tail = self.halfnormal_with_p_weight_before(self.bar_widths[-1])
 
-        bar_means = borders[:-1] + bar_widths / 2
+        bar_means = self.borders[:-1] + self.bar_widths / 2
         bar_means = bar_means.clone()
-        bar_means[0] = borders[1] - left_tail.mean.to(logits.dtype)
-        bar_means[-1] = borders[-2] + right_tail.mean.to(logits.dtype)
-        bar_means = bar_means.to(logits.device, logits.dtype)
+        bar_means[0] = self.borders[1] - left_tail.mean
+        bar_means[-1] = self.borders[-2] + right_tail.mean
 
         return probs @ bar_means
