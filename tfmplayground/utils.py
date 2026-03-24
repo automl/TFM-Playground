@@ -116,10 +116,7 @@ class BarDistribution(nn.Module):
         """
         log prob density
         """
-        log_probs = torch.log_softmax(logits, dim=-1)
-        log_widths = torch.log(self.bar_widths)
-        scaled_log_probs = log_probs - log_widths
-        return scaled_log_probs
+        return torch.log_softmax(logits, dim=-1) - torch.log(self.bar_widths)
 
 
 class FullSupportBarDistribution(BarDistribution):
