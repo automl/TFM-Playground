@@ -164,10 +164,7 @@ class FullSupportBarDistribution(BarDistribution):
             gathered_scaled_log_probs[right_mask] += right_tail.log_prob(distances) + torch.log(self.bar_widths[-1])
 
         nll = -gathered_scaled_log_probs
-
-        if ignore_mask.any():
-            nll[ignore_mask] = 0.0
-
+        nll[ignore_mask] = 0.0
         return nll
 
     def mean(self, logits):
