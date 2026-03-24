@@ -144,8 +144,7 @@ class FullSupportBarDistribution(BarDistribution):
         """
         assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
-        y = torch.as_tensor(y)
-        y = y.clone().reshape(*logits.shape[:-1])
+        y = torch.as_tensor(y).clone().reshape(*logits.shape[:-1])
         ignore_mask = self.ignore_init(y)  # alters y
         y_bar_indices = self.map_to_bar_indices(y)
         scaled_log_probs = self.compute_scaled_log_probs(logits)
