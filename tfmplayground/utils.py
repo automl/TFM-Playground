@@ -173,7 +173,7 @@ class FullSupportBarDistribution(BarDistribution):
         """
         assert logits.shape[-1] == self.num_bars, f"logits last dim shape != num bars"
 
-        probs = torch.softmax(logits, dim=-1)
+        probs = torch.softmax(logits.to(torch.float32), dim=-1).to(logits.dtype)
 
         left_tail = self._halfnormal_with_p_weight_before(self.bar_widths[0])
         right_tail = self._halfnormal_with_p_weight_before(self.bar_widths[-1])
