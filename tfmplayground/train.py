@@ -67,7 +67,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     full_data['adj'].to(device),
                 )
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
-                    continue
+                    raise NotImplemented("Should inspect if this is happening")
                 targets = full_data['target_y'].to(device)
 
                 if regression_task:
