@@ -76,8 +76,9 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     y_norm = (data[1] - y_mean) / y_std
                     data = (data[0], y_norm, data[2])
 
-                use_amp = device.type == "cuda"
-                autocast_ctx = torch.autocast(device_type=device.type, dtype=torch.bfloat16) if use_amp else torch.nullcontext()
+                device_type = torch.device(device).type
+                use_amp = device_type in ("cuda", "mps")
+                autocast_ctx = torch.autocast(device_type=device_type, dtype=torch.bfloat16) if use_amp else torch.nullcontext()
                 with autocast_ctx:
                     output = model(data, single_eval_pos=single_eval_pos)
                     targets = targets[:, single_eval_pos:]
