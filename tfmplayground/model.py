@@ -11,7 +11,7 @@ from gtfm.utils import adj
 
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, mask_attn: bool = False, modded_encoder: bool = False):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, mask_attn: bool = False, modded_encoder: bool = False, compile_blocks: bool = False):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.embedding_size = embedding_size
@@ -23,7 +23,7 @@ class NanoTabPFNModel(nn.Module):
         self.modded_encoder = modded_encoder
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
-        self.transformer_encoder = TransformerEncoderStack(num_layers, embedding_size, num_attention_heads, mlp_hidden_size, modded_encoder=modded_encoder)
+        self.transformer_encoder = TransformerEncoderStack(num_layers, embedding_size, num_attention_heads, mlp_hidden_size, modded_encoder=modded_encoder, compile_blocks=compile_blocks)
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
@@ -168,13 +168,28 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderStack(nn.Module):
-    def __init__(self, num_layers: int, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, modded_encoder: bool = False):
-        """ Instantiates num_layers many Transformer Blocks and stores them in a list so we can use them in the forward """
+    def __init__(self, num_layers: int, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int,
+                 modded_encoder: bool = False, compile_blocks: bool = False):
+        """
+        Instantiates num_layers many Transformer Blocks and stores them in a list so we can use them in the forward.
+
+        Args:
+            num_layers: (int) number of transformer blocks
+            embedding_size: (int) the size of the embeddings
+            num_attention_heads: (int) the number of attention heads
+            mlp_hidden_size: (int) the size of the hidden layer in the MLP
+            modded_encoder: (bool) whether to use the ModdedTransformerEncoderLayer
+            compile_blocks: (bool) whether to torch.compile each block. Only used when modded_encoder=True.
+                            Do not use during debugging (interferes with anomaly detection).
+        """
         super().__init__()
         layer_cls = ModdedTransformerEncoderLayer if modded_encoder else TransformerEncoderLayer
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
-            self.transformer_blocks.append(layer_cls(embedding_size, num_attention_heads, mlp_hidden_size))
+            block = layer_cls(embedding_size, num_attention_heads, mlp_hidden_size)
+            if modded_encoder and compile_blocks:
+                block = torch.compile(block)
+            self.transformer_blocks.append(block)
 
     def forward(self, x: torch.Tensor, single_eval_position: int, attn_mask: Optional[torch.Tensor] = None, num_mem_chunks: int = 1) -> torch.Tensor:
         """
@@ -268,7 +283,14 @@ class TransformerEncoderLayer(nn.Module):
 class ModdedTransformerEncoderLayer(nn.Module):
     """
     Pre-norm transformer block with explicit QKV projections and F.scaled_dot_product_attention.
-    Adapted from modded-nanotabpfn
+    Adapted from modded-nanotabpfn.
+
+    Key differences from a vanilla pre-norm block:
+    - Explicit output projections after SDPA (out_proj_features, out_proj_datapoints) to
+      re-scale attention outputs before the residual add, improving numerical stability
+      under bfloat16 autocast on CUDA.
+    - No @torch.compile on the instance method; compile at the stack level instead via
+      TransformerEncoderStack(compile_blocks=True).
     """
 
     def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
@@ -281,6 +303,13 @@ class ModdedTransformerEncoderLayer(nn.Module):
         self.qkv_features = Linear(embedding_size, 3 * embedding_size, device=device, dtype=dtype)
         self.qkv_datapoints = Linear(embedding_size, 3 * embedding_size, device=device, dtype=dtype)
 
+        # Output projections: re-scale SDPA output before residual add.
+        # This mirrors what nn.MultiheadAttention does internally and is critical for
+        # numerical stability in bfloat16, where the raw SDPA output can be large enough
+        # that the residual addition overflows.
+        self.out_proj_features = Linear(embedding_size, embedding_size, device=device, dtype=dtype)
+        self.out_proj_datapoints = Linear(embedding_size, embedding_size, device=device, dtype=dtype)
+
         self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
         self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
 
@@ -288,10 +317,9 @@ class ModdedTransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
-    @torch.compile(dynamic=True)
     def forward(self, src: torch.Tensor, single_eval_position: int, attn_mask: Optional[torch.Tensor] = None, num_mem_chunks: int = 1) -> torch.Tensor:
         """
-        Pre-norm transformer block: norm -> attention -> residual, for both feature and
+        Pre-norm transformer block: norm -> attention -> out_proj -> residual, for both feature and
         datapoint axes, followed by a pre-norm MLP.
 
         Args:
@@ -322,6 +350,11 @@ class ModdedTransformerEncoderLayer(nn.Module):
 
         x = F.scaled_dot_product_attention(q, k, v, attn_mask=feat_attn_mask)
         x = x.transpose(1, 2).reshape(batch_size * rows_size, col_size, embedding_size)
+
+        # Output projection re-scales the attention output before the residual add,
+        # preventing overflow in bfloat16 (mirrors nn.MultiheadAttention behaviour).
+        x = self.out_proj_features(x)
+
         src = (res + x).reshape(batch_size, rows_size, col_size, embedding_size)
 
         # --- Pre-norm datapoint attention (between datapoints) ---
@@ -343,6 +376,10 @@ class ModdedTransformerEncoderLayer(nn.Module):
 
         x = torch.cat([x_left, x_right], dim=2)
         x = x.transpose(1, 2).reshape(batch_size * col_size, rows_size, embedding_size)
+
+        # Output projection for the datapoint attention path.
+        x = self.out_proj_datapoints(x)
+
         src = (res + x).reshape(batch_size, col_size, rows_size, embedding_size).transpose(2, 1)
 
         # --- Pre-norm MLP ---

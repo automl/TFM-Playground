@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import torch
 from torch import nn
 import time
@@ -78,13 +79,23 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     regression_task = not classification_task
 
     assert prior.num_steps % accumulate_gradients == 0, 'num_steps must be divisible by accumulate_gradients'
+    accumulated_steps = 0
+
+    device_type = torch.device(device).type
+    use_amp = device_type in ("cuda", "mps")
+    autocast_ctx = (
+        (lambda: torch.autocast(device_type=device_type, dtype=torch.bfloat16))
+        if use_amp else nullcontext
+    )
 
     try:
         for epoch in range(ckpt['epoch'] + 1 if ckpt else 1, epochs + 1):
+            accumulated_steps = 0
             epoch_start_time = time.time()
             model.train()  # Turn on the train mode
             optimizer_adam.train()
             total_loss = 0.
+            valid_steps = 0
             for i, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
                 data = (
@@ -93,7 +104,15 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     full_data['adj'].to(device),
                 )
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
-                    raise NotImplemented("Should inspect if this is happening")
+                    x_nans = torch.isnan(data[0]).sum().item()
+                    x_total = data[0].numel()
+                    y_nans = torch.isnan(data[1]).sum().item()
+                    y_total = data[1].numel()
+                    print(f"NaNs in input data (x_nans/x_total): {x_nans}/{x_total} (x), {y_nans}/{y_total} (y). Should skip this batch!") # TODO: Should inspect if this is happening
+                    for opt in optimizers:
+                        opt.zero_grad(set_to_none=True)
+                    accumulated_steps = 0
+                    continue
                 targets = full_data['target_y'].to(device)
 
                 if regression_task:
@@ -102,10 +121,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     y_norm = (data[1] - y_mean) / y_std
                     data = (data[0], y_norm, data[2])
 
-                device_type = torch.device(device).type
-                use_amp = device_type in ("cuda", "mps")
-                autocast_ctx = torch.autocast(device_type=device_type, dtype=torch.bfloat16) if use_amp else torch.nullcontext()
-                with autocast_ctx:
+
+                with autocast_ctx():
                     output = model(data, single_eval_pos=single_eval_pos)
                     targets = targets[:, single_eval_pos:]
                     if regression_task:
@@ -117,13 +134,20 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     losses = criterion(output, targets)
                 loss = losses.mean() / accumulate_gradients
                 if torch.isnan(loss):
-                    print('Loss is NaN, stopping training batch.')
-                    return full_data
+                    raise ValueError("Loss is NaN, stopping training")
+                if loss.item() > 10:
+                    print(f"Skipping extreme loss > 10: {loss.item()}")
+                    for opt in optimizers:
+                        opt.zero_grad(set_to_none=True)
+                    accumulated_steps = 0
+                    continue
                 loss.backward()
+                accumulated_steps += 1
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
+                valid_steps += 1
                 del output, targets, losses, loss, data, full_data
 
-                if (i + 1) % accumulate_gradients == 0:
+                if accumulated_steps % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     for opt in optimizers:
                         opt.step()
@@ -131,7 +155,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                         opt.zero_grad(set_to_none=True)
 
             end_time = time.time()
-            mean_loss: float = total_loss / len(prior)
+            mean_loss: float = total_loss / valid_steps if valid_steps > 0 else float('nan')
             model.eval()
             optimizer_adam.eval()
 
@@ -156,8 +180,10 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion, tabarena_light=tabearena_light)
                 else:
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), tabarena_light=tabearena_light)
-        callback.on_train_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion if type(criterion) is FullSupportBarDistribution else None, tabarena_light=False)
+        for callback in callbacks:
+            callback.on_train_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion if type(criterion) is FullSupportBarDistribution else None, tabarena_light=False)
     except KeyboardInterrupt:
+        print('Interrupting!')
         pass
     finally:
         for callback in callbacks:
