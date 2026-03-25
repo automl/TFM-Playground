@@ -91,11 +91,11 @@ class PriorDumpDataLoader(DataLoader):
 
                 x = torch.from_numpy(f["X"][self.pointer:end, :max_seq_in_batch, :num_features])
                 y = torch.from_numpy(f["y"][self.pointer:end, :max_seq_in_batch])
-                adj = torch.from_numpy(f['adj'][self.pointer:end,])
+                # adj = torch.from_numpy(f['adj'][self.pointer:end,])
 
-                if num_features != self.stored_max_num_features:
+                # if num_features != self.stored_max_num_features:
                     # We cut down the padded features to the max number of features in **the current** batch. Therefore, we need to cut down the adjacency matrix accordingly. The features in adj are stored as (features | padded features | target node).
-                    adj = remove_axis(adj, list(range(num_features, adj.shape[1] - 1)))
+                    # adj = remove_axis(adj, list(range(num_features, adj.shape[1] - 1)))
 
                 single_eval_pos = f["single_eval_pos"][self.pointer : end]
 
@@ -112,7 +112,8 @@ class PriorDumpDataLoader(DataLoader):
                     y=y.to(self.device),
                     target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
                     single_eval_pos=single_eval_pos[0].item(),
-                    adj=adj.to(self.device),
+                    # adj=adj.to(self.device),
+                    adj = None,
                 )
 
     def __len__(self):
@@ -272,7 +273,8 @@ class GCFMDataLoader(DataLoader):
         device (torch.device): Target device for tensors.
     """
 
-    STACK_KEYS = {"x", "y", "adj", "density"}
+    # STACK_KEYS = {"x", "y", "adj", "density"}
+    STACK_KEYS = {"x", "y"}
 
     def __init__(
         self,
@@ -280,7 +282,7 @@ class GCFMDataLoader(DataLoader):
         batch_size: int,
         num_steps: int,
         device: torch.device,
-        extra_checks: bool = True,
+        extra_checks: bool = False,
     ):
         self.batch_size = batch_size
         self.num_steps = num_steps
@@ -301,24 +303,24 @@ class GCFMDataLoader(DataLoader):
 
         x = torch.cat([x_train, x_test], dim=0)
         y = torch.cat([y_train, y_test], dim=0).squeeze(-1)
-        adj = graph_info["moral_matrix_padded"] 
-        density = graph_info["moral_density"]
+        # adj = graph_info["moral_matrix_padded"] 
+        # density = graph_info["moral_density"]
         
         scm = graph_info["scm"]
         processor = graph_info["processor"]
 
-        if self.extra_checks:
-            ordered_nodes: list[int] = processor.kept_feature_indices + [processor.selected_target_feature]
-            p = len(ordered_nodes)
+        # if self.extra_checks:
+        #     ordered_nodes: list[int] = processor.kept_feature_indices + [processor.selected_target_feature]
+        #     p = len(ordered_nodes)
 
-            adj1 = move_axis(adj, src=adj.shape[0]-1, dst = processor.selected_target_feature)[:p, :p]
-            adj2 = nx.adjacency_matrix(nx.moral_graph(scm.dag.g), nodelist=ordered_nodes).todense() 
+        #     adj1 = move_axis(adj, src=adj.shape[0]-1, dst = processor.selected_target_feature)[:p, :p]
+        #     adj2 = nx.adjacency_matrix(nx.moral_graph(scm.dag.g), nodelist=ordered_nodes).todense() 
 
         return dict(
             x=x,
             y=y,
-            adj=adj,
-            density=density,
+            # adj=adj,
+            # density=density,
             single_eval_pos=dataset_info["number_train_samples"],
             scm=scm,
             processor=processor,

@@ -101,7 +101,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 data = (
                     full_data['x'].to(device),
                     full_data['y'][:, :single_eval_pos].to(device),
-                    full_data['adj'].to(device),
+                    full_data['adj'].to(device) if full_data['adj'] is not None else None
                 )
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     x_nans = torch.isnan(data[0]).sum().item()
