@@ -7,15 +7,19 @@ from pfns.bar_distribution import FullSupportBarDistribution
 import schedulefree
 import os
 
+torch.set_float32_matmul_precision('high')
+
 from tfmplayground.callbacks import Callback
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
+from gtfm.trainer.muon import Muon
+
 
 
 def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,
           epochs: int, accumulate_gradients: int = 1, lr: float = 1e-4, device: torch.device = None,
           callbacks: list[Callback] = None, ckpt: Dict[str, torch.Tensor] = None, multi_gpu: bool = False,
-          run_name: str = 'nanoTFM', workdir: str = '.'):
+          run_name: str = 'nanoTFM', workdir: str = '.', use_muon: bool = True):
     """
     Trains our model on the given prior using the given criterion.
 
@@ -43,11 +47,33 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
     if not device:
         device = get_default_device()
     model.to(device)
-    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
-    # Adam as opitmizer isnteaf of AdamW
-    # optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.0)
+
+    if use_muon:
+        muon_params = []
+        adam_params = []
+        for name, p in model.named_parameters():
+            if p.ndim != 2:
+                adam_params.append(p)
+            elif 'transformer_encoder' in name:
+                muon_params.append(p)
+            else:
+                adam_params.append(p)
+        optimizer_muon = Muon(muon_params, lr=0.1 * lr, momentum=0.95)
+        optimizer_adam = schedulefree.AdamWScheduleFree(adam_params, lr=lr, weight_decay=0.0, warmup_steps=1000)
+        optimizers = [optimizer_muon, optimizer_adam]
+    else:
+        optimizer_muon = None
+        optimizer_adam = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0, warmup_steps=1000)
+        optimizers = [optimizer_adam]
+
     if ckpt:
-        optimizer.load_state_dict(ckpt['optimizer'])
+        if 'optimizer_adam' in ckpt:
+            optimizer_adam.load_state_dict(ckpt['optimizer_adam'])
+        elif 'optimizer' in ckpt:  # backwards compat
+            optimizer_adam.load_state_dict(ckpt['optimizer'])
+        if use_muon and optimizer_muon is not None and 'optimizer_muon' in ckpt:
+            optimizer_muon.load_state_dict(ckpt['optimizer_muon'])
+
     classification_task = isinstance(criterion, nn.CrossEntropyLoss)
     regression_task = not classification_task
 
@@ -57,7 +83,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
         for epoch in range(ckpt['epoch'] + 1 if ckpt else 1, epochs + 1):
             epoch_start_time = time.time()
             model.train()  # Turn on the train mode
-            optimizer.train()
+            optimizer_adam.train()
             total_loss = 0.
             for i, full_data in enumerate(prior):
                 single_eval_pos = full_data['single_eval_pos']
@@ -99,13 +125,15 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
 
                 if (i + 1) % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    for opt in optimizers:
+                        opt.step()
+                    for opt in optimizers:
+                        opt.zero_grad(set_to_none=True)
 
             end_time = time.time()
             mean_loss: float = total_loss / len(prior)
             model.eval()
-            optimizer.eval()
+            optimizer_adam.eval()
 
             training_state = {
                 'epoch': epoch,
@@ -117,7 +145,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     'num_outputs': int((model.module if multi_gpu else model).num_outputs)
                 },
                 'model': (model.module if multi_gpu else model).state_dict(),
-                'optimizer': optimizer.state_dict()
+                'optimizer_adam': optimizer_adam.state_dict(),
+                **(({'optimizer_muon': optimizer_muon.state_dict()} if optimizer_muon is not None else {}))
             }
             torch.save(training_state, work_dir+'/latest_checkpoint.pth')
 

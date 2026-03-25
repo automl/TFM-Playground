@@ -11,7 +11,7 @@ from gtfm.utils import adj
 
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, mask_attn: bool = False):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, mask_attn: bool = False, modded_encoder: bool = False):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.embedding_size = embedding_size
@@ -20,9 +20,10 @@ class NanoTabPFNModel(nn.Module):
         self.num_layers = num_layers
         self.num_outputs = num_outputs
         self.mask_attn = mask_attn
+        self.modded_encoder = modded_encoder
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
-        self.transformer_encoder = TransformerEncoderStack(num_layers, embedding_size, num_attention_heads, mlp_hidden_size)
+        self.transformer_encoder = TransformerEncoderStack(num_layers, embedding_size, num_attention_heads, mlp_hidden_size, modded_encoder=modded_encoder)
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
@@ -167,12 +168,13 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderStack(nn.Module):
-    def __init__(self, num_layers: int, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int):
+    def __init__(self, num_layers: int, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, modded_encoder: bool = False):
         """ Instantiates num_layers many Transformer Blocks and stores them in a list so we can use them in the forward """
         super().__init__()
+        layer_cls = ModdedTransformerEncoderLayer if modded_encoder else TransformerEncoderLayer
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
-            self.transformer_blocks.append(TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size))
+            self.transformer_blocks.append(layer_cls(embedding_size, num_attention_heads, mlp_hidden_size))
 
     def forward(self, x: torch.Tensor, single_eval_position: int, attn_mask: Optional[torch.Tensor] = None, num_mem_chunks: int = 1) -> torch.Tensor:
         """
@@ -261,6 +263,94 @@ class TransformerEncoderLayer(nn.Module):
         src = mlp(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm3(src)
+        return src
+
+class ModdedTransformerEncoderLayer(nn.Module):
+    """
+    Pre-norm transformer block with explicit QKV projections and F.scaled_dot_product_attention.
+    Adapted from modded-nanotabpfn
+    """
+
+    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
+                 layer_norm_eps: float = 1e-5, device=None, dtype=None):
+        super().__init__()
+        self.nhead = nhead
+        self.head_dim = embedding_size // nhead
+        assert embedding_size % nhead == 0, "embedding_size must be divisible by nhead"
+
+        self.qkv_features = Linear(embedding_size, 3 * embedding_size, device=device, dtype=dtype)
+        self.qkv_datapoints = Linear(embedding_size, 3 * embedding_size, device=device, dtype=dtype)
+
+        self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
+        self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
+
+        self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
+        self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
+        self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
+
+    @torch.compile(dynamic=True)
+    def forward(self, src: torch.Tensor, single_eval_position: int, attn_mask: Optional[torch.Tensor] = None, num_mem_chunks: int = 1) -> torch.Tensor:
+        """
+        Pre-norm transformer block: norm -> attention -> residual, for both feature and
+        datapoint axes, followed by a pre-norm MLP.
+
+        Args:
+            src: (torch.Tensor) shape (batch_size, num_rows, num_features, embedding_size)
+            single_eval_position: (int) number of training datapoints
+            attn_mask: (torch.Tensor | None) shape (batch_size, num_features, num_features),
+                       boolean mask for feature attention (True = ignore position)
+            num_mem_chunks: kept for API compatibility, not used in this implementation
+        Returns:
+            (torch.Tensor) shape (batch_size, num_rows, num_features, embedding_size)
+        """
+        batch_size, rows_size, col_size, embedding_size = src.shape
+
+        # --- Pre-norm feature attention (between features) ---
+        x = src.reshape(batch_size * rows_size, col_size, embedding_size)
+        res = x
+        x = self.norm1(x)
+
+        qkv = self.qkv_features(x)
+        qkv = qkv.reshape(batch_size * rows_size, col_size, 3, self.nhead, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        feat_attn_mask = None
+        if attn_mask is not None:
+            # (B, C, C) -> (B*R, 1, C, C) — broadcast over heads
+            feat_attn_mask = attn_mask.repeat_interleave(rows_size, dim=0).unsqueeze(1)
+
+        x = F.scaled_dot_product_attention(q, k, v, attn_mask=feat_attn_mask)
+        x = x.transpose(1, 2).reshape(batch_size * rows_size, col_size, embedding_size)
+        src = (res + x).reshape(batch_size, rows_size, col_size, embedding_size)
+
+        # --- Pre-norm datapoint attention (between datapoints) ---
+        x = src.transpose(1, 2).reshape(batch_size * col_size, rows_size, embedding_size)
+        res = x
+        x = self.norm2(x)
+
+        qkv = self.qkv_datapoints(x)
+        qkv = qkv.reshape(batch_size * col_size, rows_size, 3, self.nhead, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        q_left, q_right = q.split([single_eval_position, rows_size - single_eval_position], dim=2)
+        k_train = k[:, :, :single_eval_position, :]
+        v_train = v[:, :, :single_eval_position, :]
+
+        x_left = F.scaled_dot_product_attention(q_left, k_train, v_train)
+        x_right = F.scaled_dot_product_attention(q_right, k_train, v_train)
+
+        x = torch.cat([x_left, x_right], dim=2)
+        x = x.transpose(1, 2).reshape(batch_size * col_size, rows_size, embedding_size)
+        src = (res + x).reshape(batch_size, col_size, rows_size, embedding_size).transpose(2, 1)
+
+        # --- Pre-norm MLP ---
+        res = src
+        x = self.norm3(src)
+        x = self.linear2(F.gelu(self.linear1(x)))
+        src = res + x
+
         return src
 
 
