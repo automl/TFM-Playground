@@ -46,6 +46,8 @@ def train_model(
     embedding_size: int = 128,
     mlp_hidden_size: int = 512,
     num_layers: int = 6,
+    checkpoint_base_dir: str = 'workdir',
+    run_name: str | None = None,
 ):
     """
     Train a single nanoTabPFN model on the given prior.
@@ -53,7 +55,7 @@ def train_model(
     Args:
         prior_path: Path to the prior .h5 file
         model_name: Name for this model (used in logging)
-        epochs: Number of training epochs
+        epochs: Target total number of training epochs
         batch_size: Batch size for training
         steps: Number of steps per epoch
         lr: Learning rate
@@ -62,6 +64,8 @@ def train_model(
         tasks: OpenML task IDs for evaluation
         n_buckets: Number of buckets for regression bar distribution
         accumulate_gradients: Number of gradients to accumulate before updating weights
+        checkpoint_base_dir:  Base directory under which run-specific checkpoint folders are stored
+        run_name: Training run name used for checkpoint output
 
     Returns:
         Tuple of (trained_model, final_metric, callback, train_time,
@@ -71,6 +75,15 @@ def train_model(
     """
     if device is None:
         device = get_default_device()
+
+    if run_name is None:
+        run_name = model_name.lower().replace(" ", "_")
+
+    # load a saved checkpoint when continuing an existing prior-specific run.
+    ckpt = None
+    checkpoint_path = os.path.join(checkpoint_base_dir, run_name, "latest_checkpoint.pth")
+    if checkpoint_path and os.path.isfile(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     print(f"\n{'='*80}")
     print(f"Training {model_name} on: {os.path.basename(prior_path)}")
@@ -82,7 +95,7 @@ def train_model(
         num_steps=steps,
         batch_size=batch_size,
         device=device,
-        starting_index=0,
+        starting_index=steps * batch_size * (ckpt["epoch"] if ckpt else 0),
     )
 
     # Define problem type
@@ -91,7 +104,6 @@ def train_model(
     # Prepare criterion
     if is_regression:
         # Compute bucket edges from the prior data (same as pretrain_regression.py)
-        # TODO: not sure if this is better or we should keep the 'online' one we should check
         bucket_edges = make_global_bucket_edges(
             filename=prior_path,
             n_buckets=n_buckets,
@@ -111,6 +123,15 @@ def train_model(
         num_layers=num_layers,
         num_outputs=num_outputs,
     )
+
+    if ckpt:
+        model.load_state_dict(ckpt["model"])
+
+    if ckpt and ckpt["epoch"] >= epochs:
+        raise ValueError(
+            f"Checkpoint is already at epoch {ckpt['epoch']}, but --epochs={epochs}. "
+            "Use a larger --epochs value to continue training."
+        )
 
     # Count parameters
     param_count = sum(p.numel() for p in model.parameters())
@@ -138,7 +159,9 @@ def train_model(
         lr=lr,
         device=device,
         callbacks=[callback],
-        run_name=f"compare_{model_name.lower().replace(' ', '_')}",
+        ckpt=ckpt,
+        run_name=run_name,
+        checkpoint_base_dir=checkpoint_base_dir,
     )
     train_time = time.time() - train_start
 

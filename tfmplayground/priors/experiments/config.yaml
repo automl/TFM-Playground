@@ -2,12 +2,12 @@
 
 # Data generation settings
 data_generation:
-  num_batches: 10
-  batch_size: 8
-  max_seq_len: 100
-  max_features: 10
+  num_batches: 10000
+  batch_size: 1
+  max_seq_len: 1000
+  max_features: 100
   min_eval_pos: 10
-  device: "cpu"  # cpu or cuda
+  device: "cuda"  # cpu or cuda
   seed: 42
   max_classes_classification: 10  # for classification tasks (regression is always 0)
 
@@ -144,16 +144,16 @@ analysis:
 
 # Model Architecture
 model:
-  num_attention_heads: 4
-  embedding_size: 128
-  mlp_hidden_size: 512
+  num_attention_heads: 6
+  embedding_size: 192
+  mlp_hidden_size: 768
   num_layers: 6
 
 # Training Hyperparameters
 training:
-  epochs: 3
+  epochs: 1
   batch_size: 1
-  steps: 5
+  steps: 10000
   lr: 0.0001
   accumulate_gradients: 1
   seed: 2402

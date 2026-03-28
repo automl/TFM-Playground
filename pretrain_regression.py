@@ -38,7 +38,13 @@ ckpt = None
 if args.loadcheckpoint:
     ckpt = torch.load(args.loadcheckpoint)
 
-prior = PriorDumpDataLoader(filename=args.priordump, num_steps=args.steps, batch_size=args.batchsize, device=device, starting_index=args.steps*(ckpt['epoch'] if ckpt else 0))
+prior = PriorDumpDataLoader(
+    filename=args.priordump,
+    num_steps=args.steps,
+    batch_size=args.batchsize,
+    device=device,
+    starting_index=args.steps * args.batchsize * (ckpt['epoch'] if ckpt else 0),
+)
 
 model = NanoTabPFNModel(
     num_attention_heads=args.heads,

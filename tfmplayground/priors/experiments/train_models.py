@@ -26,6 +26,29 @@ from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.utils import get_default_device, set_randomness_seed
 
 
+def _load_metadata(metadata_path: str):
+    """Load existing metadata.json if present, else return None."""
+    if os.path.isfile(metadata_path):
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            return metadata if isinstance(metadata, dict) else None
+        except (OSError, json.JSONDecodeError):
+            return None
+    return None
+
+
+def _merge_per_task_scores(previous_scores, new_scores):
+    merged = {
+        dataset_name: list(values)
+        for dataset_name, values in (previous_scores or {}).items()
+    }
+    for dataset_name, values in new_scores.items():
+        merged.setdefault(dataset_name, [])
+        merged[dataset_name].extend(values)
+    return merged
+
+
 def _select_priors_interactively(problem_type: str):
     """Discover .h5 files for the given problem type and let the user pick which to train."""
     data_dir = os.path.join(os.path.dirname(__file__), problem_type, "results", "data")
@@ -121,6 +144,7 @@ def _save_trained_model(
     metric,
     args,
     criterion=None,
+    previous_metadata=None,
 ):
     """Save a trained model checkpoint and metadata to disk."""
     os.makedirs(output_dir, exist_ok=True)
@@ -158,16 +182,29 @@ def _save_trained_model(
         "prior_name": prior_name,
         "problem_type": problem_type,
         "is_regression": is_regression,
-        "train_time": train_time,
+        "train_time": train_time + (
+            previous_metadata.get("train_time", 0.0) if previous_metadata else 0.0
+        ),
         "inference_time": inference_time,
         "param_count": param_count,
         "final_metric": metric,
         "metric_name": "RMSE" if is_regression else "ROC-AUC",
-        "loss_history": callback.loss_history,
-        "metric_history": metric_history,
-        "per_task_scores": per_task_scores,
-        "epoch_history": callback.epoch_history,
-        "epoch_times": callback.epoch_times,
+        "loss_history": (
+            previous_metadata.get("loss_history", []) if previous_metadata else []
+        ) + callback.loss_history,
+        "metric_history": (
+            previous_metadata.get("metric_history", []) if previous_metadata else []
+        ) + metric_history,
+        "per_task_scores": _merge_per_task_scores(
+            previous_metadata.get("per_task_scores", {}) if previous_metadata else {},
+            per_task_scores,
+        ),
+        "epoch_history": (
+            previous_metadata.get("epoch_history", []) if previous_metadata else []
+        ) + callback.epoch_history,
+        "epoch_times": (
+            previous_metadata.get("epoch_times", []) if previous_metadata else []
+        ) + callback.epoch_times,
         "hyperparams": {
             "epochs": args.epochs,
             "batch_size": args.batch_size,
@@ -177,7 +214,11 @@ def _save_trained_model(
             "eval_every": args.eval_every,
             "accumulate_gradients": args.accumulate_gradients,
         },
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "created_at": (
+            previous_metadata.get("created_at") if previous_metadata else None
+        )
+        or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
     with open(os.path.join(output_dir, "metadata.json"), "w", encoding="utf-8") as f:
@@ -203,7 +244,10 @@ def main():
         help="Problem type. Picks priors from <problem_type>/results/data/.",
     )
     parser.add_argument(
-        "--epochs", type=int, default=train_cfg["epochs"], help="Number of epochs to train each model"
+        "--epochs",
+        type=int,
+        default=train_cfg["epochs"],
+        help="Target total epochs for each model. Re-run with a larger value to continue from a saved checkpoint.",
     )
     parser.add_argument(
         "--batch_size", type=int, default=train_cfg["batch_size"], help="Batch size for training"
@@ -239,7 +283,7 @@ def main():
         "--output_dir",
         type=str,
         default=None,
-        help="Base dir for saved models (default: <problem_type>/results/trained_models/)",
+        help="Base dir for saved models and resumable checkpoints (default: <problem_type>/results/trained_models/)",
     )
     parser.add_argument(
         "--priors",
@@ -279,8 +323,6 @@ def main():
     cls_tasks = [t for t in TOY_TASKS_CLASSIFICATION if (subset is None or t in subset)]
     reg_tasks = [t for t in TOY_TASKS_REGRESSION if (subset is None or t in subset)]
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-
     for idx, (prior_name, prior_path) in enumerate(selected_priors, start=1):
         # Probe prior to determine problem type
         prior_probe = PriorDumpDataLoader(
@@ -306,6 +348,13 @@ def main():
         set_randomness_seed(args.seed)
 
         model_name = f"Model {idx}"
+        run_name = prior_name.replace(" ", "_").replace("/", "_")
+        model_dir = os.path.join(args.output_dir, run_name)
+        checkpoint_path = os.path.join(model_dir, "latest_checkpoint.pth")
+        metadata_path = os.path.join(model_dir, "metadata.json")
+        previous_metadata = (
+            _load_metadata(metadata_path) if os.path.isfile(checkpoint_path) else None
+        )
         trained_model, metric, callback, train_time, inference_time, param_count, criterion = (
             train_model(
                 prior_path=prior_path,
@@ -322,12 +371,10 @@ def main():
                 embedding_size=config["model"]["embedding_size"],
                 mlp_hidden_size=config["model"]["mlp_hidden_size"],
                 num_layers=config["model"]["num_layers"],
+                checkpoint_base_dir=args.output_dir,
+                run_name=run_name,
             )
         )
-
-        # Create a folder for this model
-        safe_name = prior_name.replace(" ", "_").replace("/", "_")
-        model_dir = os.path.join(args.output_dir, f"{safe_name}_{stamp}")
 
         _save_trained_model(
             output_dir=model_dir,
@@ -343,6 +390,7 @@ def main():
             metric=metric,
             args=args,
             criterion=criterion,
+            previous_metadata=previous_metadata,
         )
 
     print(f"\n{'='*80}")

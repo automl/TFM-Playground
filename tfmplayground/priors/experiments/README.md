@@ -1,79 +1,104 @@
 # Prior Experiments
 
-This folder contains scripts to generate priors, train per-prior models, and run analysis/comparison pipelines for classification and regression.
+This folder contains the experiment scripts to:
+- generate prior datasets
+- train one model per prior
+- compare saved models afterwards
 
 ## Quick start
-0) Arrange the environment
+
+In the project root:
+
 ```bash
-# In the project root, using a virtual env:
 pip install -e .
 ```
 
-1) Edit the experiment [config](./config.yaml).
+Edit the experiment config in [config.yaml](config.yaml).
 
-2) Run the experiment launcher.
+You can use the interactive launcher:
 
 ```bash
-sh run.sh classification
+sh tfmplayground/priors/experiments/run.sh classification
 # or
-sh run.sh regression
+sh tfmplayground/priors/experiments/run.sh regression
 ```
 
-You will be prompted to choose from available priors and whether you want analysis and comparison analysis.
+## Generate Data
 
-### Non-interactive / SLURM mode
-
-All scripts accept `--priors` to bypass interactive prompts.
-
-**Data generation** — pick exactly which priors to generate:
+Use `generate_data.py` to create `.h5` prior dumps for one problem type.
 
 ```bash
-# All priors
-python generate_data.py --mode regression --priors all
+# All configured priors
+python tfmplayground/priors/experiments/generate_data.py \
+  --mode regression \
+  --priors all
 
-# Specific priors
-python generate_data.py --mode regression --priors ticl_gp ticl_mlp tabpfn_mlp
+# Selected priors
+python tfmplayground/priors/experiments/generate_data.py \
+  --mode classification \
+  --priors ticl_gp tabpfn_mlp
 ```
 
-**Training** — pick exactly which priors to train on:
+Generated files are written to:
+- [classification/results/data](classification/results/data)
+- [regression/results/data](regression/results/data)
+
+Pay attention to:
+- `--mode` must match the experiment you want to train later.
+- Generated filenames depend on the config. If you change data-generation settings, check the existing `.h5` files before reusing them.
+- Re-generating with the same output path overwrites the existing prior dump.
+
+## Train Models
+
+Use `train_models.py` after the `.h5` files exist.
 
 ```bash
-# All available priors
-python train_models.py --problem_type regression --priors all --epochs 50 --steps 100
+# All discovered priors
+python tfmplayground/priors/experiments/train_models.py \
+  --problem_type regression \
+  --priors all \
+  --epochs 50 \
+  --steps 100
 
-# Specific priors (great for SLURM job arrays)
-python train_models.py --problem_type regression --priors ticl_gp --epochs 50
+# One prior
+python tfmplayground/priors/experiments/train_models.py \
+  --problem_type classification \
+  --priors ticl_gp \
+  --epochs 100
 ```
 
-**Via run.sh** — pass `--priors` after the mode:
+Saved models are written to:
+- [classification/results/trained_models](classification/results/trained_models)
+- [regression/results/trained_models](regression/results/trained_models)
+
+Each prior gets a stable folder containing:
+- `model.pth`
+- `metadata.json`
+- `latest_checkpoint.pth`
+- `bucket_edges.pth` for regression
+
+Pay attention to:
+- `--problem_type` must match the problem type of the prior dump.
+- `--epochs` is the target total epoch count. Re-running with a larger value resumes from `latest_checkpoint.pth`.
+- Training now reuses the same prior folder instead of creating timestamped folders.
+- If you change config in a way that should start a fresh run, check or remove the existing trained-model folder for that prior first. Otherwise the script may resume from the old checkpoint and append to old metadata.
+
+## Compare Models
 
 ```bash
-# Non-interactive data generation (analysis step stays interactive)
-sh run.sh regression --priors ticl_gp ticl_mlp tabpfn_mlp
+python tfmplayground/priors/experiments/compare_models.py \
+  --problem_type classification
 ```
 
-> **Note:** Omitting `--priors` from any command keeps the original interactive behavior.
-
-## Compare trained models
-
-Use the comparison script to run a side-by-side analysis using saved priors.
+Or use a custom trained-model directory:
 
 ```bash
-python compare_models.py \
-  --prior ./classification/results/data/prior_tabicl_mlp_scm_10x8_50x3.h5 \
-  --prior ./classification/results/data/prior_ticl_classification_adapter_10x8_50x3.h5 \
-  --prior ./classification/results/data/prior_tabpfn_mlp_10x8_50x3.h5
+python tfmplayground/priors/experiments/compare_models.py \
+  --problem_type regression \
+  --models_dir /path/to/trained_models
 ```
 
-## Outputs and where to look
+## Notes
 
-- Generated prior data: [classification/results/data](classification/results/data) and [regression/results/data](regression/results/data)
-- Reports: [classification/results/reports](classification/results/reports) and [regression/results/reports](regression/results/reports)
-- Plots: [plots](plots) and [plots](plots)
-- Checkpoints and working files: [workdir](workdir)
-
-## Configuration notes
-
-- The primary configuration lives in [config.yaml](config.yaml).
-- If you add new priors, make sure they are exposed in the config so the launcher can prompt for them.
-
+- Omitting `--priors` keeps the interactive selection behavior.
+- If you add a new prior, expose it in [config.yaml](config.yaml) so the scripts can discover it.
