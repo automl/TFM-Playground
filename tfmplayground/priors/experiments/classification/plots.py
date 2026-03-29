@@ -14,7 +14,7 @@ from sklearn.decomposition import PCA
 from tfmplayground.priors.experiments.classification.analyzer import (
     ClassificationDataAnalyzer,
 )
-from tfmplayground.priors.experiments.utils import (
+from tfmplayground.priors.experiments.utils.general import (
     get_prior_colors,
     apply_plot_style,
     merge_variable_width_features,

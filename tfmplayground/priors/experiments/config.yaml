@@ -4,7 +4,7 @@
 data_generation:
   num_batches: 10000
   batch_size: 1
-  max_seq_len: 1000
+  max_seq_len: 450
   max_features: 100
   min_eval_pos: 10
   device: "cuda"  # cpu or cuda
@@ -151,13 +151,13 @@ model:
 
 # Training Hyperparameters
 training:
-  epochs: 1
+  epochs: 200
   batch_size: 1
-  steps: 10000
+  steps: 100
   lr: 0.0001
   accumulate_gradients: 1
   seed: 2402
-  eval_every: 1
+  eval_every: 10
 
 # Visualization Settings
 visualization:
