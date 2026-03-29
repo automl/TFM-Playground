@@ -56,8 +56,10 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             epoch_start_time = time.time()
             model.train()  # Turn on the train mode
             optimizer.train()
+            optimizer.zero_grad()
             total_loss = 0.
-            for i, full_data in enumerate(prior):
+            grad_batches = 0  # counts batches that actually produced gradients
+            for full_data in prior:
                 single_eval_pos = full_data['single_eval_pos']
                 data = (full_data['x'].to(device),
                         full_data['y'][:, :single_eval_pos].to(device))
@@ -78,19 +80,30 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 if classification_task:
                     targets = targets.reshape((-1,)).to(torch.long)
                     output = output.view(-1, output.shape[-1])
+                    # skip batches where every target is the ignore index.
+                    # crossEntropyLoss averages over zero valid targets so it makes mean loss NaN.
+                    if (targets == criterion.ignore_index).all():
+                        continue
 
                 losses = criterion(output, targets)
                 loss = losses.mean() / accumulate_gradients
                 loss.backward()
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
+                grad_batches += 1
 
-                if (i + 1) % accumulate_gradients == 0:
+                if grad_batches % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     optimizer.step()
                     optimizer.zero_grad()
 
+            # flush any leftover accumulated gradients 
+            if grad_batches % accumulate_gradients != 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                optimizer.step()
+                optimizer.zero_grad()
+
             end_time = time.time()
-            mean_loss = total_loss / len(prior)
+            mean_loss = total_loss / grad_batches if grad_batches > 0 else float('nan')
             model.eval()
             optimizer.eval()
 
