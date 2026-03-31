@@ -42,7 +42,7 @@ e_id = f"{ts}-{uid}-{e_name}"
 e_root = os.path.join(args.experiments_dir, e_name)
 e_dir = os.path.join(e_root, e_id)
 os.makedirs(e_dir, exist_ok=True)
-buckets_path = os.path.join(e_dir, f"{e_id}-buckets.pth")
+buckets_path = os.path.join(e_dir, f"{e_id}-regressor-buckets.pth")
 print(f"experiment id: {e_id}")
 
 set_randomness_seed(2402)

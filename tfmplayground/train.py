@@ -115,7 +115,8 @@ def train(
                 'model': (model.module if multi_gpu else model).state_dict(),
                 'optimizer': optimizer.state_dict()
             }
-            torch.save(training_state, os.path.join(experiment_dir, f'{experiment_id}-checkpoint.pth'))
+            task_name = 'classifier' if classification_task else 'regressor'
+            torch.save(training_state, os.path.join(experiment_dir, f'{experiment_id}-{task_name}-checkpoint.pth'))
 
             for callback in callbacks:
                 if type(criterion) is FullSupportBarDistribution:
