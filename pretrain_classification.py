@@ -1,6 +1,10 @@
 import argparse
+import os
+import uuid
 
 import torch
+
+from datetime import datetime
 from sklearn.metrics import accuracy_score, roc_auc_score
 from torch import nn
 
@@ -13,7 +17,7 @@ from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, set_randomness_seed
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--priordump", type=str, default="50x3_3_100k_classification.h5", help="path to the prior dump")
+parser.add_argument("--priordump", type=str, default="workdir/dumps/50x3_3_100k_classification.h5", help="path to the prior dump")
 parser.add_argument("--heads", type=int, default=6, help="number of attention heads")
 parser.add_argument("--embeddingsize", type=int, default=192, help="the size of the embeddings used for the cells")
 parser.add_argument("--hiddensize", type=int, default=768, help="size of the hidden layer of the mlps")
@@ -25,9 +29,19 @@ parser.add_argument("--steps", type=int, default=100, help="number of steps that
 parser.add_argument("--epochs", type=int, default=10000, help="number of epochs to train for")
 parser.add_argument("--loadcheckpoint", type=str, default=None, help="checkpoint from which to continue training")
 parser.add_argument("--multigpu", action="store_true", help="enable multi-GPU training using data parallelism")
-parser.add_argument("--runname", type=str, default="nanotabpfn", help="name of the training run, will be used to store the training checkpoints and for WandB logging")
+parser.add_argument("--experiments-dir", type=str, default='workdir/experiments')
+parser.add_argument("--name", type=str, default='test')
 
 args = parser.parse_args()
+
+ts = datetime.now().strftime("%y%m%d-%H%M%S")
+uid = uuid.uuid4().hex[:8]
+e_name = args.name.strip()
+e_id = f"{ts}-{uid}-{e_name}"
+e_root = os.path.join(args.experiments_dir, e_name)
+e_dir = os.path.join(e_root, e_id)
+os.makedirs(e_dir, exist_ok=True)
+print(f"experiment id: {e_id}")
 
 set_randomness_seed(2402)
 
@@ -99,5 +113,7 @@ trained_model, loss = train(
     callbacks=callbacks,
     ckpt=ckpt,
     multi_gpu=args.multigpu,
-    run_name=args.runname
+    run_name=e_name,
+    experiment_id=e_id,
+    experiment_dir=e_dir,
 )
