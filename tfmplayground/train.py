@@ -49,6 +49,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
         device = get_default_device()
     model.to(device)
 
+    adam_kwargs = {'lr': lr}
     if use_muon:
         muon_params = []
         adam_params = []
@@ -60,11 +61,11 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             else:
                 adam_params.append(p)
         optimizer_muon = Muon(muon_params, lr=0.1 * lr, momentum=0.95)
-        optimizer_adam = schedulefree.AdamWScheduleFree(adam_params, lr=lr, weight_decay=0.0, warmup_steps=1000)
+        optimizer_adam = schedulefree.AdamWScheduleFree(adam_params, **adam_kwargs)
         optimizers = [optimizer_muon, optimizer_adam]
     else:
         optimizer_muon = None
-        optimizer_adam = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0, warmup_steps=1000)
+        optimizer_adam = schedulefree.AdamWScheduleFree(model.parameters(), **adam_kwargs)
         optimizers = [optimizer_adam]
 
     if ckpt:
@@ -97,11 +98,12 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             total_loss = 0.
             valid_steps = 0
             for i, full_data in enumerate(prior):
+                print(f'Epoch {epoch}, Step {i}/{prior.num_steps}')
                 single_eval_pos = full_data['single_eval_pos']
                 data = (
                     full_data['x'].to(device),
                     full_data['y'][:, :single_eval_pos].to(device),
-                    full_data['adj'].to(device) if full_data['adj'] is not None else None
+                    full_data['adj'].to(device) if full_data.get('adj') is not None else None
                 )
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     x_nans = torch.isnan(data[0]).sum().item()
@@ -180,8 +182,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion, tabarena_light=tabearena_light)
                 else:
                     callback.on_epoch_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), tabarena_light=tabearena_light)
-        for callback in callbacks:
-            callback.on_train_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion if type(criterion) is FullSupportBarDistribution else None, tabarena_light=False)
+        # for callback in callbacks:
+        #     callback.on_train_end(epoch, end_time - epoch_start_time, mean_loss, (model.module if multi_gpu else model), dist=criterion if type(criterion) is FullSupportBarDistribution else None, tabarena_light=False)
     except KeyboardInterrupt:
         print('Interrupting!')
         pass
