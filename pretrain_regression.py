@@ -32,7 +32,7 @@ parser.add_argument("--steps", type=int, default=100, help="number of steps that
 parser.add_argument("--epochs", type=int, default=10000, help="number of epochs to train for")
 parser.add_argument("--loadcheckpoint", type=str, default=None, help="checkpoint from which to continue training")
 parser.add_argument("--n_buckets", type=int, default=100, help="number of buckets for the data loader")
-parser.add_argument("--experiments-dir", type=str, default='workdir/experiments')
+parser.add_argument("--experiments-dir", type=str, default='workdir/experiments/regression')
 parser.add_argument("--name", type=str, default='test')
 
 args = parser.parse_args()
