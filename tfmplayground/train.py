@@ -26,7 +26,6 @@ def train(
     run_name: str = 'nanoTFM',
     experiment_id: str = None,
     experiment_dir: str = None,
-    weights_path: str = None,
 ):
     """
     Trains our model on the given prior using the given criterion.
@@ -117,8 +116,6 @@ def train(
                 'optimizer': optimizer.state_dict()
             }
             torch.save(training_state, os.path.join(experiment_dir, f'{experiment_id}-checkpoint.pth'))
-            if epoch == epochs:
-                torch.save(training_state, weights_path)
 
             for callback in callbacks:
                 if type(criterion) is FullSupportBarDistribution:

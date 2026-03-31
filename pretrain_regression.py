@@ -19,8 +19,6 @@ from tfmplayground.utils import get_default_device, set_randomness_seed, make_gl
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--priordump", type=str, default="workdir/dumps/50x3_1280k_regression.h5", help="path to the prior dump")
-parser.add_argument("--saveweights", type=str, default=None, help="path to save the trained model to")
-parser.add_argument("--savebuckets", type=str, default=None, help="path to save the bucket edges to")
 parser.add_argument("--heads", type=int, default=6, help="number of attention heads")
 parser.add_argument("--embeddingsize", type=int, default=192, help="the size of the embeddings used for the cells")
 parser.add_argument("--hiddensize", type=int, default=768, help="size of the hidden layer of the mlps")
@@ -44,8 +42,7 @@ e_id = f"{ts}-{uid}-{e_name}"
 e_root = os.path.join(args.experiments_dir, e_name)
 e_dir = os.path.join(e_root, e_id)
 os.makedirs(e_dir, exist_ok=True)
-weights_path = os.path.join(e_dir, f"{e_id}-weights.pth") if not args.saveweights else args.saveweights
-buckets_path = os.path.join(e_dir, f"{e_id}-buckets.pth") if not args.savebuckets else args.savebuckets
+buckets_path = os.path.join(e_dir, f"{e_id}-buckets.pth")
 print(f"experiment id: {e_id}")
 
 set_randomness_seed(2402)
@@ -111,5 +108,4 @@ trained_model, loss = train(
     run_name=e_name,
     experiment_id=e_id,
     experiment_dir=e_dir,
-    weights_path=weights_path,
 )
