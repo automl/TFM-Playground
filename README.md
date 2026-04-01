@@ -37,7 +37,7 @@ print("Accuracy", accuracy_score(y_test, predictions))
 ### Our Code
 
 `tfmplayground/model.py` contains the implementation of the architecture in less than 250 lines of code. `tfmplayground/train.py` implements a simple training loop in under 100 lines and `tfmplayground/priors.py` implements a dataloader that allows you to load a dump pre-generated from a prior.
-We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
+We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own `get_batch` function.
 
 ### Pretrain your own small nanoTabPFN
 First we download 100k pre-generated datasets with 50 datapoints, 3 features and up to 3 classes each from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5).
@@ -131,3 +131,79 @@ Check out `prior_visualization.ipynb` for some more examples.
 
 - [TabICL](https://github.com/soda-inria/tabicl) (Classification)
 - [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
+
+### Time Series Priors for Forecasting
+
+We introduce **time series priors** that generate synthetic data with temporal patterns, designed to improve model performance on forecasting tasks.
+
+#### Why Time Series Priors?
+
+Existing priors (TabICL, TICL) generate i.i.d. tabular data — rows are independent with no temporal structure. This is suboptimal for forecasting where:
+- Data has **trends** (systematic drift over time)
+- Data has **seasonality** (repeating patterns)
+- Data has **autocorrelation** (past values predict future)
+
+Our time series priors expose the model to these patterns during pretraining.
+
+#### Quick Start
+
+Train a model on time series priors:
+```bash
+python pretrain_forecasting.py --epochs 100 --steps 50 --batchsize 4
+```
+
+Evaluate on synthetic forecasting data:
+```bash
+python eval_forecasting.py --model nanotabpfn_forecasting_weights.pth
+```
+
+#### Temporal Pattern Types
+
+| Type          | Description                  |
+|---------------|------------------------------|
+| `trend`       | Linear/polynomial drift      | 
+| `seasonal`    | Periodic oscillations        | 
+| `ar`          | Autoregressive dependencies  | 
+| `random_walk` | Cumulative noise             |
+| `mixed`       | Random combination (default) | 
+
+```bash
+# Train with specific pattern type
+python pretrain_forecasting.py --priortype seasonal --epochs 100
+
+# Use a preset
+python pretrain_forecasting.py --preset ar --epochs 100
+```
+
+#### Python API
+
+```python
+from tfmplayground.priors import TimeSeriesPriorDataLoader
+
+loader = TimeSeriesPriorDataLoader(
+    num_steps=100,
+    batch_size=8,
+    num_datapoints_min=50,
+    num_datapoints_max=256,
+    min_features=1,
+    max_features=10,
+    device=device,
+    prior_type="mixed",
+)
+
+for batch in loader:
+    x = batch["x"]           # (batch, seq_len, features)
+    y = batch["y"]           # (batch, seq_len)
+    split = batch["single_eval_pos"]  # temporal train/test boundary
+```
+
+#### Key Differences from Standard Priors
+
+| Aspect           | TabICL/TICL               | Time Series Priors      |
+|------------------|---------------------------|-------------------------|
+| Row independence | i.i.d.                    | Temporally correlated   |
+| Train/test split | Random                    | Temporal (past→future)  |
+| Patterns         | None                      | Trends, seasonality, AR |
+| Use case         | Classification/regression | Forecasting             |
+
+
