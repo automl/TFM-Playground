@@ -8,3 +8,7 @@ Submodules:
 
 from utils.general import discover_h5_files, load_config
 from utils.training import train_model, _build_metrics_payload, _json_safe
+from utils.visualization import (
+    plot_tabarena_performance_heatmap,
+    plot_prior_correlation_heatmap,
+)

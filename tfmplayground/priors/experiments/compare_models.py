@@ -6,6 +6,7 @@ then runs all the comparison plotting and metrics JSON generation.
 Usage:
     python compare_trained_models.py --problem_type classification
     python compare_trained_models.py --problem_type regression --seed 42
+    python compare_trained_models.py --problem_type classification --models all
 """
 
 import argparse
@@ -14,12 +15,15 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import numpy as np
 import torch
+from sklearn.metrics import roc_auc_score, r2_score
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from classification.callback import ClassificationTrackerCallback
 from regression.callback import RegressionTrackerCallback
+from new_evaluation import get_openml_predictions, TABARENA_TASKS
 from utils.training import (
     _build_metrics_payload,
     _json_safe,
@@ -31,8 +35,11 @@ from utils.visualization import (
     plot_per_fold_normalized_averaged_metrics,
     plot_per_task_comparison,
     plot_time_budget_metrics,
+    plot_tabarena_performance_heatmap,
+    plot_prior_correlation_heatmap,
 )
 from utils.general import load_config
+from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
 
@@ -112,6 +119,35 @@ def _select_models_interactively(available):
         confirm = input("Proceed? (y/n): ").strip().lower()
         if confirm == "y":
             return selected
+
+
+def _select_models_noninteractive(available, models_arg):
+    """Resolve --models CLI argument to a list of model items.
+
+    Args:
+        available: List of discovered model dicts from _discover_trained_models.
+        models_arg: List of model directory names, or ['all'].
+
+    Returns:
+        List of selected model dicts.
+    """
+    if models_arg == ["all"]:
+        selected = available
+    else:
+        name_to_item = {item["dir_name"]: item for item in available}
+        unknown = [m for m in models_arg if m not in name_to_item]
+        if unknown:
+            print(f"ERROR: Unknown model(s): {unknown}")
+            print(f"Available: {list(name_to_item.keys())}")
+            sys.exit(1)
+        selected = [name_to_item[m] for m in models_arg]
+
+    if not selected:
+        print("No models selected.")
+        sys.exit(1)
+
+    print(f"\nSelected models: {[s['dir_name'] for s in selected]}")
+    return selected
 
 
 def _load_model(model_dir: str, device, is_regression: bool = False):
@@ -203,6 +239,28 @@ def main():
     parser.add_argument(
         "--seed", type=int, default=config["training"]["seed"], help="Random seed (for decision boundary / regression toy plots)"
     )
+    parser.add_argument(
+        "--models",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "Model folder name(s) to compare (non-interactive). "
+            "Use 'all' for every discovered model, or list names e.g. 'tabpfn_mlp ticl_gp'. "
+            "Leave empty for interactive selection."
+        ),
+    )
+    parser.add_argument(
+        "--skip_tabarena",
+        action="store_true",
+        help="Skip TabArena evaluation and heatmap generation.",
+    )
+    parser.add_argument(
+        "--tabarena_cache_dir",
+        type=str,
+        default=None,
+        help="Directory to cache OpenML data for TabArena evaluation.",
+    )
 
     args = parser.parse_args()
 
@@ -228,7 +286,10 @@ def main():
         print("Run train_single_model.py first to train and save models.")
         sys.exit(1)
 
-    selected = _select_models_interactively(available)
+    if args.models is not None:
+        selected = _select_models_noninteractive(available, args.models)
+    else:
+        selected = _select_models_interactively(available)
 
     device = get_default_device()
     print(f"\nUsing device: {device}\n")
@@ -369,6 +430,139 @@ def main():
             seed=args.seed,
             output_path=regression_output,
         )
+
+    # --- TabArena heatmaps ---
+    if not args.skip_tabarena:
+        print(f"\n{'='*80}")
+        print("TABARENA EVALUATION")
+        print(f"{'='*80}\n")
+
+        tabarena_metric = "ROC-AUC" if not is_regression else "R²"
+        all_dataset_names: set[str] = set()
+        per_prior_scores: dict[str, dict[str, float]] = {}  # prior_name -> {dataset -> score}
+
+        for item in selected:
+            meta = item["metadata"]
+            prior_name = meta.get("prior_name", item["dir_name"])
+            cache_path = os.path.join(item["dir"], "tabarena_results.json")
+
+            # Check cache
+            if os.path.isfile(cache_path):
+                print(f"  {prior_name}: loading cached TabArena results")
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                per_prior_scores[prior_name] = cached
+                all_dataset_names.update(cached.keys())
+                continue
+
+            # Load model and wrap in sklearn-like interface
+            model_raw, dist = _load_model(item["dir"], device, is_regression=is_regression)
+
+            if is_regression:
+                if dist is None:
+                    print(f"  {prior_name}: SKIPPED (no bucket_edges.pth for regression)")
+                    continue
+                wrapped_model = NanoTabPFNRegressor(model=model_raw, dist=dist, device=device)
+            else:
+                wrapped_model = NanoTabPFNClassifier(model=model_raw, device=device)
+
+            print(f"  {prior_name}: evaluating on TabArena tasks...")
+            predictions = get_openml_predictions(
+                model=wrapped_model,
+                tasks=TABARENA_TASKS,
+                max_folds=1,
+                max_n_samples=5_000,
+                classification=not is_regression,
+                cache_directory=args.tabarena_cache_dir,
+            )
+
+            # Compute per-dataset metric (average across folds)
+            dataset_scores: dict[str, float] = {}
+            for dataset_name, fold_records in predictions.items():
+                fold_metrics = []
+                for rec in fold_records:
+                    y_true = rec["y_true"]
+                    y_pred = rec["y_pred"]
+                    y_proba = rec["y_proba"]
+                    try:
+                        if is_regression:
+                            fold_metrics.append(r2_score(y_true, y_pred))
+                        else:
+                            if y_proba is not None:
+                                fold_metrics.append(
+                                    roc_auc_score(y_true, y_proba, multi_class="ovr")
+                                )
+                            else:
+                                fold_metrics.append(roc_auc_score(y_true, y_pred))
+                    except ValueError:
+                        # e.g. single-class fold
+                        continue
+
+                if fold_metrics:
+                    dataset_scores[dataset_name] = float(np.mean(fold_metrics))
+
+            per_prior_scores[prior_name] = dataset_scores
+            all_dataset_names.update(dataset_scores.keys())
+
+            # Cache results
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(dataset_scores, f, indent=2)
+            print(f"    cached to {cache_path}")
+
+        # Build performance matrix
+        all_dataset_names_sorted = sorted(all_dataset_names)
+        prior_names_ordered = [meta.get("prior_name", item["dir_name"]) for item, meta in
+                               [(item, item["metadata"]) for item in selected]
+                               if meta.get("prior_name", item["dir_name"]) in per_prior_scores]
+
+        if prior_names_ordered and all_dataset_names_sorted:
+            perf_matrix = np.full(
+                (len(prior_names_ordered), len(all_dataset_names_sorted)), np.nan
+            )
+            for i, pname in enumerate(prior_names_ordered):
+                for j, dname in enumerate(all_dataset_names_sorted):
+                    if dname in per_prior_scores.get(pname, {}):
+                        perf_matrix[i, j] = per_prior_scores[pname][dname]
+
+            # Save raw performance matrix as JSON
+            perf_json_path = os.path.join(
+                results_dir, "metrics", f"tabarena_performance_{stamp}.json"
+            )
+            os.makedirs(os.path.dirname(perf_json_path), exist_ok=True)
+            with open(perf_json_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "prior_names": prior_names_ordered,
+                    "dataset_names": all_dataset_names_sorted,
+                    "metric": tabarena_metric,
+                    "performance_matrix": perf_matrix.tolist(),
+                }, f, indent=2)
+            print(f"\nSaved TabArena performance matrix to: {perf_json_path}")
+
+            # Plot heatmaps
+            heatmap_output = os.path.join(
+                results_dir, "plots", f"tabarena_performance_{stamp}.png"
+            )
+            plot_tabarena_performance_heatmap(
+                perf_matrix,
+                prior_names_ordered,
+                all_dataset_names_sorted,
+                metric_name=tabarena_metric,
+                output_path=heatmap_output,
+            )
+
+            if len(prior_names_ordered) >= 2:
+                corr_output = os.path.join(
+                    results_dir, "plots", f"prior_correlation_{stamp}.png"
+                )
+                plot_prior_correlation_heatmap(
+                    perf_matrix,
+                    prior_names_ordered,
+                    output_path=corr_output,
+                )
+            else:
+                print("⚠️  Need >= 2 priors for the correlation heatmap, skipping.")
+        else:
+            print("⚠️  No TabArena results to plot.")
 
     return {
         "problem_type": "regression" if is_regression else "classification",

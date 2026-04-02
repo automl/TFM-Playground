@@ -35,6 +35,7 @@ def get_openml_predictions(
         tasks: list[int] | str = "tabarena-v0.1",
         max_n_features: int = 500,
         max_n_samples: int = 10_000,
+        max_folds: int | None = None,
         classification: bool | None = None,
         cache_directory: str | None = None,
 ):
@@ -49,12 +50,12 @@ def get_openml_predictions(
         tasks (list[int] | str, optional): A list of OpenML task IDs or the name of a benchmark suite.
         max_n_features (int, optional): Maximum number of features allowed for a task. Tasks exceeding this limit are skipped.
         max_n_samples (int, optional): Maximum number of instances allowed for a task. Tasks exceeding this limit are skipped.
+        max_folds (int | None, optional): Maximum number of folds to evaluate per task. If None, all folds are used.
         classification (bool | None, optional): Whether the model is a classifier (True) or regressor (False). If None, it is inferred from the model type.
         cache_directory (str | None, optional): Directory to save OpenML data. If None, default cache path is used.
     Returns:
-        dict: If return_per_fold=False (default), a dictionary where keys are dataset names and values are tuples of (true targets, predicted labels, predicted probabilities).
-              If return_per_fold=True, a dictionary mapping dataset names to a list (length = folds) of dicts with keys:
-              "y_true", "y_pred", "y_proba" (None for regression), and optionally "train_indices", "test_indices".
+        dict: A dictionary mapping dataset names to a list (one per fold) of dicts with keys:
+              "y_true", "y_pred", "y_proba" (None for regression).
     """
     if classification is None:
         classification = isinstance(model, NanoTabPFNClassifier)
@@ -86,6 +87,8 @@ def get_openml_predictions(
             continue  # skip task, too big
 
         _, folds, _ = task.get_split_dimensions()
+        if max_folds is not None:
+            folds = min(folds, max_folds)
         print(f"Evaluating on task {task_id} with dataset '{dataset.name}' ({n_samples} samples, {n_features} features, {folds} folds)...")
         repeat = 0  # code only supports one repeat
 

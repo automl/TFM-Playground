@@ -1049,3 +1049,130 @@ def plot_per_fold_normalized_averaged_metrics(
     output_path = _resolve_plot_path(output_path)
     plt.savefig(output_path)
     plt.close()
+
+
+def plot_tabarena_performance_heatmap(
+    perf_matrix: np.ndarray,
+    prior_names: list[str],
+    dataset_names: list[str],
+    metric_name: str = "ROC-AUC",
+    output_path: str = "tabarena_performance_heatmap.png",
+):
+    """Plot a heatmap of prior (rows) vs TabArena dataset (columns) performance.
+
+    Args:
+        perf_matrix: 2-D array of shape (n_priors, n_datasets).
+        prior_names: Names for each row.
+        dataset_names: Names for each column.
+        metric_name: Label shown on the colour-bar.
+        output_path: File path for the saved figure.
+    """
+    n_priors, n_datasets = perf_matrix.shape
+
+    fig_width = max(10, n_datasets * 0.7 + 3)
+    fig_height = max(4, n_priors * 0.6 + 2)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    im = ax.imshow(perf_matrix, aspect="auto", cmap="RdYlGn")
+
+    ax.set_xticks(range(n_datasets))
+    ax.set_xticklabels(dataset_names, rotation=60, ha="right", fontsize=8)
+    ax.set_yticks(range(n_priors))
+    ax.set_yticklabels(prior_names, fontsize=10)
+
+    # Annotate cells
+    for i in range(n_priors):
+        for j in range(n_datasets):
+            val = perf_matrix[i, j]
+            if np.isnan(val):
+                text = "—"
+            else:
+                text = f"{val:.3f}"
+            # Pick contrasting text colour
+            norm_val = (val - np.nanmin(perf_matrix)) / (
+                np.nanmax(perf_matrix) - np.nanmin(perf_matrix) + 1e-9
+            ) if not np.isnan(val) else 0.5
+            text_color = "white" if norm_val < 0.35 or norm_val > 0.85 else "black"
+            ax.text(j, i, text, ha="center", va="center", fontsize=7, color=text_color)
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.04)
+    cbar.set_label(metric_name, fontsize=11)
+
+    ax.set_title(
+        f"Prior vs TabArena — {metric_name}",
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
+    )
+    ax.set_xlabel("TabArena Dataset", fontsize=12)
+    ax.set_ylabel("Prior", fontsize=12)
+
+    output_path = _resolve_plot_path(output_path)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"📊 TabArena performance heatmap saved to: {output_path}")
+    plt.close()
+
+
+def plot_prior_correlation_heatmap(
+    perf_matrix: np.ndarray,
+    prior_names: list[str],
+    output_path: str = "prior_correlation_heatmap.png",
+):
+    """Plot a prior-vs-prior Pearson correlation heatmap.
+
+    Correlation is computed between rows of *perf_matrix* (each row is
+    a prior's performance vector across datasets).
+
+    Args:
+        perf_matrix: 2-D array of shape (n_priors, n_datasets).
+        prior_names: Names for each prior.
+        output_path: File path for the saved figure.
+    """
+    n_priors = perf_matrix.shape[0]
+
+    # Mask NaN columns so corrcoef doesn't produce all-NaN results
+    valid_cols = ~np.any(np.isnan(perf_matrix), axis=0)
+    clean_matrix = perf_matrix[:, valid_cols]
+
+    if clean_matrix.shape[1] < 2:
+        print("⚠️  Not enough valid datasets to compute prior correlation.")
+        return
+
+    corr = np.corrcoef(clean_matrix)
+
+    fig_size = max(5, n_priors * 0.8 + 2)
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+
+    im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
+
+    ax.set_xticks(range(n_priors))
+    ax.set_xticklabels(prior_names, rotation=45, ha="right", fontsize=10)
+    ax.set_yticks(range(n_priors))
+    ax.set_yticklabels(prior_names, fontsize=10)
+
+    # Annotate cells
+    for i in range(n_priors):
+        for j in range(n_priors):
+            val = corr[i, j]
+            text_color = "white" if abs(val) > 0.7 else "black"
+            ax.text(
+                j, i, f"{val:.2f}", ha="center", va="center",
+                fontsize=9, fontweight="bold", color=text_color,
+            )
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04)
+    cbar.set_label("Pearson Correlation", fontsize=11)
+
+    ax.set_title(
+        "Prior vs Prior — Performance Correlation",
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
+    )
+
+    output_path = _resolve_plot_path(output_path)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"📊 Prior correlation heatmap saved to: {output_path}")
+    plt.close()
