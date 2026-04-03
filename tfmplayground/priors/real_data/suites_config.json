@@ -22,21 +22,25 @@
     },
     "toy_tasks_classification": {
         "description": "Toy classification tasks for quick evaluation (iris, wine, breast_cancer)",
-        "eval_dataset_ids": [],
-        "eval_task_ids": [
-            59, 2382, 9946
-        ]
+        "eval_dataset_ids": [61, 187, 1510],
+        "eval_task_ids": [59, 2382, 9946]
     },
     "toy_tasks_regression": {
         "description": "Toy regression tasks for quick evaluation (diabetes)",
-        "eval_dataset_ids": [],
-        "eval_task_ids": [
-            362443
-        ]
+        "eval_dataset_ids": [43959],
+        "eval_task_ids": [362443]
     },
     "tabarena": {
         "description": "TabArena v0.1 benchmark suite",
-        "eval_dataset_ids": [],
+        "eval_dataset_ids": [
+            46904, 46905, 46906, 46907, 46908, 46910, 46911, 46912,
+            46913, 46915, 46916, 46917, 46918, 46919, 46920, 46921,
+            46922, 46923, 46924, 46927, 46928, 46929, 46930, 46931,
+            46932, 46933, 46934, 46935, 46937, 46938, 46939, 46940,
+            46941, 46942, 46969, 46947, 46949, 46950, 46952, 46953,
+            46954, 46955, 46956, 46958, 46960, 46961, 46962, 46963,
+            46964, 46980, 46979
+        ],
         "eval_task_ids": [
             363612, 363613, 363614, 363615, 363616, 363618, 363619, 363620,
             363621, 363623, 363624, 363625, 363626, 363627, 363628, 363629,
