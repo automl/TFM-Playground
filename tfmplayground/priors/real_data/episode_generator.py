@@ -105,6 +105,19 @@ class EpisodeConfig:
     # optional fallback pool file for mixed_random_target mode
     # must be explicitly provided, otherwise try a couple times and give error when target column not found
     fallback_pool_file: Optional[str] = None
+
+    # ── episode quality thresholds for regression
+    # reject episodes where max|y| exceeds this after per-episode normalization
+    max_abs_target: float = 10.0
+    # reject episodes where the most frequent y value dominates more than this fraction
+    max_dominant_frac: float = 0.95
+    # total retry budget (across dataset + row resamples) before accepting last attempt
+    max_episode_retries: int = 100
+    # std floor for per-episode regression normalization
+    min_target_std: float = 1e-6
+    # standardize all columns of a dataset when loading (reduces cross-column scale differences)
+    standardize_columns_on_load: bool = True
+
     _VALID_TASK_MODES: ClassVar[set[str]] = {"classification_only", "regression_only", "mixed_random_target"}
 
 class LRUCache:
@@ -212,6 +225,15 @@ class RealDataPrior(Dataset):
             unique_counts = f["column_unique_counts"].astype(int)
             original_target_idx = int(f["original_target_idx"])
 
+        # per-dataset column standardization to reduce cross-column scale differences
+        if self.config.standardize_columns_on_load:
+            data = data.astype(np.float64, copy=True)
+            means = np.nanmean(data, axis=0, keepdims=True)
+            stds = np.nanstd(data, axis=0, keepdims=True)
+            stds = np.where(stds == 0.0, 1.0, stds)
+            data = ((data - means) / stds).astype(np.float32)
+            data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+
         out = (data, is_categorical, unique_counts, original_target_idx)
         self.npz_cache.put(dataset_id, out)
         return out
@@ -290,8 +312,7 @@ class RealDataPrior(Dataset):
         train_y64 = train_y.astype(np.float64, copy=False)
         y_mean = float(train_y64.mean())
         y_std = float(train_y64.std())
-        if y_std == 0.0:
-            y_std = 1.0
+        y_std = max(y_std, self.config.min_target_std)
         y_scaled = (y_ep.astype(np.float64, copy=False) - y_mean) / y_std
         y_scaled = np.nan_to_num(y_scaled, nan=0.0, posinf=0.0, neginf=0.0)
         return y_scaled.astype(np.float32)
@@ -448,22 +469,49 @@ class RealDataPrior(Dataset):
         other = int(y_ep.max()) + 1
         y_ep[mask] = other
 
+    def _check_regression_episode(self, y_ep: np.ndarray) -> tuple[bool, str]:
+        """Check whether a regression episode passes quality gates.
+        Returns (passed, reason). Mirrors TabDPT's check_reg_sample."""
+        cfg = self.config
+        # reject if max absolute value exceeds threshold
+        max_abs = float(np.max(np.abs(y_ep)))
+        if max_abs > cfg.max_abs_target:
+            return False, f"max_abs={max_abs:.2f}>{cfg.max_abs_target}"
+        # reject if a single value dominates > 95% of entries
+        _, counts = np.unique(y_ep, return_counts=True)
+        dominant_frac = float(np.max(counts)) / len(y_ep)
+        if dominant_frac > cfg.max_dominant_frac:
+            return False, f"dominant_frac={dominant_frac:.3f}>{cfg.max_dominant_frac}"
+        return True, ""
+
     def _sample_episode(self, idx: int, initial_rng: np.random.Generator) -> dict[str, torch.Tensor | int]:
         self._validate_task_mode()
+        cfg = self.config
+        rejections: dict[str, int] = {}  # reason -> count
 
-        rng, data, target_col, is_classification = self._select_dataset_and_target(idx, initial_rng)
+        for _ in range(cfg.max_episode_retries):
+            rng, data, target_col, is_classification = self._select_dataset_and_target(idx, initial_rng)
 
-        X_ep, y_ep = self._sample_rows_and_build_xy(rng, data, target_col, is_classification)
+            X_ep, y_ep = self._sample_rows_and_build_xy(rng, data, target_col, is_classification)
 
-        if is_classification:
-            self._cap_classes_in_place(y_ep)
+            if is_classification:
+                self._cap_classes_in_place(y_ep)
 
-        single_eval_pos = self._pick_single_eval_pos(rng, X_ep.shape[0])
+            single_eval_pos = self._pick_single_eval_pos(rng, X_ep.shape[0])
 
-        X_ep = self._standardize_in_place(X_ep, single_eval_pos)
-        X_ep = self._subsample_features(rng, X_ep)
+            X_ep = self._standardize_in_place(X_ep, single_eval_pos)
+            X_ep = self._subsample_features(rng, X_ep)
 
-        y_ep = self._format_target(y_ep, single_eval_pos, is_classification)
+            y_ep = self._format_target(y_ep, single_eval_pos, is_classification)
+
+            # quality gate: regression episodes only
+            if not is_classification:
+                passed, reason = self._check_regression_episode(y_ep)
+                if not passed:
+                    rejections[reason] = rejections.get(reason, 0) + 1
+                    continue  # retry with fresh dataset + target + rows
+
+            break  # episode passed quality checks (or is classification)
 
         x_tensor = torch.from_numpy(X_ep)
         y_tensor = torch.from_numpy(y_ep)
