@@ -32,15 +32,16 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         features = []
         max_features = 0
         
-        # First pass: determine max features from actual data shapes
+        # First pass: determine max features from recorded per-sample widths.
+        # Do not use X.shape[1], which is often a padded global width.
         for i in range(len(self.data["X"])):
-            n_features_actual = self.data["X"][i].shape[1]
+            n_features_actual = int(self.data["num_features"][i])
             max_features = max(max_features, n_features_actual)
         
         # Second pass: collect features with padding/truncation if needed
         for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
-            n_features_actual = self.data["X"][i].shape[1]
+            n_features_actual = int(self.data["num_features"][i])
             x = self.data["X"][i, :n_points, :n_features_actual]
             
             # Create padded array and copy data
@@ -64,6 +65,12 @@ class ClassificationDataAnalyzer(DataAnalyzer):
             labels.append(self.data["y"][i, :n_points].astype(int))
         return np.concatenate(labels)
 
+    @staticmethod
+    def _filter_valid_labels(labels: np.ndarray) -> np.ndarray:
+        """Drop masked or invalid class labels before plotting/statistics."""
+        labels = np.asarray(labels)
+        return labels[np.isfinite(labels) & (labels >= 0)].astype(int, copy=False)
+
 
     def analyze_target_distribution(self) -> Dict:
         """Analyze the distribution of class labels.
@@ -72,7 +79,21 @@ class ClassificationDataAnalyzer(DataAnalyzer):
             Dictionary with class distribution statistics.
         """
         # collect all non-padded labels
-        labels = self.get_all_targets()
+        labels = self._filter_valid_labels(self.get_all_targets())
+        if labels.size == 0:
+            return {
+                "num_classes": 0,
+                "n_samples": 0,
+                "classes": [],
+                "class_counts": [],
+                "class_probs": [],
+                "majority_class": None,
+                "minority_class": None,
+                "majority_ratio": 0.0,
+                "minority_ratio": 0.0,
+                "imbalance_ratio": 0.0,
+                "entropy_bits": 0.0,
+            }
         values, counts = np.unique(labels, return_counts=True)
         total = counts.sum()
         probs = counts / total

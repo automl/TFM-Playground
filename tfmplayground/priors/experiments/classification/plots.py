@@ -20,6 +20,18 @@ from tfmplayground.priors.experiments.utils.general import (
     merge_variable_width_features,
 )
 
+
+def _filter_valid_classification_labels(
+    labels: np.ndarray, features: Optional[np.ndarray] = None
+) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    """Drop masked or invalid class labels before plotting."""
+    labels = np.asarray(labels)
+    mask = np.isfinite(labels) & (labels >= 0)
+    filtered_labels = labels[mask].astype(int, copy=False)
+    if features is None:
+        return filtered_labels, None
+    return filtered_labels, np.asarray(features)[mask]
+
 # individual prior visualizations
 
 
@@ -62,22 +74,30 @@ def plot_class_samples(
 
         for idx in sample_indices:
             n_points = data["num_datapoints"][idx]
-            y = data["y"][idx, :n_points].astype(int)
+            y, _ = _filter_valid_classification_labels(data["y"][idx, :n_points])
+            if y.size == 0:
+                continue
             unique, counts = np.unique(y, return_counts=True)
             class_counts.append(dict(zip(unique, counts)))
             labels.append(f"S{idx}")
 
+        if not class_counts:
+            raise ValueError(
+                f"{prior_name}: no valid class labels found after filtering masked values"
+            )
+
         # get all unique classes across samples
         all_classes = sorted(set().union(*[set(cc.keys()) for cc in class_counts]))
 
-        # create stacked bar chart
-        bottom = np.zeros(len(sample_indices))
+        # create stacked bar chart using only the samples that survived filtering
+        positions = np.arange(len(class_counts))
+        bottom = np.zeros(len(class_counts))
         colors_list = plt.cm.Set3(np.linspace(0, 1, len(all_classes)))
 
         for i, cls in enumerate(all_classes):
             counts = [cc.get(cls, 0) for cc in class_counts]
             ax.bar(
-                range(len(sample_indices)),
+                positions,
                 counts,
                 bottom=bottom,
                 label=f"Class {cls}",
@@ -86,7 +106,7 @@ def plot_class_samples(
             )
             bottom += counts
 
-        ax.set_xticks(range(len(sample_indices)))
+        ax.set_xticks(positions)
         ax.set_xticklabels(labels, rotation=45)
         ax.set_xlabel("Sample")
         ax.set_ylabel("Count")
@@ -105,9 +125,16 @@ def plot_class_samples(
             n_points = data["num_datapoints"][idx]
             n_features = data["num_features"][idx]
             x = data["X"][idx, :n_points, :n_features]
-            y = data["y"][idx, :n_points].astype(int)
+            y, x = _filter_valid_classification_labels(data["y"][idx, :n_points], x)
+            if y.size == 0:
+                continue
             all_features.append(x)
             all_labels.append(y)
+
+        if not all_features:
+            raise ValueError(
+                f"{prior_name}: no valid class labels found after filtering masked values"
+            )
 
         all_features = merge_variable_width_features(all_features)
         all_labels = np.concatenate(all_labels)
@@ -179,9 +206,16 @@ def plot_single_prior_overview(
             n_points = data["num_datapoints"][idx]
             n_features = data["num_features"][idx]
             x = data["X"][idx, :n_points, :n_features]
-            y = data["y"][idx, :n_points].astype(int)
+            y, x = _filter_valid_classification_labels(data["y"][idx, :n_points], x)
+            if y.size == 0:
+                continue
             all_features.append(x)
             all_labels.append(y)
+
+        if not all_features:
+            raise ValueError(
+                f"{prior_name}: no valid class labels found after filtering masked values"
+            )
 
         all_features = merge_variable_width_features(all_features)
         all_labels = np.concatenate(all_labels)
@@ -216,33 +250,48 @@ def plot_single_prior_overview(
         # middle-left: feature distribution boxplot
         ax2 = fig.add_subplot(gs[1, 0])
         all_features_matrix = analyzer.get_all_features()
-        n_features_to_show = min(10, all_features_matrix.shape[1])
-        feature_data = [all_features_matrix[:, i] for i in range(n_features_to_show)]
+        # Filter out NaN values and only show features with substantial data
+        feature_data = []
+        feature_indices = []
+        for i in range(all_features_matrix.shape[1]):
+            col_data = all_features_matrix[:, i][~np.isnan(all_features_matrix[:, i])]
+            if col_data.size > 0 and np.std(col_data) > 1e-6:  # Has data and non-zero variance
+                feature_data.append(col_data)
+                feature_indices.append(i)
+                if len(feature_data) >= 10:  # Show up to 10 features
+                    break
         bp = ax2.boxplot(feature_data, patch_artist=True)
         for patch in bp["boxes"]:
             patch.set_facecolor(color)
             patch.set_alpha(0.7)
         ax2.set_xlabel("Feature Index")
         ax2.set_ylabel("Feature Value")
-        ax2.set_title(f"Feature Distributions (first {n_features_to_show} features)")
+        ax2.set_title(f"Feature Distributions ({len(feature_data)} features with data)")
+        ax2.set_xticks(range(1, len(feature_data) + 1))
+        ax2.set_xticklabels(feature_indices)
         ax2.grid(True, alpha=0.3, axis="y")
 
         # middle-right: class distribution
         ax3 = fig.add_subplot(gs[1, 1])
-        all_labels_flat = analyzer.get_all_targets().astype(int)
+        all_labels_flat, _ = _filter_valid_classification_labels(analyzer.get_all_targets())
+        if all_labels_flat.size == 0:
+            raise ValueError(
+                f"{prior_name}: no valid class labels found after filtering masked values"
+            )
         unique_classes, class_counts = np.unique(all_labels_flat, return_counts=True)
+        class_probs = class_counts / class_counts.sum()
 
         colors_list = plt.cm.Set3(np.linspace(0, 1, len(unique_classes)))
         ax3.bar(
             unique_classes,
-            class_counts,
+            class_probs,
             color=colors_list,
             alpha=0.7,
             edgecolor="black",
         )
         ax3.set_xlabel("Class Label")
-        ax3.set_ylabel("Frequency")
-        ax3.set_title("Class Distribution")
+        ax3.set_ylabel("Proportion")
+        ax3.set_title("Class Distribution (normalized)")
         ax3.set_xticks(unique_classes)
         ax3.grid(True, alpha=0.3, axis="y")
 
@@ -252,14 +301,23 @@ def plot_single_prior_overview(
         sample_balances = []
         for i in range(min(20, len(data["X"]))):
             n_points = data["num_datapoints"][i]
-            y = data["y"][i, :n_points].astype(int)
+            y, _ = _filter_valid_classification_labels(data["y"][i, :n_points])
+            if y.size == 0:
+                continue
             unique, counts = np.unique(y, return_counts=True)
+            if unique.size == 0:
+                continue
             # calculate balance as entropy normalized to [0, 1]
             probs = counts / counts.sum()
             entropy = -np.sum(probs * np.log2(probs + 1e-10))
             max_entropy = np.log2(len(unique))
             balance = entropy / max_entropy if max_entropy > 0 else 1.0
             sample_balances.append(balance)
+
+        if not sample_balances:
+            raise ValueError(
+                f"{prior_name}: no valid class labels found after filtering masked values"
+            )
 
         ax4.hist(sample_balances, bins=20, color=color, alpha=0.7, edgecolor="black")
         ax4.axvline(
