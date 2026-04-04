@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import torch
 
@@ -47,10 +48,9 @@ def _merge_per_task_scores(previous_scores, new_scores):
     return merged
 
 
-def _select_priors_interactively(problem_type: str):
+def _select_priors_interactively(problem_type: str, data_dir: Path):
     """Discover .h5 files for the given problem type and let the user pick which to train."""
-    data_dir = os.path.join(os.path.dirname(__file__), problem_type, "results", "data")
-    available = discover_h5_files(data_dir)
+    available = discover_h5_files(str(data_dir))
 
     if not available:
         print(f"No .h5 files found in {data_dir}")
@@ -99,15 +99,14 @@ def _select_priors_interactively(problem_type: str):
             return selected  # return list of (name, path) tuples
 
 
-def _resolve_priors_noninteractive(problem_type: str, priors_arg: list):
+def _resolve_priors_noninteractive(problem_type: str, priors_arg: list, data_dir: Path):
     """Resolve --priors CLI argument to a list of (name, path) tuples.
 
     Returns:
         List of (name, path) tuples matching the requested priors.
     """
 
-    data_dir = os.path.join(os.path.dirname(__file__), problem_type, "results", "data")
-    available = discover_h5_files(data_dir)
+    available = discover_h5_files(str(data_dir))
 
     if not available:
         print(f"No .h5 files found in {data_dir}")
@@ -239,7 +238,7 @@ def main():
         type=str,
         choices=["classification", "regression"],
         required=True,
-        help="Problem type. Picks priors from <problem_type>/results/data/.",
+        help="Problem type. Picks priors from <problem_type>/<config.output.data_dir>/.",
     )
     parser.add_argument(
         "--epochs",
@@ -278,12 +277,6 @@ def main():
     )
 
     parser.add_argument(
-        "--output_dir",
-        type=str,
-        default=None,
-        help="Base dir for saved models and resumable checkpoints (default: <problem_type>/results/trained_models/)",
-    )
-    parser.add_argument(
         "--priors",
         type=str,
         nargs="+",
@@ -296,18 +289,18 @@ def main():
     )
 
     args = parser.parse_args()
-
-    # Set up output directory
-    if args.output_dir is None:
-        args.output_dir = os.path.join(
-            os.path.dirname(__file__), args.problem_type, "results", "trained_models"
-        )
+    data_dir = Path(args.problem_type) / config["output"]["data_dir"]
+    model_output_base_dir = str(
+        Path(args.problem_type) / config["output"]["trained_models_dir"]
+    )
 
     # Select priors: non-interactively when --priors is given, interactive otherwise
     if args.priors is not None:
-        selected_priors = _resolve_priors_noninteractive(args.problem_type, args.priors)
+        selected_priors = _resolve_priors_noninteractive(
+            args.problem_type, args.priors, data_dir
+        )
     else:
-        selected_priors = _select_priors_interactively(args.problem_type)
+        selected_priors = _select_priors_interactively(args.problem_type, data_dir)
 
     # Set random seed
     set_randomness_seed(args.seed)
@@ -347,7 +340,7 @@ def main():
 
         model_name = f"Model {idx}"
         run_name = prior_name.replace(" ", "_").replace("/", "_")
-        model_dir = os.path.join(args.output_dir, run_name)
+        model_dir = os.path.join(model_output_base_dir, run_name)
         checkpoint_path = os.path.join(model_dir, "latest_checkpoint.pth")
         metadata_path = os.path.join(model_dir, "metadata.json")
         previous_metadata = (
@@ -369,7 +362,7 @@ def main():
                 embedding_size=config["model"]["embedding_size"],
                 mlp_hidden_size=config["model"]["mlp_hidden_size"],
                 num_layers=config["model"]["num_layers"],
-                checkpoint_base_dir=args.output_dir,
+                checkpoint_base_dir=model_output_base_dir,
                 run_name=run_name,
             )
         )
@@ -392,7 +385,7 @@ def main():
         )
 
     print(f"\n{'='*80}")
-    print(f"All {len(selected_priors)} model(s) trained and saved to: {args.output_dir}")
+    print(f"All {len(selected_priors)} model(s) trained and saved to: {model_output_base_dir}")
     print(f"{'='*80}\n")
 
 

@@ -130,6 +130,7 @@ real_data:
 # Output settings
 output:
   data_dir: "./results/data"
+  trained_models_dir: "./results/trained_models"
   reports_dir: "./results/reports"
   save_reports: true
 
