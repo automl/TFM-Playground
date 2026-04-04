@@ -2,7 +2,7 @@
 
 from sklearn.metrics import roc_auc_score
 
-from new_evaluation import get_openml_predictions
+from tfmplayground.priors.experiments.new_evaluation import get_openml_predictions
 from tfmplayground.callbacks import ConsoleLoggerCallback
 from tfmplayground.interface import NanoTabPFNClassifier
 from tfmplayground.utils import get_default_device

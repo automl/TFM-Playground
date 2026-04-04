@@ -13,13 +13,11 @@ from datetime import datetime, timezone
 
 import torch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-
-from utils.training import (
+from tfmplayground.priors.experiments.utils.training import (
     _json_safe,
     train_model,
 )
-from utils.general import discover_h5_files, load_config
+from tfmplayground.priors.experiments.utils.general import discover_h5_files, load_config
 
 from tfmplayground.evaluation import TOY_TASKS_CLASSIFICATION, TOY_TASKS_REGRESSION
 from tfmplayground.priors import PriorDumpDataLoader

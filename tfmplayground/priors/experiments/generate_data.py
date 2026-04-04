@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List
 
-from utils.general import load_config
+from tfmplayground.priors.experiments.utils.general import load_config
 
 
 def generate_prior_data(

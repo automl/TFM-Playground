@@ -19,16 +19,21 @@ import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score, r2_score
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-
-from classification.callback import ClassificationTrackerCallback
-from regression.callback import RegressionTrackerCallback
-from new_evaluation import get_openml_predictions, TABARENA_TASKS
-from utils.training import (
+from tfmplayground.priors.experiments.classification.callback import (
+    ClassificationTrackerCallback,
+)
+from tfmplayground.priors.experiments.regression.callback import (
+    RegressionTrackerCallback,
+)
+from tfmplayground.priors.experiments.new_evaluation import (
+    get_openml_predictions,
+    TABARENA_TASKS,
+)
+from tfmplayground.priors.experiments.utils.training import (
     _build_metrics_payload,
     _json_safe,
 )
-from utils.visualization import (
+from tfmplayground.priors.experiments.utils.visualization import (
     plot_comparison_multi,
     plot_all_decision_boundaries,
     plot_all_regression_predictions,
@@ -38,7 +43,7 @@ from utils.visualization import (
     plot_tabarena_performance_heatmap,
     plot_prior_correlation_heatmap,
 )
-from utils.general import load_config
+from tfmplayground.priors.experiments.utils.general import load_config
 from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device

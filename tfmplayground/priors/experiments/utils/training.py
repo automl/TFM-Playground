@@ -7,15 +7,12 @@ This module provides:
 """
 
 import os
-import sys
 import time
 from datetime import datetime, timezone
 
 import torch
 from pfns.bar_distribution import FullSupportBarDistribution
 from torch import nn
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from tfmplayground.evaluation import (
     TOY_TASKS_CLASSIFICATION,
@@ -26,8 +23,12 @@ from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, make_global_bucket_edges
 
-from classification.callback import ClassificationTrackerCallback
-from regression.callback import RegressionTrackerCallback
+from tfmplayground.priors.experiments.classification.callback import (
+    ClassificationTrackerCallback,
+)
+from tfmplayground.priors.experiments.regression.callback import (
+    RegressionTrackerCallback,
+)
 
 
 def train_model(

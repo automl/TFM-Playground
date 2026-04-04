@@ -3,12 +3,17 @@
 import argparse
 import os
 from pathlib import Path
-import sys
 from typing import Dict, List
 from itertools import combinations
-from utils.general import load_config, discover_h5_files
-from regression.analyzer import RegressionDataAnalyzer, compare_regression_priors
-from classification.analyzer import ClassificationDataAnalyzer, compare_classification_priors
+from tfmplayground.priors.experiments.utils.general import load_config, discover_h5_files
+from tfmplayground.priors.experiments.regression.analyzer import (
+    RegressionDataAnalyzer,
+    compare_regression_priors,
+)
+from tfmplayground.priors.experiments.classification.analyzer import (
+    ClassificationDataAnalyzer,
+    compare_classification_priors,
+)
 
 
 def select_priors_for_analysis(available_files: Dict[str, str]) -> List[str]:

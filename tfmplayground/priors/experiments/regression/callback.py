@@ -2,7 +2,7 @@
 
 from sklearn.metrics import root_mean_squared_error
 
-from new_evaluation import get_openml_predictions
+from tfmplayground.priors.experiments.new_evaluation import get_openml_predictions
 from tfmplayground.callbacks import ConsoleLoggerCallback
 from tfmplayground.interface import NanoTabPFNRegressor
 from tfmplayground.utils import get_default_device

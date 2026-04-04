@@ -244,15 +244,19 @@ class RealDataPrior(Dataset):
         return int(rng.integers(min_eval, max_eval + 1))
 
     def _standardize_in_place(self, X_ep: np.ndarray, single_eval_pos: int) -> np.ndarray:
+        # sanitize non-finite values before computing statistics to avoid reduction overflow warnings
+        np.nan_to_num(X_ep, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+
         # take the 'context' portion of the episode up to single_eval_pos
         train_X = X_ep[:single_eval_pos]
         # compute mean and std, and standardize the entire episode using those statistics for no leakage
-        means = train_X.mean(axis=0, keepdims=True)
-        stds = train_X.std(axis=0, keepdims=True)
+        train_X64 = train_X.astype(np.float64, copy=False)
+        means = train_X64.mean(axis=0, keepdims=True)
+        stds = train_X64.std(axis=0, keepdims=True)
         # avoid division by zero for constant features by setting std to 1.0 in those cases
         stds = np.where(stds == 0.0, 1.0, stds)
         # standardize
-        X_ep = (X_ep - means) / stds
+        X_ep = (X_ep.astype(np.float64, copy=False) - means) / stds
         # safety guard/could be redundant
         X_ep = np.nan_to_num(X_ep, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -281,12 +285,14 @@ class RealDataPrior(Dataset):
 
         # regression
         # rescale using mean and std of the 'context' portion to avoid leakage
+        y_ep = np.nan_to_num(y_ep, nan=0.0, posinf=0.0, neginf=0.0)
         train_y = y_ep[:single_eval_pos]
-        y_mean = float(train_y.mean())
-        y_std = float(train_y.std())
+        train_y64 = train_y.astype(np.float64, copy=False)
+        y_mean = float(train_y64.mean())
+        y_std = float(train_y64.std())
         if y_std == 0.0:
             y_std = 1.0
-        y_scaled = (y_ep - y_mean) / y_std
+        y_scaled = (y_ep.astype(np.float64, copy=False) - y_mean) / y_std
         y_scaled = np.nan_to_num(y_scaled, nan=0.0, posinf=0.0, neginf=0.0)
         return y_scaled.astype(np.float32)
 
