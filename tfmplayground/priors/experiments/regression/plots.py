@@ -225,15 +225,53 @@ def plot_single_prior_overview(analyzer: RegressionDataAnalyzer,
         # middle-left: box plot of first 10 features to show feature-wise distributions
         ax2 = fig.add_subplot(gs[1, 0])
         all_features_matrix = analyzer.get_all_features()
-        n_features_to_show = min(10, all_features_matrix.shape[1])
-        feature_data = [all_features_matrix[:, i] for i in range(n_features_to_show)]
-        bp = ax2.boxplot(feature_data, patch_artist=True)
-        for patch in bp['boxes']:
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
+        n_candidate_features = min(10, all_features_matrix.shape[1])
+
+        # Skip mostly-missing columns from variable-width episodes (NaN padding).
+        feature_data = []
+        feature_labels = []
+        min_valid_points = 10
+
+        for i in range(n_candidate_features):
+            col = all_features_matrix[:, i]
+            finite_col = col[np.isfinite(col)]
+            if finite_col.size >= min_valid_points:
+                feature_data.append(finite_col)
+                feature_labels.append(str(i + 1))
+
+        if len(feature_data) > 0:
+            bp = ax2.boxplot(
+                feature_data,
+                patch_artist=True,
+                showfliers=True,
+                flierprops={
+                    'marker': 'o',
+                    'markersize': 2,
+                    'markerfacecolor': color,
+                    'markeredgecolor': color,
+                    'alpha': 0.18,
+                },
+            )
+            for patch in bp['boxes']:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            ax2.set_xticks(np.arange(1, len(feature_labels) + 1))
+            ax2.set_xticklabels(feature_labels)
+            shown = len(feature_data)
+            ax2.set_title(f'Feature Distributions ({shown} valid of first {n_candidate_features})')
+        else:
+            ax2.text(
+                0.5,
+                0.5,
+                'No feature columns with enough valid values',
+                ha='center',
+                va='center',
+                transform=ax2.transAxes,
+            )
+            ax2.set_title('Feature Distributions')
+
         ax2.set_xlabel('Feature Index')
         ax2.set_ylabel('Feature Value')
-        ax2.set_title(f'Feature Distributions (first {n_features_to_show} features)')
         ax2.grid(True, alpha=0.3, axis='y')
         
         # middle-right: target value distribution
