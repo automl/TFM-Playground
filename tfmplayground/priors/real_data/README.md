@@ -6,16 +6,17 @@ This folder contains the real-data prior pipeline used by `tfmplayground/priors/
 
 The pipeline has 3 phases:
 
-1. Build cache of processed OpenML datasets (`.npz` + metadata)
+1. Build cache of processed datasets from OpenML or Kaggle (`.npz` + metadata)
 2. Select train/eval pools from that cache
 3. Sample episodes from selected pools
 
 ## Files
 
-- `build_dataset_cache.py`: downloads/processes datasets and writes cache
+- `build_dataset_cache.py`: downloads/processes datasets (OpenML or Kaggle) and writes cache
 - `select_pools.py`: builds `train_pool_all.txt`, `train_pool_classification.txt`, `train_pool_regression.txt` (+ optional eval pool JSON)
 - `episode_generator.py`: loads pools and emits episodes for classification/regression
 - `suites_config.json`: eval suite definitions used by pool selection
+- `openml.csv` / `kaggle.csv`: dataset lists for each source
 
 ## Phase 1: Build Cache
 
@@ -25,7 +26,27 @@ python -m tfmplayground.priors.real_data.build_dataset_cache \
   --cache-dir tfmplayground/priors/real_data/data/cache
 ```
 
+### Kaggle datasets
+
+```bash
+python -m tfmplayground.priors.real_data.build_dataset_cache \
+  --dataset-csv tfmplayground/priors/real_data/kaggle.csv \
+  --source kaggle \
+  --cache-dir tfmplayground/priors/real_data/data/cache
+```
+
+Requires Kaggle API credentials:
+```bash
+EXPORT KAGGLE_API_TOKEN=KGAT_xxxxxxxxxxxxxxxxx
+```
+
+The `kaggle.csv` format is: `kaggle_slug`
+
+Both OpenML and Kaggle datasets share the same cache directory and metadata,
+so pool selection and episode generation work transparently across sources.
+
 Optional controls:
+- `--source {openml,kaggle}` (default: openml)
 - `--max-datasets`
 - `--max-rows`
 - `--max-features`

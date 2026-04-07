@@ -2,7 +2,7 @@
 Real Data Prior - Cache Builder (Phase 1)
 
 Purpose:
-Build a local on-disk cache of cleaned and preprocessed OpenML datasets.
+Build a local on-disk cache of cleaned and preprocessed datasets from OpenML or Kaggle.
 Each dataset is downloaded once, cleaned, encoded, imputed, and stored as a
 compressed .npz file along with metadata for later use.
 
@@ -11,7 +11,7 @@ This cache is used by:
 - Phase 3: Episode generation (sampling in context learning episodes)
 
 What this script does:
-- Downloads OpenML datasets by ID
+- Downloads datasets by ID (OpenML) or slug (Kaggle)
 - Cleans and filters unusable columns
 - Encodes categorical features
 - Imputes missing values
@@ -19,11 +19,19 @@ What this script does:
 - Stores dataset + metadata locally for fast reuse
 
 Example usage:
-    python -m tfmplayground.priors.real_data.cache_builder \
-        --dataset-csv path/to/datasets.csv \
+    # OpenML
+    python -m tfmplayground.priors.real_data.build_dataset_cache \
+        --dataset-csv path/to/openml.csv \
+        --cache-dir data/cache
+
+    # Kaggle
+    python -m tfmplayground.priors.real_data.build_dataset_cache \
+        --dataset-csv path/to/kaggle.csv \
+        --source kaggle \
         --cache-dir data/cache
 
 Optional arguments:
+    --source {openml,kaggle}
     --max-datasets N
     --max-rows N
     --max-features N
@@ -324,6 +332,106 @@ def load_openml_dataset(dataset_id: int):
     return data, column_names, is_categorical, column_unique_counts, original_target_idx, dataset.name, task_type
 
 
+def slugify_kaggle(slug: str) -> str:
+    """convert a kaggle slug like 'username/dataset-name' to a safe filename component.
+    replaces '/' with '__' so it can be used in file paths."""
+    return slug.replace("/", "__")
+
+
+def load_kaggle_dataset(slug: str):
+    """
+    load and preprocess a Kaggle dataset for mixed_random_target mode.
+    - downloads dataset via kaggle API into a temp dir.
+    - reads the largest CSV file.
+    - normalizes common missing markers.
+    - cleans unusable columns.
+    - encodes categorical columns.
+    - uses the last column as the nominal target (mixed mode will pick its own).
+
+    Returns same tuple as load_openml_dataset, or None if unusable.
+    """
+    import csv as csv_mod
+    import tempfile
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    api = KaggleApi()
+    api.authenticate()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        api.dataset_download_files(slug, path=tmpdir, unzip=True)
+
+        csv_files = list(Path(tmpdir).rglob("*.csv"))
+        if not csv_files:
+            print(f"No CSV files found for {slug}")
+            return None
+
+        # prefer train files over test/submission files, fall back to largest
+        train_files = [f for f in csv_files if f.stem.lower() in ("train", "training", "data")]
+        if train_files:
+            csv_path = max(train_files, key=lambda p: p.stat().st_size)
+        else:
+            non_test = [f for f in csv_files if f.stem.lower() not in
+                        ("test", "testing", "sample_submission", "samplesubmission", "submission")]
+            csv_path = max(non_test or csv_files, key=lambda p: p.stat().st_size)
+
+        # detect delimiter by sniffing the first bytes
+        with open(csv_path, "r", errors="replace") as f:
+            sample = f.read(8192)
+        dialect = csv_mod.Sniffer().sniff(sample, delimiters=",;\t|")
+        sep = dialect.delimiter
+
+        try:
+            df = pd.read_csv(csv_path, sep=sep)
+        except UnicodeDecodeError:
+            df = pd.read_csv(csv_path, sep=sep, encoding="latin-1")
+
+    if df.shape[1] < 2 or df.shape[0] < 10:
+        return None
+
+    # use the last column as the nominal target
+    # in mixed_random_target mode the episode generator ignores this and picks its own
+    target_column = df.columns[-1]
+
+    df = df.replace(["?"], np.nan)
+    df = df.replace([r"^-+$"], np.nan, regex=True)
+    df = df.replace("", np.nan)
+
+    df = clean_dataframe(df, target_name=target_column)
+    if df is None:
+        return None
+
+    n_unique = df[target_column].nunique()
+    task_type = "classification" if n_unique <= 10 else "regression"
+
+    obj_cols = df.select_dtypes(include=["object", "string", "category"]).columns
+    for col in obj_cols:
+        df[col] = pd.Categorical(df[col])
+        df[col] = df[col].cat.codes
+        df[col] = df[col].replace(-1, np.nan)
+
+    if len(df) < 10 or len(df.columns) < 2 or df[target_column].nunique() < 2:
+        return None
+
+    feature_cols = [c for c in df.columns if c != target_column]
+    ordered_cols = feature_cols + [target_column]
+    df = df[ordered_cols]
+    column_names = list(ordered_cols)
+
+    is_categorical = []
+    column_unique_counts = []
+    for col in ordered_cols:
+        if col == target_column:
+            is_categorical.append(task_type == "classification")
+        else:
+            is_categorical.append(col in obj_cols)
+        column_unique_counts.append(int(df[col].nunique()))
+    original_target_idx = len(ordered_cols) - 1
+
+    dataset_name = slug.split("/")[-1]
+    data = df.values
+    return data, column_names, is_categorical, column_unique_counts, original_target_idx, dataset_name, task_type
+
+
 def parse_dataset_csv(csv_path: str) -> list[dict]:
     """parse a CSV file to extract dataset IDs and optional task IDs"""
 
@@ -354,6 +462,24 @@ def parse_dataset_csv(csv_path: str) -> list[dict]:
     return datasets
 
 
+def parse_kaggle_csv(csv_path: str) -> list[dict]:
+    """parse a CSV file with Kaggle dataset slugs.
+    one slug per line, first line is the header 'kaggle_slug'.
+    """
+    df = pd.read_csv(csv_path)
+
+    if "kaggle_slug" not in df.columns:
+        raise ValueError(f"Could not find 'kaggle_slug' column in {csv_path}")
+
+    datasets = []
+    for _, row in df.iterrows():
+        slug = str(row["kaggle_slug"]).strip()
+        if not slug or slug == "nan":
+            continue
+        datasets.append({"dataset_id": slug, "source": "kaggle"})
+    return datasets
+
+
 def save_dataset_cache(data: np.ndarray, column_names: list[str],
                        column_is_categorical: list[bool], column_unique_counts: list[int],
                        original_target_idx: int, task_type: str, cache_path: str):
@@ -373,15 +499,39 @@ def save_dataset_cache(data: np.ndarray, column_names: list[str],
     )
 
 
+def _make_cache_filename(source: str, dataset_id) -> str:
+    """build a cache filename from source and dataset ID.
+    openml -> openml_1234.npz
+    kaggle -> kaggle_username__dataset-name.npz
+    """
+    if source == "kaggle":
+        return f"kaggle_{slugify_kaggle(str(dataset_id))}.npz"
+    return f"openml_{dataset_id}.npz"
+
+
+def _load_and_preprocess(info: dict) -> Optional[tuple]:
+    """dispatch to the right loader based on source type."""
+    source = info["source"]
+    dataset_id = info["dataset_id"]
+
+    if source == "openml":
+        return load_openml_dataset(int(dataset_id))
+    elif source == "kaggle":
+        return load_kaggle_dataset(slug=str(dataset_id))
+    else:
+        raise ValueError(f"Unknown source: {source}")
+
+
 def build_cache(
     dataset_csv: str,
     cache_dir: str = "data/cache",
+    source: str = "openml",
     max_datasets: Optional[int] = None,
     max_rows: Optional[int] = None,
     max_features: Optional[int] = None,
     skip_existing: bool = True,
 ):
-    """build cache from a CSV of openml dataset IDs."""
+    """build cache from a CSV of dataset IDs (openml or kaggle)."""
     cache_dir = Path(cache_dir)
     datasets_dir = cache_dir / "datasets"
     datasets_dir.mkdir(parents=True, exist_ok=True)
@@ -398,15 +548,19 @@ def build_cache(
         existing_metadata = {"datasets": [], "created": datetime.now().isoformat()}
         cached_ids = set()
 
-    # parse the dataset CSV
-    openml_datasets = parse_dataset_csv(dataset_csv)
-    print(f"Found {len(openml_datasets)} datasets in {dataset_csv}")
-    print(f"Processing {len(openml_datasets)} OpenML datasets")
+    # parse the dataset CSV based on source
+    if source == "kaggle":
+        all_datasets = parse_kaggle_csv(dataset_csv)
+    else:
+        all_datasets = parse_dataset_csv(dataset_csv)
+
+    print(f"Found {len(all_datasets)} datasets in {dataset_csv}")
+    print(f"Processing {len(all_datasets)} {source} datasets")
 
     failed = []
     processed = 0
 
-    for i, info in enumerate(openml_datasets):
+    for i, info in enumerate(all_datasets):
         # stop if we have processed enough datasets
         if max_datasets is not None and processed >= max_datasets:
             break
@@ -415,15 +569,15 @@ def build_cache(
 
         # skip if already cached based on the metadata
         if skip_existing and str(dataset_id) in cached_ids:
-            print(f"[{i+1}/{len(openml_datasets)}] Skipping {dataset_id} (already cached)")
+            print(f"[{i+1}/{len(all_datasets)}] Skipping {dataset_id} (already cached)")
             continue
 
-        print(f"[{i+1}/{len(openml_datasets)}] Processing dataset {dataset_id}...", end=" ", flush=True)
+        print(f"[{i+1}/{len(all_datasets)}] Processing dataset {dataset_id}...", end=" ", flush=True)
         start_time = time.time()
 
         try:
-            # load from OpenML by dataset ID
-            loaded = load_openml_dataset(dataset_id)
+            # dispatch to the right loader
+            loaded = _load_and_preprocess(info)
             if loaded is None:
                 print("SKIP (dropped target, empty, or no target)")
                 continue
@@ -459,7 +613,8 @@ def build_cache(
             y_col = data_proc[:, original_target_idx]
 
             # save to cache
-            cache_path = datasets_dir / f"openml_{dataset_id}.npz"
+            cache_filename = _make_cache_filename(source, dataset_id)
+            cache_path = datasets_dir / cache_filename
             save_dataset_cache(
                 data_proc, column_names, is_categorical, column_unique_counts,
                 original_target_idx, task_type, str(cache_path)
@@ -468,8 +623,8 @@ def build_cache(
             # create metadata
             metadata = DatasetMetadata(
                 dataset_id=str(dataset_id),
-                source_type="openml",
-                cache_path=f"datasets/openml_{dataset_id}.npz",
+                source_type=source,
+                cache_path=f"datasets/{cache_filename}",
                 n_rows=n_rows,
                 n_features=n_features,
                 column_names=column_names,
@@ -485,7 +640,7 @@ def build_cache(
                 y_unique_count=int(len(np.unique(y_col[~np.isnan(y_col)]))),
                 intended_task_type=task_type,
                 frac_missing=float(frac_missing),
-                dataset_name=name or f"openml_{dataset_id}",
+                dataset_name=name or f"{source}_{dataset_id}",
                 data_hash=data_hash,
                 task_id=info.get("task_id"),
             )
@@ -505,7 +660,7 @@ def build_cache(
 
         except Exception as e:
             print(f"FAILED: {e}")
-            failed.append({"dataset_id": dataset_id, "error": str(e)})
+            failed.append({"dataset_id": str(dataset_id), "error": str(e)})
 
     # final save of everything
     existing_metadata["last_updated"] = datetime.now().isoformat()
@@ -533,6 +688,8 @@ def main():
     parser = argparse.ArgumentParser(description="Build cache for Real Data Prior")
     parser.add_argument("--dataset-csv", type=str, default="tfmplayground/priors/real_data/openml.csv",
                         help="Path to CSV with dataset IDs")
+    parser.add_argument("--source", type=str, default="openml", choices=["openml", "kaggle"],
+                        help="Data source: 'openml' or 'kaggle'")
     parser.add_argument("--cache-dir", type=str, default="tfmplayground/priors/real_data/data/cache",
                         help="Directory to save cache")
     parser.add_argument("--max-datasets", type=int, default=None,
@@ -548,6 +705,7 @@ def main():
     build_cache(
         dataset_csv=args.dataset_csv,
         cache_dir=args.cache_dir,
+        source=args.source,
         max_datasets=args.max_datasets,
         max_rows=args.max_rows,
         max_features=args.max_features,
