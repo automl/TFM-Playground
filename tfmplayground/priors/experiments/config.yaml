@@ -2,10 +2,10 @@
 
 # Data generation settings
 data_generation:
-  num_batches: 10000
+  num_batches: 250000
   batch_size: 1
-  max_seq_len: 450
-  max_features: 100
+  max_seq_len: 200 #500
+  max_features: 10 #25
   min_eval_pos: 10
   device: "cuda"  # cpu or cuda
   seed: 42
@@ -93,15 +93,15 @@ available_priors:
       prior_type: "classification_adapter"
       description: "TICL Classification Adapter with MLP/GP base"
 
-    ticl_boolean_conjunctions:
-      lib: "ticl"
-      prior_type: "boolean_conjunctions"
-      description: "TICL Boolean Conjunctions prior"
+   # ticl_boolean_conjunctions:
+   #  lib: "ticl"
+   #  prior_type: "boolean_conjunctions"
+   #  description: "TICL Boolean Conjunctions prior"
 
-    ticl_step_function:
-      lib: "ticl"
-      prior_type: "step_function"
-      description: "TICL Step Function prior"
+   # ticl_step_function:
+   #  lib: "ticl"
+   #  prior_type: "step_function"
+   #  description: "TICL Step Function prior"
     
     # TabPFN priors (also support regression)
     tabpfn_mlp:
@@ -152,9 +152,9 @@ model:
 
 # Training Hyperparameters
 training:
-  epochs: 200
+  epochs: 1000
   batch_size: 1
-  steps: 100
+  steps: 250
   lr: 0.0001
   accumulate_gradients: 1
   seed: 2402
