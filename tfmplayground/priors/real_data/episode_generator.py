@@ -1,4 +1,3 @@
-
 """
 Real Data Prior - Episode Generator (Phase 3)
 
@@ -69,6 +68,7 @@ from torch.utils.data import Dataset
 # model constraint: maximum number of classes the model can handle
 MODEL_MAX_CLASSES = 10
 
+
 @dataclass
 class EpisodeConfig:
     cache_dir: str
@@ -118,7 +118,12 @@ class EpisodeConfig:
     # standardize all columns of a dataset when loading (reduces cross-column scale differences)
     standardize_columns_on_load: bool = True
 
-    _VALID_TASK_MODES: ClassVar[set[str]] = {"classification_only", "regression_only", "mixed_random_target"}
+    _VALID_TASK_MODES: ClassVar[set[str]] = {
+        "classification_only",
+        "regression_only",
+        "mixed_random_target",
+    }
+
 
 class LRUCache:
     """
@@ -129,7 +134,9 @@ class LRUCache:
 
     def __init__(self, maxsize: int = 16):
         self.maxsize = maxsize
-        self.cache: OrderedDict[str, tuple[np.ndarray, np.ndarray, np.ndarray, int]] = OrderedDict()
+        self.cache: OrderedDict[str, tuple[np.ndarray, np.ndarray, np.ndarray, int]] = (
+            OrderedDict()
+        )
 
     def get(self, key: str) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray, int]]:
         if key in self.cache:
@@ -137,7 +144,9 @@ class LRUCache:
             return self.cache[key]
         return None
 
-    def put(self, key: str, value: tuple[np.ndarray, np.ndarray, np.ndarray, int]) -> None:
+    def put(
+        self, key: str, value: tuple[np.ndarray, np.ndarray, np.ndarray, int]
+    ) -> None:
         if key in self.cache:
             self.cache.move_to_end(key)
             self.cache[key] = value
@@ -155,10 +164,13 @@ class RealDataPrior(Dataset):
 
     def __init__(self, config: EpisodeConfig):
         self.config = config
+        self._cache_path_map = self._build_cache_path_map()
         self.pool_ids = self._load_pool_ids()
         if not self.pool_ids:
-            raise ValueError(f"No valid datasets found in pool file: {config.train_pool_file}")
-        
+            raise ValueError(
+                f"No valid datasets found in pool file: {config.train_pool_file}"
+            )
+
         # load fallback pool only if in mixed_random_target mode
         if config.task_mode == "mixed_random_target":
             self.fallback_pool_ids = self._load_fallback_pool_ids()
@@ -166,7 +178,27 @@ class RealDataPrior(Dataset):
             self.fallback_pool_ids = []
         self.npz_cache = LRUCache(maxsize=config.npz_cache_size)
 
+    def _build_cache_path_map(self) -> dict[str, str]:
+        """build dataset_id -> relative cache_path lookup from metadata.json.
+        falls back to legacy openml_{id}.npz for datasets not in metadata."""
+        import json
+
+        metadata_path = Path(self.config.cache_dir) / "metadata.json"
+        if not metadata_path.exists():
+            return {}
+        with open(metadata_path) as f:
+            meta = json.load(f)
+        return {
+            str(entry["dataset_id"]): entry["cache_path"]
+            for entry in meta.get("datasets", [])
+            if "cache_path" in entry
+        }
+
     def _npz_path(self, dataset_id: str) -> Path:
+        # resolve from metadata; fall back to legacy openml naming
+        rel = self._cache_path_map.get(dataset_id)
+        if rel:
+            return Path(self.config.cache_dir) / rel
         return Path(self.config.cache_dir) / "datasets" / f"openml_{dataset_id}.npz"
 
     def _load_pool_ids(self) -> list[str]:
@@ -192,31 +224,33 @@ class RealDataPrior(Dataset):
         returns empty list if fallback_pool_file not set or doesn't exist.
         """
         cfg = self.config
-        
+
         # must be explicitly set
         if cfg.fallback_pool_file is None:
             return []
-        
+
         fallback_path = Path(cfg.fallback_pool_file)
         if not fallback_path.exists():
             return []
-        
+
         with open(fallback_path) as f:
             ids = [line.strip() for line in f if line.strip()]
-        
+
         valid_ids: list[str] = []
         for did in ids:
             if self._npz_path(did).exists():
                 valid_ids.append(did)
-        
+
         return valid_ids
 
-    def _load_dataset(self, dataset_id: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    def _load_dataset(
+        self, dataset_id: str
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
         # check cache first
         cached = self.npz_cache.get(dataset_id)
         if cached is not None:
             return cached
-        
+
         # load if not in cache
         npz_path = self._npz_path(dataset_id)
         with np.load(npz_path) as f:
@@ -237,7 +271,7 @@ class RealDataPrior(Dataset):
         out = (data, is_categorical, unique_counts, original_target_idx)
         self.npz_cache.put(dataset_id, out)
         return out
-    
+
     def _stable_hash_seed(self, *parts: object) -> int:
         "ensures the same seed is generated for the same episode index and dataset_id across runs, regardless of other config changes. includes base_seed for global seed control."
         s = "|".join([str(self.config.base_seed)] + [str(p) for p in parts])
@@ -265,7 +299,9 @@ class RealDataPrior(Dataset):
             return seq_len // 2
         return int(rng.integers(min_eval, max_eval + 1))
 
-    def _standardize_in_place(self, X_ep: np.ndarray, single_eval_pos: int) -> np.ndarray:
+    def _standardize_in_place(
+        self, X_ep: np.ndarray, single_eval_pos: int
+    ) -> np.ndarray:
         # sanitize non-finite values before computing statistics to avoid reduction overflow warnings
         np.nan_to_num(X_ep, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -282,20 +318,22 @@ class RealDataPrior(Dataset):
         # safety guard/could be redundant
         X_ep = np.nan_to_num(X_ep, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # optional clipping to avoid extreme values that can destabilize training 
+        # optional clipping to avoid extreme values that can destabilize training
         if self.config.clip_features:
             X_ep = np.clip(X_ep, -self.config.clip_value, self.config.clip_value)
 
         return X_ep.astype(np.float32, copy=False)
 
-    def _format_target(self, y_ep: np.ndarray, single_eval_pos: int, is_classification: bool) -> np.ndarray:
-        """formats y_ep according to task type. 
-        for classification, remaps classes to 0..C-1 and returns int64. 
+    def _format_target(
+        self, y_ep: np.ndarray, single_eval_pos: int, is_classification: bool
+    ) -> np.ndarray:
+        """formats y_ep according to task type.
+        for classification, remaps classes to 0..C-1 and returns int64.
         for regression, standardizes using train portion stats and returns float32."""
-        
+
         if is_classification:
             y_ep = y_ep.astype(np.int64)
-            
+
             classes = np.unique(y_ep)
             # remap to 0..max_classes - 1
             classes_sorted = np.sort(classes)
@@ -317,7 +355,9 @@ class RealDataPrior(Dataset):
         y_scaled = np.nan_to_num(y_scaled, nan=0.0, posinf=0.0, neginf=0.0)
         return y_scaled.astype(np.float32)
 
-    def _subsample_features(self, rng: np.random.Generator, X_ep: np.ndarray) -> np.ndarray:
+    def _subsample_features(
+        self, rng: np.random.Generator, X_ep: np.ndarray
+    ) -> np.ndarray:
         """if there are more features than max_features, randomly subsample features using the provided RNG.
         if fewer, return as-is (padding is handled downstream by dump_prior_to_h5)."""
         cfg = self.config
@@ -334,28 +374,41 @@ class RealDataPrior(Dataset):
                 f"Unknown task_mode '{cfg.task_mode}'. "
                 f"Must be one of {sorted(cfg._VALID_TASK_MODES)}"
             )
-        if cfg.task_mode == "mixed_random_target" and cfg.mixed_target_type not in ("classification", "regression"):
+        if cfg.task_mode == "mixed_random_target" and cfg.mixed_target_type not in (
+            "classification",
+            "regression",
+        ):
             raise ValueError(
                 "mixed_random_target requires mixed_target_type to be 'classification' or 'regression'."
             )
 
-    def _pick_target_col_mixed(self, rng: np.random.Generator, is_categorical: np.ndarray, unique_counts: np.ndarray, n_cols: int) -> tuple[Optional[int], bool]:
+    def _pick_target_col_mixed(
+        self,
+        rng: np.random.Generator,
+        is_categorical: np.ndarray,
+        unique_counts: np.ndarray,
+        n_cols: int,
+    ) -> tuple[Optional[int], bool]:
         """select a target column for mixed_random_target mode.
         iterates over all columns in random order and returns the first column
         that matches the requested task type (classification or regression)."""
         cfg = self.config
-        classification_wanted = (cfg.mixed_target_type == "classification")
+        classification_wanted = cfg.mixed_target_type == "classification"
 
         for candidate in rng.permutation(n_cols):
             c = int(candidate)
             # classification if categorical or has few unique values, regression otherwise
-            candidate_is_cls = bool(is_categorical[c]) or (int(unique_counts[c]) <= cfg.unique_count_threshold)
+            candidate_is_cls = bool(is_categorical[c]) or (
+                int(unique_counts[c]) <= cfg.unique_count_threshold
+            )
             if candidate_is_cls == classification_wanted:
                 return c, candidate_is_cls
 
         return None, classification_wanted
 
-    def _select_dataset_and_target(self, idx: int, initial_rng: np.random.Generator) -> tuple[np.random.Generator, np.ndarray, int, bool]:
+    def _select_dataset_and_target(
+        self, idx: int, initial_rng: np.random.Generator
+    ) -> tuple[np.random.Generator, np.ndarray, int, bool]:
         """
         selects a dataset and a valid target column for one episode.
         in single-target modes, the dataset’s original target column is used.
@@ -376,12 +429,16 @@ class RealDataPrior(Dataset):
         for _ in range(cfg.max_dataset_retries):
             rng = self._get_episode_rng(idx, dataset_id)
             # load the dataset
-            data, is_categorical, unique_counts, original_target_idx = self._load_dataset(dataset_id)
+            data, is_categorical, unique_counts, original_target_idx = (
+                self._load_dataset(dataset_id)
+            )
 
             if cfg.task_mode == "mixed_random_target":
                 # randomly samples columns until it finds one that matches the requested task type, or exhausts the columns.
                 # if no column found after max retries returns none and the task it was looking for
-                target_col, is_cls = self._pick_target_col_mixed(rng, is_categorical, unique_counts, data.shape[1])
+                target_col, is_cls = self._pick_target_col_mixed(
+                    rng, is_categorical, unique_counts, data.shape[1]
+                )
                 if target_col is None:
                     # sample a new one retry
                     dataset_id = self._sample_dataset_id(initial_rng)
@@ -390,7 +447,7 @@ class RealDataPrior(Dataset):
             else:
                 # target column is the original target column
                 target_col = int(original_target_idx)
-                is_classification = (cfg.task_mode == "classification_only")
+                is_classification = cfg.task_mode == "classification_only"
 
             return rng, data, int(target_col), bool(is_classification)
 
@@ -400,10 +457,12 @@ class RealDataPrior(Dataset):
             fallback_idx = int(initial_rng.integers(0, len(self.fallback_pool_ids)))
             dataset_id = self.fallback_pool_ids[fallback_idx]
             rng = self._get_episode_rng(idx, dataset_id)
-            data, is_categorical, unique_counts, original_target_idx = self._load_dataset(dataset_id)
+            data, is_categorical, unique_counts, original_target_idx = (
+                self._load_dataset(dataset_id)
+            )
 
             target_col = int(original_target_idx)
-            is_classification = (cfg.mixed_target_type == "classification")
+            is_classification = cfg.mixed_target_type == "classification"
             return rng, data, target_col, bool(is_classification)
 
         raise RuntimeError(
@@ -419,7 +478,7 @@ class RealDataPrior(Dataset):
         target_col: int,
         is_classification: bool,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """ Builds one episode by randomly sampling rows.
+        """Builds one episode by randomly sampling rows.
         - Splits data into X and y.
         - Samples a sequence length and rows without replacement.
         - For classification, ensures at least two classes if possible.
@@ -443,7 +502,9 @@ class RealDataPrior(Dataset):
 
         # subsampled episode data
         X_ep = X_use[rows].astype(np.float32, copy=True)
-        y_ep = y_use[rows].astype(np.int64 if is_classification else np.float32, copy=True)
+        y_ep = y_use[rows].astype(
+            np.int64 if is_classification else np.float32, copy=True
+        )
 
         # safeguard against sampling only one class for classification episodes
         if is_classification:
@@ -484,15 +545,21 @@ class RealDataPrior(Dataset):
             return False, f"dominant_frac={dominant_frac:.3f}>{cfg.max_dominant_frac}"
         return True, ""
 
-    def _sample_episode(self, idx: int, initial_rng: np.random.Generator) -> dict[str, torch.Tensor | int]:
+    def _sample_episode(
+        self, idx: int, initial_rng: np.random.Generator
+    ) -> dict[str, torch.Tensor | int]:
         self._validate_task_mode()
         cfg = self.config
         rejections: dict[str, int] = {}  # reason -> count
 
         for _ in range(cfg.max_episode_retries):
-            rng, data, target_col, is_classification = self._select_dataset_and_target(idx, initial_rng)
+            rng, data, target_col, is_classification = self._select_dataset_and_target(
+                idx, initial_rng
+            )
 
-            X_ep, y_ep = self._sample_rows_and_build_xy(rng, data, target_col, is_classification)
+            X_ep, y_ep = self._sample_rows_and_build_xy(
+                rng, data, target_col, is_classification
+            )
 
             if is_classification:
                 self._cap_classes_in_place(y_ep)
@@ -531,10 +598,12 @@ class RealDataPrior(Dataset):
         initial_rng = np.random.default_rng(seed)
         return self._sample_episode(idx, initial_rng)
 
+
 class RealDataPriorDataLoader:
     """
     Thin wrapper that yields dict batches on a device fitting the style of the synthetic data loaders
     """
+
     def __init__(
         self,
         cache_dir: str,
@@ -546,13 +615,13 @@ class RealDataPriorDataLoader:
         device: torch.device,
         task_type: str,
         mode: str = "only",
-        batch_size: int = 1, # required for model's loss function otherwise padding effects the loss calculation
+        batch_size: int = 1,  # required for model's loss function otherwise padding effects the loss calculation
         base_seed: int = 0,
         npz_cache_size: int = 16,
         num_workers: int = 0,
         fallback_pool_file: Optional[str] = None,
     ):
-        # support 2 modes: randomly sampling the target column until it is not degenerate or 
+        # support 2 modes: randomly sampling the target column until it is not degenerate or
         # sampling the original target column
         if mode == "only":
             internal_task_mode = f"{task_type}_only"

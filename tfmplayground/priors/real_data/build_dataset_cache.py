@@ -64,7 +64,7 @@ class DatasetMetadata:
     """metadata to store for a cached dataset"""
     dataset_id: str
     dataset_name: str
-    source_type: str  # "openml" or TODO:"kaggle" later on
+    source_type: str  # "openml" or "kaggle"
     cache_path: str
     n_rows: int
     n_features: int # excluding the target
@@ -453,7 +453,6 @@ def parse_dataset_csv(csv_path: str) -> list[dict]:
         if pd.notna(did):
             entry = {
                 "dataset_id": int(did),
-                #TODO: currently its all openml so this is hardcoded
                 "source": "openml",
             }
             if pd.notna(tid):
