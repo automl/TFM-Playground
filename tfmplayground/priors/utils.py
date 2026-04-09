@@ -1,5 +1,7 @@
 """Utility functions for priors."""
 
+import resource
+import time
 from typing import Union
 
 import h5py
@@ -81,6 +83,10 @@ def dump_prior_to_h5(
 ):
     """Dumps synthetic prior data into an HDF5 file for later training."""
     
+    wall_start = time.perf_counter()
+    cpu_start = time.process_time()
+    total_samples = 0
+
     with h5py.File(save_path, "w") as f:
         dump_X = f.create_dataset(
             "X",
@@ -114,6 +120,8 @@ def dump_prior_to_h5(
             if isinstance(single_eval_pos, torch.Tensor):
                 single_eval_pos = single_eval_pos.item()
 
+            total_samples += x.shape[0]
+
             # pad x and y to the maximum sequence length and number of features needed for tabicl
             x_padded = np.pad(
                 x, ((0, 0), (0, max_seq_len - x.shape[1]), (0, max_features - x.shape[2])), mode="constant"
@@ -134,3 +142,27 @@ def dump_prior_to_h5(
 
             dump_single_eval_pos.resize(dump_single_eval_pos.shape[0] + batch_size, axis=0)
             dump_single_eval_pos[-batch_size:] = single_eval_pos
+
+        # --- Metrics: compute final values ---
+        wall_seconds = time.perf_counter() - wall_start
+        cpu_seconds = time.process_time() - cpu_start
+        rss_after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # macOS reports ru_maxrss in bytes, Linux in KB
+        import sys as _sys
+        rss_scale = 1 if _sys.platform == "darwin" else 1024
+        peak_memory_bytes = rss_after * rss_scale
+        throughput = total_samples / cpu_seconds if cpu_seconds > 0 else float("inf")
+
+        # store metrics as HDF5 attributes
+        f.attrs["wall_seconds"] = wall_seconds
+        f.attrs["cpu_seconds"] = cpu_seconds
+        f.attrs["peak_memory_bytes"] = peak_memory_bytes
+        f.attrs["throughput_samples_per_cpu_sec"] = throughput
+        f.attrs["total_samples"] = total_samples
+
+        print(f"\n--- Generation Metrics ---")
+        print(f"  Wall-clock time : {wall_seconds:.2f}s")
+        print(f"  CPU process time: {cpu_seconds:.2f}s")
+        print(f"  Peak memory RSS : {peak_memory_bytes / 1024**2:.1f} MB")
+        print(f"  Total samples   : {total_samples}")
+        print(f"  Throughput      : {throughput:.1f} samples/cpu_sec")
