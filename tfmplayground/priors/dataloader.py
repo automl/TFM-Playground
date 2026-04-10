@@ -8,6 +8,7 @@ import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 # from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from gcfm.priordata_processing.Datasets.ObservationalDataset import ObservationalDataset as GCFMPriorDataset
+from gcfm.priordata_processing.Datasets.ObservationalDatasetTabICLNorm import ObservationalDatasetTabICLNorm as GCFMTabICLPriorDataset
 from torch.utils.data import DataLoader
 import networkx as nx
 
@@ -355,6 +356,83 @@ class GCFMDataLoader(DataLoader):
                 if batch is not None:
                     yield batch
 
+        return generate()
+
+    def __len__(self):
+        return self.num_steps
+
+
+class GCFMTabICLDataLoader(DataLoader):
+    """DataLoader using GCFM's DAG/MLP generation with TabICL's Reg2Cls normalisation.
+
+    Drop-in replacement for GCFMDataLoader. The only difference is the underlying
+    dataset class (ObservationalDatasetTabICLNorm instead of ObservationalDataset),
+    which replaces GCFM's BasicProcessing with TabICL's Reg2Cls pipeline.
+
+    Args:
+        config (Dict[str, Any]): Must contain 'scm_config', 'dataset_config', and
+            optionally 'tabicl_hp' (merged with DEFAULT_TABICL_HP defaults).
+        batch_size (int): Number of datasets per batch.
+        num_steps (int): Number of batches per epoch.
+        device (torch.device): Target device.
+    """
+
+    STACK_KEYS = {"x", "y"}
+
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        batch_size: int,
+        num_steps: int,
+        device: torch.device,
+    ):
+        self.batch_size = batch_size
+        self.num_steps = num_steps
+        self.device = device
+        self._global_idx = 0
+
+        self.pd = GCFMTabICLPriorDataset(
+            scm_config=config["scm_config"],
+            dataset_config=config["dataset_config"],
+            tabicl_hp=config.get("tabicl_hp"),
+            seed=None,
+        )
+
+    def gcfm_to_ours(self, sample):
+        x_train, y_train, x_test, y_test, graph_info, dataset_info = sample
+        x = torch.cat([x_train, x_test], dim=0)
+        y = torch.cat([y_train, y_test], dim=0).squeeze(-1)
+        return dict(
+            x=x,
+            y=y,
+            single_eval_pos=dataset_info["number_train_samples"],
+            scm=graph_info["scm"],
+            processor=graph_info["processor"],
+        )
+
+    def _collate(self, dicts):
+        single_eval_positions = [d["single_eval_pos"] for d in dicts]
+        if len(set(single_eval_positions)) > 1:
+            raise ValueError("Varying train sizes within a batch is not supported.")
+        batch = {
+            k: torch.stack([d[k] for d in dicts]).to(self.device)
+            for k in self.STACK_KEYS
+        }
+        batch["target_y"] = batch["y"]
+        batch["single_eval_pos"] = single_eval_positions[0]
+        batch["scm"] = [d["scm"] for d in dicts]
+        batch["processor"] = [d["processor"] for d in dicts]
+        return batch
+
+    def __iter__(self):
+        def generate():
+            for _ in range(self.num_steps):
+                samples = [
+                    self.gcfm_to_ours(self.pd[self._global_idx + i])
+                    for i in range(self.batch_size)
+                ]
+                self._global_idx += self.batch_size
+                yield self._collate(samples)
         return generate()
 
     def __len__(self):
