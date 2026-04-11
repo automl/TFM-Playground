@@ -99,9 +99,9 @@ def get_tabpfn_prior_config(prior_type: str) -> dict:
         }
     elif prior_type == "gp":
         return {
-            'noise': 0.1,
-            'outputscale': 1.0,
-            'lengthscale': 0.2,
+            'noise': 1e-3,
+            'outputscale': 3.0,
+            'lengthscale': 1.0,
             'is_binary_classification': False,
             'normalize_by_used_features': True,
             'order_y': False,
