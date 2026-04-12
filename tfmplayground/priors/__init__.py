@@ -4,14 +4,14 @@ from .dataloader import (
     PriorDataLoader,
     PriorDumpDataLoader,
     TabICLPriorDataLoader,
-    TICLPriorDataLoader,
     TabPFNPriorDataLoader,
+    TICLPriorDataLoader,
 )
-from .utils import build_ticl_prior, build_tabpfn_prior
+from .utils import build_tabpfn_prior, build_ticl_prior
 
 __version__ = "0.0.1"
 __all__ = [
-    "PriorDataLoader", 
+    "PriorDataLoader",
     "PriorDumpDataLoader",
     "TabICLPriorDataLoader",
     "TICLPriorDataLoader",

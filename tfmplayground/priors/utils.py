@@ -1,19 +1,19 @@
 """Utility functions for priors."""
 
-from typing import Union
-
 import h5py
 import numpy as np
 import torch
-from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
+from ticl.priors import BooleanConjunctionPrior, ClassificationAdapterPrior, GPPrior, MLPPrior, StepFunctionPrior
 from tqdm import tqdm
 
-from .config import get_ticl_prior_config, get_tabpfn_prior_config
+from .config import get_tabpfn_prior_config, get_ticl_prior_config
 
 
-def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
+def build_ticl_prior(
+    prior_type: str, base_prior: str = None, max_num_classes: int = None
+) -> MLPPrior | GPPrior | ClassificationAdapterPrior | BooleanConjunctionPrior | StepFunctionPrior:
     """Builds a TICL prior based on the prior type string using the defaults in config.py.
-    
+
     Args:
         prior_type: Type of TICL prior ('mlp', 'gp', 'classification_adapter', etc.)
         base_prior: Base regression prior for composite priors (e.g., 'mlp' or 'gp' for classification_adapter)
@@ -21,7 +21,7 @@ def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: i
     """
 
     cfg = get_ticl_prior_config(prior_type)
-    
+
     if prior_type == "mlp":
         return MLPPrior(cfg)
     elif prior_type == "gp":
@@ -31,7 +31,7 @@ def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: i
             base_prior = "mlp"  # default to MLP
         # build the base regression prior
         base_prior_obj = build_ticl_prior(base_prior)
-        
+
         # we equate them rather than treating num_classes as a separate parameter because:
         # - max_num_classes serves as the upper bound for TICL's internal sampling
         # - even with num_classes set to a constant, TICL's class_sampler_f() will internally
@@ -49,38 +49,34 @@ def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: i
 
 def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
     """Builds TabPFN prior configuration with appropriate settings for regression or classification.
-        
+
     Args:
         prior_type: Type of TabPFN prior ('mlp', 'gp', 'prior_bag')
         max_classes: Maximum number of classes
-        
+
     Returns:
         dict with 'flexible', 'max_num_classes', and 'prior_config' keys
     """
     is_regression = max_classes == 0
-    
+
     return {
-        'flexible': not is_regression,  # false for regression, true for classification
-        'max_num_classes': 2 if is_regression else max_classes,  # library weirdly requires >=2 regardless of regression or classification
+        "flexible": not is_regression,  # false for regression, true for classification
+        "max_num_classes": 2
+        if is_regression
+        else max_classes,  # library weirdly requires >=2 regardless of regression or classification
         # num_classes parameter in the library code is equated to max_num_classes
         # so its not varied separately here
-        'prior_config': {
+        "prior_config": {
             **get_tabpfn_prior_config(prior_type),
         },
     }
 
 
 def dump_prior_to_h5(
-    prior, 
-    max_classes: int, 
-    batch_size: int, 
-    save_path: str, 
-    problem_type: str, 
-    max_seq_len: int, 
-    max_features: int
+    prior, max_classes: int, batch_size: int, save_path: str, problem_type: str, max_seq_len: int, max_features: int
 ):
     """Dumps synthetic prior data into an HDF5 file for later training."""
-    
+
     with h5py.File(save_path, "w") as f:
         dump_X = f.create_dataset(
             "X",
