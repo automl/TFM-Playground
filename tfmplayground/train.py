@@ -32,7 +32,7 @@ def train(
         model: (NanoTabPFNModel) our PyTorch model
         prior: (DataLoader) torch-compatible dataloader
         criterion: (nn.CrossEntropyLoss | FullSupportBarDistribution) our loss criterion
-        epochs: (int) the number of epochs we train for, 
+        epochs: (int) the number of epochs we train for,
             the number of steps that constitute an epoch are decided by the prior
         accumulate_gradients: (int) the number of gradients to accumulate before updating the weights
         device: (torch.device) the device we are using
@@ -68,8 +68,8 @@ def train(
             optimizer.train()
             total_loss = 0.0
             for i, full_data in enumerate(prior):
-                single_eval_pos = full_data["single_eval_pos"]
-                data = (full_data["x"].to(device), full_data["y"][:, :single_eval_pos].to(device))
+                train_test_split_index = full_data["train_test_split_index"]
+                data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
                 if torch.isnan(data[0]).any() or torch.isnan(data[1]).any():
                     continue
                 targets = full_data["target_y"].to(device)
@@ -80,8 +80,8 @@ def train(
                     y_norm = (data[1] - y_mean) / y_std
                     data = (data[0], y_norm)
 
-                output = model(data, single_eval_pos=single_eval_pos)
-                targets = targets[:, single_eval_pos:]
+                output = model(data, train_test_split_index=train_test_split_index)
+                targets = targets[:, train_test_split_index:]
                 if regression_task:
                     targets = (targets - y_mean) / y_std
                 if classification_task:

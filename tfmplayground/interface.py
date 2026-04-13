@@ -137,9 +137,9 @@ class NanoTabPFNClassifier:
         with torch.no_grad():
             x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)  # introduce batch size 1
             y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model((x, y), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(
-                0
-            )  # remove batch size 1
+            out = self.model(
+                (x, y), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
+            ).squeeze(0)  # remove batch size 1
             # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
             out = out[:, : self.num_classes]
             # apply softmax to get a probability distribution
@@ -216,7 +216,7 @@ class NanoTabPFNRegressor:
             y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device).unsqueeze(0)
 
             logits = self.model(
-                (X_tensor, y_tensor), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks
+                (X_tensor, y_tensor), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
             ).squeeze(0)
             preds_n = self.dist.mean(logits)
             preds = preds_n * self.y_train_std + self.y_train_mean

@@ -113,7 +113,7 @@ class FeatureEncoder(nn.Module):
         """
         x = x.unsqueeze(-1)
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8 #TODO: maybe change the constant
+        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
         x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)
@@ -142,8 +142,6 @@ class TargetEncoder(nn.Module):
         y = torch.cat([y_train, padding], dim=1)
         y = y.unsqueeze(-1)
         return self.linear_layer(y)
-
-
 
 
 class TransformerEncoderLayer(nn.Module):

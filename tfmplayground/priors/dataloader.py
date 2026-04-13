@@ -88,7 +88,10 @@ class PriorDumpDataLoader(DataLoader):
 
                 x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])
                 y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])
-                single_eval_pos = f["single_eval_pos"][self.pointer : end]
+                if "train_test_split_index" in f:
+                    train_test_split_index = f["train_test_split_index"][self.pointer : end]
+                else:
+                    train_test_split_index = f["single_eval_pos"][self.pointer : end]
 
                 self.pointer += self.batch_size
                 if self.pointer >= f["X"].shape[0]:
@@ -102,7 +105,7 @@ class PriorDumpDataLoader(DataLoader):
                     x=x.to(self.device),
                     y=y.to(self.device),
                     target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
-                    single_eval_pos=single_eval_pos[0].item(),
+                    train_test_split_index=train_test_split_index[0].item(),
                 )
 
     def __len__(self):
@@ -163,12 +166,14 @@ class TabICLPriorDataLoader(DataLoader):
             0
         ].item()  # should be all the same since we use batch_size_per_gp=batch_size (not true in practice!)
         x = x[:, :, :active_features]
-        single_eval_pos = train_size[0].item()  # should be all the same since we use batch_size_per_gp=batch_size
+        train_test_split_index = train_size[
+            0
+        ].item()  # should be all the same since we use batch_size_per_gp=batch_size
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),
             target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
-            single_eval_pos=single_eval_pos,
+            train_test_split_index=train_test_split_index,
         )
 
     def __iter__(self):
@@ -215,7 +220,7 @@ class TICLPriorDataLoader(DataLoader):
         )
 
     def ticl_to_ours(self, d):
-        (info, x, y), target_y, single_eval_pos = d
+        (info, x, y), target_y, train_test_split_index = d
         x = x.permute(1, 0, 2)
         y = y.permute(1, 0)
         target_y = target_y.permute(1, 0)
@@ -224,7 +229,7 @@ class TICLPriorDataLoader(DataLoader):
             x=x.to(self.device),
             y=y.to(self.device),
             target_y=target_y.to(self.device),  # target_y is identical to y (for downstream compatibility)
-            single_eval_pos=single_eval_pos,
+            train_test_split_index=train_test_split_index,
         )
 
     def __iter__(self):

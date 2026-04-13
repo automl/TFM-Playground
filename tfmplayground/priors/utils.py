@@ -94,8 +94,8 @@ def dump_prior_to_h5(
         dump_y = f.create_dataset(
             "y", shape=(0, max_seq_len), maxshape=(None, max_seq_len), chunks=(batch_size, max_seq_len)
         )
-        dump_single_eval_pos = f.create_dataset(
-            "single_eval_pos", shape=(0,), maxshape=(None,), chunks=(batch_size,), dtype="i4"
+        dump_train_test_split_index = f.create_dataset(
+            "train_test_split_index", shape=(0,), maxshape=(None,), chunks=(batch_size,), dtype="i4"
         )
 
         if problem_type == "classification":
@@ -106,9 +106,9 @@ def dump_prior_to_h5(
         for e in tqdm(prior):
             x = e["x"].to("cpu").numpy()
             y = e["y"].to("cpu").numpy()
-            single_eval_pos = e["single_eval_pos"]
-            if isinstance(single_eval_pos, torch.Tensor):
-                single_eval_pos = single_eval_pos.item()
+            train_test_split_index = e["train_test_split_index"]
+            if isinstance(train_test_split_index, torch.Tensor):
+                train_test_split_index = train_test_split_index.item()
 
             # pad x and y to the maximum sequence length and number of features needed for tabicl
             x_padded = np.pad(
@@ -128,5 +128,5 @@ def dump_prior_to_h5(
             dump_num_datapoints.resize(dump_num_datapoints.shape[0] + batch_size, axis=0)
             dump_num_datapoints[-batch_size:] = x.shape[1]
 
-            dump_single_eval_pos.resize(dump_single_eval_pos.shape[0] + batch_size, axis=0)
-            dump_single_eval_pos[-batch_size:] = single_eval_pos
+            dump_train_test_split_index.resize(dump_train_test_split_index.shape[0] + batch_size, axis=0)
+            dump_train_test_split_index[-batch_size:] = train_test_split_index
