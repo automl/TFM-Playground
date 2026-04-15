@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Iterator, Union
 
 import h5py
 import torch
+import numpy as np
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 # from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from gcfm.priordata_processing.Datasets.ObservationalDataset import ObservationalDataset as GCFMPriorDataset
@@ -14,6 +15,7 @@ import networkx as nx
 
 from gtfm.graph.torch_moral import calculate_density
 from gtfm.utils.adj import move_axis, remove_axis
+from gtfm.graph.scm import get_graph, add_node_types, add_layer
 
 class PriorDataLoader(DataLoader):
     """Generic DataLoader for synthetic data generation using a get_batch function.
@@ -147,6 +149,7 @@ class TabICLPriorDataLoader(DataLoader):
         device: torch.device,
         scm_fixed_hp: Dict[str, Any],
         scm_sampled_hp: Dict[str, Any],
+        return_extra_info: bool,
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -156,6 +159,7 @@ class TabICLPriorDataLoader(DataLoader):
         self.max_features = max_features
         self.max_num_classes = max_num_classes
         self.device = device
+        self.return_extra_info = return_extra_info        
 
         self.pd = TabICLPriorDataset(
             batch_size=batch_size,
@@ -171,7 +175,6 @@ class TabICLPriorDataLoader(DataLoader):
 
     def tabicl_to_ours(self, d):
         x, y, active_features, seqlen, train_size, adj, priors = d
-        density = torch.tensor([p.density for p in priors])
         if (active_features != active_features[0]).any():
             print("Warning: Varying active features within a batch is not supported. ")
             return None # skip batches with varying active features for now
@@ -183,14 +186,31 @@ class TabICLPriorDataLoader(DataLoader):
             print("Warning: Varying train sizes within a batch is not supported. ")
             return None # skip batches with varying train sizes for now
         single_eval_pos = train_size[0].item()  # should be all the same since we use batch_size_per_gp=batch_size
+
+        if self.return_extra_info:
+            scms = []
+            for prior in priors:
+                adj = prior.adj_full.numpy()
+                adj = (np.abs(adj) > 0.)
+                indices = (idxs_x, idxs_y) = [idx_i.numpy() for idx_i in prior.indices]
+                width_layers = np.concatenate([[prior.num_causes], [prior.hidden_dim] * prior.num_layers])
+
+                scm = get_graph(adj, width_layers, idxs_x, idxs_y)
+                scms.append(scm)
+            extra_info = dict(
+                scm=scms,
+                # adj=adj.to(self.device),
+                prior=priors,
+            )
+        else:
+            extra_info = dict()
+
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),
             target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
             single_eval_pos=single_eval_pos,
-            adj=adj.to(self.device),
-            density=density.to(self.device),
-            priors=priors,
+            **extra_info,
         )
 
     def __iter__(self):
@@ -283,6 +303,7 @@ class GCFMDataLoader(DataLoader):
         batch_size: int,
         num_steps: int,
         device: torch.device,
+        return_extra_info: bool,
         extra_checks: bool = False,
     ):
         self.batch_size = batch_size
@@ -290,6 +311,7 @@ class GCFMDataLoader(DataLoader):
         self.device = device
         self._global_idx = 0
         self.extra_checks = extra_checks
+        self.return_extra_info = return_extra_info
 
         self.pd = GCFMPriorDataset(
             scm_config=config["scm_config"],
@@ -298,6 +320,22 @@ class GCFMDataLoader(DataLoader):
             seed=None,
         )
 
+    def prep_scm(self, scm, ordered_nodes):
+        scm = scm.dag.g
+
+
+        for layer, nodes in enumerate(nx.topological_generations(scm)):
+            # `multipartite_layout` expects the layer as a node attribute, so add the
+            # numeric layer value as a node attribute
+            for node in nodes:
+                scm.nodes[node]["layer"] = layer
+
+        scm = add_node_types(
+            graph=scm, 
+            indices_x=ordered_nodes[:-1], 
+            indices_y=ordered_nodes[-1:],
+        )
+        return scm
     def gcfm_to_ours(self, sample):
         """Convert a single GCFM sample to our dict format."""
         x_train, y_train, x_test, y_test, graph_info, dataset_info = sample
@@ -306,9 +344,19 @@ class GCFMDataLoader(DataLoader):
         y = torch.cat([y_train, y_test], dim=0).squeeze(-1)
         # adj = graph_info["moral_matrix_padded"] 
         # density = graph_info["moral_density"]
-        
-        scm = graph_info["scm"]
-        processor = graph_info["processor"]
+
+        if self.return_extra_info:
+            scm = self.prep_scm(graph_info["scm"], graph_info["ordered_nodes"])
+            # scm = graph_info["scm"]
+            processor = graph_info["processor"]
+            # print(graph_info)
+            extra_info = dict(
+                scm = scm,
+                processor = processor,
+                graph_info = graph_info,
+            )
+        else:
+            extra_info = dict()
 
         # if self.extra_checks:
         #     ordered_nodes: list[int] = processor.kept_feature_indices + [processor.selected_target_feature]
@@ -323,8 +371,7 @@ class GCFMDataLoader(DataLoader):
             # adj=adj,
             # density=density,
             single_eval_pos=dataset_info["number_train_samples"],
-            scm=scm,
-            processor=processor,
+            **extra_info,
         )
 
     def _collate(self, dicts):
@@ -341,6 +388,7 @@ class GCFMDataLoader(DataLoader):
         batch["single_eval_pos"] = single_eval_positions[0]
         batch["scm"] = [d["scm"] for d in dicts]
         batch["processor"] = [d["processor"] for d in dicts]
+        batch["graph_info"] = [d["graph_info"] for d in dicts]
 
         return batch
 
