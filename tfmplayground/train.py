@@ -98,7 +98,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
             total_loss = 0.
             valid_steps = 0
             for i, full_data in enumerate(prior):
-                print(f'Epoch {epoch}, Step {i}/{prior.num_steps}')
+                # print(f'Epoch {epoch}, Step {i}/{prior.num_steps}')
                 single_eval_pos = full_data['single_eval_pos']
                 data = (
                     full_data['x'].to(device),

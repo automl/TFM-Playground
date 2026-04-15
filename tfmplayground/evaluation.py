@@ -33,6 +33,49 @@ TABARENA_TASKS = [
     363708, 363711, 363712
 ]
 
+# import pandas as pd
+# from sklearn.compose import ColumnTransformer
+# from sklearn.pipeline import Pipeline
+# from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, FunctionTransformer
+
+# def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
+#     """
+#     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
+#     """
+#     X = pd.DataFrame(X)
+#     num_mask = []
+#     cat_mask = []
+#     for col in X:
+#         unique_non_nan_entries = X[col].dropna().unique()
+#         if len(unique_non_nan_entries) <= 1:
+#             num_mask.append(False)
+#             cat_mask.append(False)
+#             continue
+#         non_nan_entries = X[col].notna().sum()
+#         numeric_entries = pd.to_numeric(X[col], errors='coerce').notna().sum() # in case numeric columns are stored as strings
+#         num_mask.append(non_nan_entries == numeric_entries)
+#         cat_mask.append(non_nan_entries != numeric_entries)
+#         # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
+
+#     num_mask = np.array(num_mask)
+#     cat_mask = np.array(cat_mask)
+
+#     num_transformer = Pipeline([
+#         ("to_pandas", FunctionTransformer(lambda x: pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x)), # to apply pd.to_numeric of pandas
+#         ("to_numeric", FunctionTransformer(lambda x: x.apply(pd.to_numeric, errors='coerce').to_numpy())), # in case numeric columns are stored as strings
+#     ])
+#     cat_transformer = Pipeline([
+#         ('encoder', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=np.nan)),
+#     ])
+
+#     preprocessor = ColumnTransformer(
+#         transformers=[
+#             ('num', num_transformer, num_mask),
+#             ('cat', cat_transformer, cat_mask)
+#         ]
+#     )
+#     return preprocessor
+
 @torch.no_grad()
 def get_openml_predictions(
         *,
@@ -120,6 +163,10 @@ def get_openml_predictions(
                 y_train = y.iloc[train_indices].to_numpy()
                 X_test = X.iloc[test_indices].to_numpy()
                 y_test = y.iloc[test_indices].to_numpy()
+
+                # preprocessor = get_feature_preprocessor(X_train)
+                # X_train = preprocessor.fit_transform(X_train)
+                # X_test = preprocessor.transform(X_test)
 
                 if classification:
                     label_encoder = LabelEncoder()
