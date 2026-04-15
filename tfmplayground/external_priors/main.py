@@ -6,8 +6,10 @@ import random
 import numpy as np
 import torch
 
-from .dataloader import TabICLPriorDataLoader, TabPFNPriorDataLoader, TICLPriorDataLoader
-from .utils import build_tabpfn_prior, build_ticl_prior, dump_prior_to_h5
+from .base import dump_prior_to_h5
+from .tabicl import TabICLPriorDataLoader
+from .tabpfn import TabPFNPriorDataLoader, build_tabpfn_prior
+from .ticl import TICLPriorDataLoader, build_ticl_prior
 
 
 def main():

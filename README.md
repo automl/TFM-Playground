@@ -36,7 +36,7 @@ print("Accuracy", accuracy_score(y_test, predictions))
 
 ### Our Code
 
-`tfmplayground/models/nanotabpfn.py` contains the implementation of the architecture in less than 300 lines of code. `tfmplayground/train.py` implements a simple training loop in under 200 lines and `tfmplayground/priors.py` implements a dataloader that allows you to load a dump pre-generated from a prior.
+`tfmplayground/models/nanotabpfn.py` contains the implementation of the architecture in less than 300 lines of code. `tfmplayground/train.py` implements a simple training loop in under 200 lines and `tfmplayground/external_priors/` provides an interface to publicly available priors form other repositories as well as a dataloader for loading HDF5 dumps.
 We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
 
 ### Pretrain your own small nanoTabPFN
@@ -57,7 +57,7 @@ You can pretrain on it using `python pretrain_regressor.py`.
 First we import our Architecture, Prior interface and training loop, etc.
 ```python
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
-from tfmplayground.priors import PriorDumpDataLoader
+from tfmplayground.external_priors import PriorDumpDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device
 from tfmplayground.interface import NanoTabPFNClassifier
@@ -94,11 +94,11 @@ trained_model, loss = train(
 ```
 
 ### Creating your own datasets
-Check out [tfmplayground.priors](https://github.com/automl/TFM-Playground/tree/main/tfmplayground/priors) to create your own data using publicly available priors.
+Check out [tfmplayground.external_priors](https://github.com/automl/TFM-Playground/tree/main/tfmplayground/external_priors) to create your own data using publicly available priors.
 
-You can use tfmplayground.priors as a command-line-tool to pre-generate data from a prior, e.g. via
+You can use `tfmplayground.external_priors` as a command-line-tool to pre-generate data from a prior, e.g. via
 ```
-python -m tfmplayground.priors --lib tabicl \
+python -m tfmplayground.external_priors --lib tabicl \
        --prior_type mix_scm \
        --num_batches 1000 --batch_size 4 \
        --min_features 3 --max_features 3 \
@@ -107,12 +107,12 @@ python -m tfmplayground.priors --lib tabicl \
 ```
 which can afterwards be loaded via
 ```python
-from tfmplayground.priors.dataloader import PriorDumpDataLoader
+from tfmplayground.external_priors import PriorDumpDataLoader
 prior = PriorDumpDataLoader('tabicl_4k_50x3.h5', num_steps=20, batch_size=4, device='cpu')
 ```
 You can also just let it create the data on-the-fly via:
 ```python
-from tfmplayground.priors.dataloader import TabICLPriorDataLoader
+from tfmplayground.external_priors import TabICLPriorDataLoader
 prior = TabICLPriorDataLoader(
     num_steps=20,
     batch_size=4,
