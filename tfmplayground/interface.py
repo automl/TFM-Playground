@@ -11,7 +11,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 
-from tfmplayground.model import NanoTabPFNModel
+from tfmplayground.models.nanotabpfn import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
 
 

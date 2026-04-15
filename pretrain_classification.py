@@ -7,7 +7,7 @@ from torch import nn
 from tfmplayground.callbacks import ConsoleLoggerCallback, WandbLoggerCallback
 from tfmplayground.evaluation import TABARENA_TASKS, TOY_TASKS_CLASSIFICATION, get_openml_predictions
 from tfmplayground.interface import NanoTabPFNClassifier
-from tfmplayground.model import NanoTabPFNModel
+from tfmplayground.models.nanotabpfn import NanoTabPFNModel
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.train import train
 from tfmplayground.utils import get_default_device, set_randomness_seed
