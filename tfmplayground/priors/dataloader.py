@@ -114,6 +114,7 @@ class PriorDumpDataLoader(DataLoader):
                     x=x.to(self.device),
                     y=y.to(self.device),
                     target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
+                    # Warning! Current code assumes that single_eval_pos is the same for all datasets in the batch, which should be the case if the data was generated with batch_size_per_gp=batch_size. If this is not the case, we will just take the single_eval_pos of the first dataset in the batch, which may lead to unexpected behaviour.
                     single_eval_pos=single_eval_pos[0].item(),
                     # adj=adj.to(self.device),
                     adj = None,
