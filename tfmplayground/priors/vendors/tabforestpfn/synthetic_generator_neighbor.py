@@ -8,6 +8,8 @@ points, then discretizing predictions via quantile transform and random buckets.
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import QuantileTransformer
+import warnings
+warnings.filterwarnings('ignore', message='n_quantiles.*is set to n_samples')
 
 
 def synthetic_dataset_function_neighbor(

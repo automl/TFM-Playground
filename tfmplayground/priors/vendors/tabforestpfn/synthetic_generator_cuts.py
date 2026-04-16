@@ -7,6 +7,8 @@ absolute value, then classifying via argmax over random gamma weighting.
 
 import numpy as np
 from sklearn.preprocessing import QuantileTransformer
+import warnings
+warnings.filterwarnings('ignore', message='n_quantiles.*is set to n_samples')
 
 
 def synthetic_dataset_function_cuts(

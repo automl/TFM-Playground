@@ -8,6 +8,8 @@ then discretizing predictions via quantile transform and random bucket boundarie
 import numpy as np
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.tree import DecisionTreeRegressor
+import warnings
+warnings.filterwarnings('ignore', message='n_quantiles.*is set to n_samples')
 
 
 def synthetic_dataset_function_forest(
