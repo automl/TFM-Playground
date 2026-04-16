@@ -6,18 +6,18 @@ import random
 import numpy as np
 import torch
 
-from .dataloader import TabICLPriorDataLoader, TICLPriorDataLoader, TabPFNPriorDataLoader
+from .dataloader import TabICLPriorDataLoader, TICLPriorDataLoader, TabPFNPriorDataLoader, TabForestPFNPriorDataLoader
 from .real_data.episode_generator import RealDataPriorDataLoader
 from .utils import build_ticl_prior, build_tabpfn_prior, dump_prior_to_h5
 
 def main():
     parser = argparse.ArgumentParser(description="Dump prior data (TICL, TabICL, or TabPFN) into HDF5 format.")
-    parser.add_argument("--lib", type=str, required=True, choices=["ticl", "tabicl", "tabpfn", "real"], help="Which library to use for the prior.")
+    parser.add_argument("--lib", type=str, required=True, choices=["ticl", "tabicl", "tabpfn", "tabforest", "real"], help="Which library to use for the prior.")
     parser.add_argument("--save_path", type=str, required=False, help="Path to save the HDF5 file.")
     parser.add_argument("--num_batches", type=int, default=100, help="Number of batches to dump.")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for dumping.")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device to run prior sampling on.")
-    parser.add_argument("--prior_type", type=str, required=True, help="Type of prior to use. For TICL: mlp, gp, classification_adapter, boolean_conjunctions, step_function. For TabICL: mlp_scm, tree_scm, mix_scm, dummy. For TabPFN: mlp, gp, prior_bag.")
+    parser.add_argument("--prior_type", type=str, required=True, help="Type of prior to use. For TICL: mlp, gp, classification_adapter, boolean_conjunctions, step_function. For TabICL: mlp_scm, tree_scm, mix_scm, dummy. For TabPFN: mlp, gp, prior_bag. For TabForest: forest, neighbor, cuts.")
     parser.add_argument("--base_prior", type=str, default="mlp", choices=["mlp", "gp"], help="Base regression prior for composite priors like classification_adapter.")
     parser.add_argument("--min_features", type=int, default=1, help="Minimum number of input features.")
     parser.add_argument("--max_features", type=int, default=100, help="Maximum number of input features.")
@@ -89,6 +89,18 @@ def main():
             fallback_pool_file=args.fallback_pool,
         )
         args.batch_size = real_batch_size  # override batch size for dumping
+    elif args.lib == "tabforest":
+        prior = TabForestPFNPriorDataLoader(
+            prior_type=args.prior_type,
+            num_steps=args.num_batches,
+            batch_size=args.batch_size,
+            num_datapoints_max=args.max_seq_len,
+            num_features=args.max_features,
+            max_num_classes=args.max_classes,
+            device=device,
+            min_eval_pos=args.min_eval_pos,
+            min_features=args.min_features,
+        )
     else:  # tabicl
         prior = TabICLPriorDataLoader(
             num_steps=args.num_batches,

@@ -119,6 +119,22 @@ available_priors:
       prior_type: "prior_bag"
       description: "TabPFN Prior Bag (ensemble)"
 
+    # TabForestPFN priors (classification-only, vendored)
+    tabforest_forest:
+      lib: "tabforest"
+      prior_type: "forest"
+      description: "TabForestPFN Decision Tree Forest prior"
+
+    tabforest_neighbor:
+      lib: "tabforest"
+      prior_type: "neighbor"
+      description: "TabForestPFN KNN Neighbor prior"
+
+    tabforest_cuts:
+      lib: "tabforest"
+      prior_type: "cuts"
+      description: "TabForestPFN Random Cuts prior"
+
 # Real data prior settings (used when lib=real)
 real_data:
   cache_dir: "tfmplayground/priors/real_data/data/cache"

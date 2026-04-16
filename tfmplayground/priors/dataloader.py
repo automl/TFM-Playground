@@ -1,6 +1,7 @@
 """Data loading utilities for tabular priors."""
 
 from typing import Callable, Dict, Iterator, Union
+import random
 
 import h5py
 import torch
@@ -9,6 +10,16 @@ from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 # import here for future use & cleaner imports/it already handles type conversions
 from tabpfn_prior import TabPFNPriorDataLoader
 from torch.utils.data import DataLoader
+
+import numpy as np
+
+from .config import get_tabforest_prior_config
+from .vendors.tabforestpfn import (
+    synthetic_dataset_generator_forest,
+    synthetic_dataset_generator_neighbor,
+    synthetic_dataset_generator_cut,
+)
+
 
 
 class PriorDataLoader(DataLoader):
@@ -229,6 +240,107 @@ class TICLPriorDataLoader(DataLoader):
 
     def __iter__(self):
         return (self.ticl_to_ours(batch) for batch in self.pd)
+
+    def __len__(self):
+        return self.num_steps
+
+
+_TABFOREST_GENERATORS = {
+    "forest": synthetic_dataset_generator_forest,
+    "neighbor": synthetic_dataset_generator_neighbor,
+    "cuts": synthetic_dataset_generator_cut,
+}
+
+
+class TabForestPFNPriorDataLoader(DataLoader):
+    """DataLoader sampling synthetic prior data on-the-fly from vendored TabForestPFN generators.
+
+    These generators produce classification-only data.  Each call to the
+    underlying generator yields a single ``(x, y)`` numpy pair.  This loader
+    collects ``batch_size`` such pairs, pads / truncates to the configured
+    sequence length and feature count, picks a random ``single_eval_pos``,
+    and returns the standard dict expected by the training loop.
+
+    Args:
+        prior_type (str): Generator variant – ``'forest'``, ``'neighbor'``, or ``'cuts'``.
+        num_steps (int): Number of batches per epoch.
+        batch_size (int): Number of functions per batch.
+        num_datapoints_max (int): Sequence length (``n_samples`` passed to the generator).
+        num_features (int): Maximum feature dimensionality (used for the generator's ``max_features``).
+        max_num_classes (int): Upper bound on class count passed to the generator.
+        device (torch.device): Target device for tensors.
+        min_eval_pos (int): Minimum evaluation position in the sequence.
+        min_features (int): Minimum number of features (passed to the generator).
+    """
+
+    def __init__(
+        self,
+        prior_type: str,
+        num_steps: int,
+        batch_size: int,
+        num_datapoints_max: int,
+        num_features: int,
+        max_num_classes: int,
+        device: torch.device,
+        min_eval_pos: int = 10,
+        min_features: int = 1,
+    ):
+        if prior_type not in _TABFOREST_GENERATORS:
+            raise ValueError(
+                f"Unsupported TabForestPFN prior type: {prior_type}. "
+                f"Choose from {list(_TABFOREST_GENERATORS)}"
+            )
+
+        self.prior_type = prior_type
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.num_datapoints_max = num_datapoints_max
+        self.num_features = num_features
+        self.max_num_classes = max_num_classes
+        self.device = device
+        self.min_eval_pos = min_eval_pos
+
+        # build generator kwargs from config defaults
+        gen_kwargs = get_tabforest_prior_config(prior_type)
+        gen_kwargs.update(
+            min_features=min_features,
+            max_features=num_features,
+            n_samples=num_datapoints_max,
+            max_classes=max_num_classes,
+        )
+
+        gen_factory = _TABFOREST_GENERATORS[prior_type]
+        self._gen = gen_factory(**gen_kwargs)
+
+    def _generate_batch(self):
+        """Sample ``batch_size`` episodes from the generator and stack them."""
+        xs, ys = [], []
+        for _ in range(self.batch_size):
+            x_np, y_np = next(self._gen)
+            # x_np: (n_samples, n_features_actual),  y_np: (n_samples,)
+            x_t = torch.from_numpy(np.asarray(x_np, dtype=np.float32))
+            # pad features to num_features (generators randomize n_features per call)
+            n_feat_actual = x_t.shape[1]
+            if n_feat_actual < self.num_features:
+                pad = torch.zeros(x_t.shape[0], self.num_features - n_feat_actual)
+                x_t = torch.cat([x_t, pad], dim=1)
+            xs.append(x_t)
+            ys.append(torch.from_numpy(np.asarray(y_np, dtype=np.float32)))
+
+        x = torch.stack(xs, dim=0)  # (B, seq, num_features)
+        y = torch.stack(ys, dim=0)  # (B, seq)
+
+        single_eval_pos = random.randint(self.min_eval_pos, max(self.min_eval_pos, x.shape[1] - 1))
+
+        return dict(
+            x=x.to(self.device),
+            y=y.to(self.device),
+            target_y=y.to(self.device),
+            single_eval_pos=single_eval_pos,
+        )
+
+    def __iter__(self):
+        return iter(self._generate_batch() for _ in range(self.num_steps))
 
     def __len__(self):
         return self.num_steps
