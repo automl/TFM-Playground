@@ -151,6 +151,7 @@ class TabICLPriorDataLoader(DataLoader):
         scm_fixed_hp: Dict[str, Any],
         scm_sampled_hp: Dict[str, Any],
         return_extra_info: bool,
+        **prior_dataset_kwargs,
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -172,6 +173,7 @@ class TabICLPriorDataLoader(DataLoader):
             max_seq_len=num_datapoints_max,
             scm_fixed_hp=scm_fixed_hp,
             scm_sampled_hp=scm_sampled_hp,
+            **prior_dataset_kwargs,
         )
 
     def tabicl_to_ours(self, d):
@@ -191,16 +193,19 @@ class TabICLPriorDataLoader(DataLoader):
         if self.return_extra_info:
             scms = []
             for prior in priors:
-                adj = prior.adj_full.numpy()
-                adj = (np.abs(adj) > 0.)
+                adj_full = prior.adj_full.numpy()
+                adj_full = (np.abs(adj_full) > 0.)
                 indices = (idxs_x, idxs_y) = [idx_i.numpy() for idx_i in prior.indices]
                 width_layers = np.concatenate([[prior.num_causes], [prior.hidden_dim] * prior.num_layers])
 
-                scm = get_graph(adj, width_layers, idxs_x, idxs_y)
+                scm = get_graph(adj_full, width_layers, idxs_x, idxs_y)
+                assert nx.is_isomorphic(scm, prior.graph_full), "SCM graph structure does not match adjacency matrix!"
+
                 scms.append(scm)
             extra_info = dict(
                 scm=scms,
-                # adj=adj.to(self.device),
+                adj=prior.adj.to(self.device),
+                density = prior.density,
                 prior=priors,
             )
         else:
