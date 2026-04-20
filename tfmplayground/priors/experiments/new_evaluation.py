@@ -11,11 +11,12 @@ TOY_TASKS_REGRESSION = [
 ]
 
 TOY_TASKS_CLASSIFICATION = [
-    59,   # iris
-    2382, # wine
-    9946, # breast_cancer
+    146818, 
+    23, 
+    31, 
+    146227, 
+    14969
 ]
-
 # we hardcode the list here because even if the tasks are cached
 # openml.study.get_suite("tabarena-v0.1") might fail if there are connection issues
 TABARENA_TASKS = [
