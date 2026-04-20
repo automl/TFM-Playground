@@ -118,3 +118,34 @@ def get_tabpfn_prior_config(prior_type: str) -> dict:
         }
     else:
         raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")
+
+
+def get_tabforest_prior_config(prior_type: str) -> dict:
+    """Return the default kwargs for TabForestPFN generators.
+    
+    These generators are vendored from TabForestPFN (den Breejen et al.)
+    and produce classification-only synthetic tabular data.
+    
+    Args:
+        prior_type: Type of TabForestPFN prior ('forest', 'neighbor', 'cuts')
+    """
+    
+    if prior_type == "forest":
+        return {
+            'base_size': 1000,       # number of random training points for the decision tree
+            'n_estimators': 1,       # number of trees (unused in current impl, kept for API compat)
+            'min_depth': 1,          # minimum tree depth
+            'max_depth': 25,         # maximum tree depth
+            'categorical_x': True,   # whether to randomly convert some features to categorical
+        }
+    elif prior_type == "neighbor":
+        return {
+            'min_neighbors': 2,      # minimum number of anchor points for KNN
+            'max_neighbors': 2048,   # maximum number of anchor points for KNN
+        }
+    elif prior_type == "cuts":
+        return {
+            'n_cuts': 1000,          # number of random hyperplane cuts
+        }
+    else:
+        raise ValueError(f"Unsupported TabForestPFN prior type: {prior_type}")

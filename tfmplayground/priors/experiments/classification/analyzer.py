@@ -159,7 +159,18 @@ class ClassificationDataAnalyzer(DataAnalyzer):
                     continue
 
                 X_nc = X_sample[:, non_constant]
-                f_vals, p_vals = f_classif(X_nc, y_sample)
+                
+                import warnings
+                with warnings.catch_warnings():
+                    # synthetic priors (like tabforest) often generate zero-variance sets 
+                    # for identical classes, pushing MSW=0. Scikit-learn will warn and return inf.
+                    warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
+                    warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value")
+
+                    f_vals, p_vals = f_classif(X_nc, y_sample)
+                
+                # cap the infinite F-scores to a numerical bound
+                f_vals = np.nan_to_num(f_vals, nan=0.0, posinf=1e6, neginf=0.0)
                 f_scores.extend(f_vals)
             except Exception:
                 continue

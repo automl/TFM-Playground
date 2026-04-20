@@ -6,6 +6,7 @@ from .dataloader import (
     TabICLPriorDataLoader,
     TICLPriorDataLoader,
     TabPFNPriorDataLoader,
+    TabForestPFNPriorDataLoader,
 )
 from .utils import build_ticl_prior, build_tabpfn_prior
 
@@ -16,6 +17,7 @@ __all__ = [
     "TabICLPriorDataLoader",
     "TICLPriorDataLoader",
     "TabPFNPriorDataLoader",
+    "TabForestPFNPriorDataLoader",
     "build_ticl_prior",
     "build_tabpfn_prior",
 ]
