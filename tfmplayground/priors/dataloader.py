@@ -204,7 +204,7 @@ class TabICLPriorDataLoader(DataLoader):
                 scms.append(scm)
             extra_info = dict(
                 scm=scms,
-                adj=prior.adj.to(self.device),
+                adj=[prior.adj.to(self.device)],
                 density = prior.density,
                 prior=priors,
             )
