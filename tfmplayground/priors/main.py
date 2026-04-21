@@ -29,9 +29,9 @@ def main():
     parser.add_argument("--torch_seed", type=int, default=None, help="Random seed for PyTorch.")
     # real data prior args
     parser.add_argument("--cache_dir", type=str, default=None, help="Path to cached .npz datasets (required for --lib real).")
-    parser.add_argument("--train_pool", type=str, default=None, help="“Path to training pool file. In mode=only, use the pool that matches task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. In mode=mixed, you can use train_pool_all.txt.”")
-    parser.add_argument("--mode", type=str, default="only", choices=["only", "mixed"], help="Sampling mode: 'only' uses original target, 'mixed' allows any column matching task type.")
-    parser.add_argument("--fallback_pool", type=str, default=None, help="“Optional fallback pool used only in mode=mixed. Should match task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. If omitted and no suitable column is found, episode generation raises an error.”")
+    parser.add_argument("--train_pool", type=str, default=None, help="Path to training pool file. In mode=default_targets, use the pool that matches task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. In mode=random_targets, you can use train_pool_all.txt.")
+    parser.add_argument("--mode", type=str, default="default_targets", choices=["default_targets", "random_targets"], help=("Sampling mode: 'default_targets' uses original target, 'random_targets' allows any column matching task type."))
+    parser.add_argument("--fallback_pool", type=str, default=None, help="Optional fallback pool used only in mode=random_targets. Should match task_type: train_pool_classification.txt for classification, train_pool_regression.txt for regression. If omitted and no suitable column is found, episode generation raises an error.")
 
     args = parser.parse_args()
 
@@ -74,12 +74,13 @@ def main():
         if not args.cache_dir or not args.train_pool:
             parser.error("--cache_dir and --train_pool are required for --lib real")
         real_batch_size = 1  # enforce batch_size=1 for real data prior
+        real_min_seq_len = args.min_seq_len if args.min_seq_len is not None else min(64, args.max_seq_len)
         prior = RealDataPriorDataLoader(
             cache_dir=args.cache_dir,
             train_pool_file=args.train_pool,
             num_steps=args.num_batches,
-            batch_size= real_batch_size,
-            min_seq_len=args.min_seq_len or 64,
+            batch_size=real_batch_size,
+            min_seq_len=real_min_seq_len,
             max_seq_len=args.max_seq_len,
             max_features=args.max_features,
             device=device,

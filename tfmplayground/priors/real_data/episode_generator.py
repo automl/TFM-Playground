@@ -24,13 +24,11 @@ What this module does:
 - Returns torch tensors ready for training
 
 Supported modes:
-    classification_only
-        Uses each dataset’s original classification target.
+    default_targets
+        Uses each dataset's original target column.
+        The task type is controlled by `task_type`.
 
-    regression_only
-        Uses each dataset’s original regression target.
-
-    mixed_random_target
+    random_targets
         Randomly selects a column matching the requested task type.
         Optionally falls back to a curated fallback pool if needed.
 
@@ -44,7 +42,7 @@ Example usage:
         max_features=100,
         device=torch.device("cuda"),
         task_type="classification",
-        mode="mixed"
+        mode="random_targets"
     )
 
 Output per iteration:
@@ -545,7 +543,7 @@ class RealDataPriorDataLoader:
         max_features: int,
         device: torch.device,
         task_type: str,
-        mode: str = "only",
+        mode: str = "default_targets",
         batch_size: int = 1, # required for model's loss function otherwise padding effects the loss calculation
         base_seed: int = 0,
         npz_cache_size: int = 16,
@@ -554,10 +552,15 @@ class RealDataPriorDataLoader:
     ):
         # support 2 modes: randomly sampling the target column until it is not degenerate or 
         # sampling the original target column
-        if mode == "only":
+        if mode == "default_targets":
             internal_task_mode = f"{task_type}_only"
-        else:  # mode == "mixed"
+        elif mode == "random_targets":
             internal_task_mode = "mixed_random_target"
+        else:
+            raise ValueError(
+                "Unknown mode '{mode}'. Must be one of "
+                "{'default_targets', 'random_targets'}.".format(mode=mode)
+            )
 
         self.config = EpisodeConfig(
             cache_dir=cache_dir,

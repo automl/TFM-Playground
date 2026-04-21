@@ -87,11 +87,11 @@ def generate_prior_data(
     # append real-data-specific args
     if lib == "real":
         real_cfg = config['real_data']
-        sampling_mode = (prior_info or {}).get('sampling_mode', 'only')
+        sampling_mode = (prior_info or {}).get('sampling_mode', 'default_targets')
         task_type = "classification" if max_classes > 0 else "regression"
 
         # pick the right pool for the sampling_mode
-        if sampling_mode == "mixed":
+        if sampling_mode == "random_targets":
             train_pool = real_cfg['pools']['all']
             fallback_pool = real_cfg['pools'][task_type]
         else:

@@ -15,20 +15,24 @@ data_generation:
 # Note: TabPFN priors support both regression and classification
 #       TICL: mlp/gp are regression-only, others are classification-only
 #       TabICL: classification-only
+#       TabForestPFN: classification-only
+#       Real data prior supports both, with two sampling modes:
+#         - default_targets: uses original target column (train_pool_classification.txt for classification, train_pool_regression.txt for regression)
+#         - random_targets: randomly selects any column matching the task type from train_pool_all.txt, with optional fallback to the curated pools if no suitable column is found
 available_priors:
   regression:
     # Real data prior
-    real_only:
+    real_default_targets:
       lib: "real"
-      prior_type: "mlp"
-      sampling_mode: "only"
-      description: "Real data prior (only mode, original target)"
+      prior_type: "real"
+      sampling_mode: "default_targets"
+      description: "Real data prior (default_targets mode, original target)"
 
-    real_mixed:
+    real_random_targets:
       lib: "real"
-      prior_type: "mlp"
-      sampling_mode: "mixed"
-      description: "Real data prior (mixed mode, any matching target column)"
+      prior_type: "real"
+      sampling_mode: "random_targets"
+      description: "Real data prior (random_targets mode, any matching target column)"
 
     # TICL regression priors
     ticl_gp:
@@ -59,17 +63,17 @@ available_priors:
 
   classification:
     # Real data prior
-    real_only:
+    real_default_targets:
       lib: "real"
-      prior_type: "mlp"
-      sampling_mode: "only"
-      description: "Real data prior (only mode, original target)"
+      prior_type: "real"
+      sampling_mode: "default_targets"
+      description: "Real data prior (default_targets mode, original target)"
 
-    real_mixed:
+    real_random_targets:
       lib: "real"
-      prior_type: "mlp"
-      sampling_mode: "mixed"
-      description: "Real data prior (mixed mode, any matching target column)"
+      prior_type: "real"
+      sampling_mode: "random_targets"
+      description: "Real data prior (random_targets mode, any matching target column)"
 
     # TabICL (classification-only)
     tabicl_mlp_scm:
