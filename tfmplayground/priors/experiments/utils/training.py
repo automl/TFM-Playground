@@ -14,7 +14,7 @@ import torch
 from pfns.bar_distribution import FullSupportBarDistribution
 from torch import nn
 
-from tfmplayground.evaluation import (
+from tfmplayground.priors.experiments.new_evaluation import (
     TOY_TASKS_CLASSIFICATION,
     TOY_TASKS_REGRESSION,
 )
