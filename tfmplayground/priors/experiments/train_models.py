@@ -20,7 +20,10 @@ from tfmplayground.priors.experiments.utils.training import (
 )
 from tfmplayground.priors.experiments.utils.general import discover_h5_files, load_config
 
-from tfmplayground.evaluation import TOY_TASKS_CLASSIFICATION, TOY_TASKS_REGRESSION
+from tfmplayground.priors.experiments.new_evaluation import (
+    TOY_TASKS_CLASSIFICATION,
+    TOY_TASKS_REGRESSION,
+)
 from tfmplayground.priors import PriorDumpDataLoader
 from tfmplayground.utils import get_default_device, set_randomness_seed
 
