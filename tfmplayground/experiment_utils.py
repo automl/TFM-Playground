@@ -11,12 +11,14 @@ import seaborn as sns
 import numpy as np
 import openml
 import pandas as pd
+from tqdm import tqdm
 from openml.tasks import TaskType
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, FunctionTransformer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from sklearn.impute import SimpleImputer
 
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
@@ -50,9 +52,11 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
     num_transformer = Pipeline([
         ("to_pandas", FunctionTransformer(lambda x: pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x)), # to apply pd.to_numeric of pandas
         ("to_numeric", FunctionTransformer(lambda x: x.apply(pd.to_numeric, errors='coerce').to_numpy())), # in case numeric columns are stored as strings
+        ("imputer", SimpleImputer(strategy="mean")),
     ])
     cat_transformer = Pipeline([
         ('encoder', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=np.nan)),
+        ("imputer", SimpleImputer(strategy="most_frequent")),
     ])
 
     preprocessor = ColumnTransformer(
@@ -64,13 +68,36 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
     return preprocessor
 
 def get_openml_datasets(
-        max_features_eval: int = 10, 
-        new_instances_eval: int = 200, 
-        target_classes_filter: int = 2,
-        **kwargs,
-        ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        max_features_eval: int | None,
+        new_instances_eval: int | None,
+        target_classes_filter: int | None,
+        eval_subsample_features: int | None,
+        eval_subsample_samples: int | None,
+        seed: int = 0,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """
-    Load OpenML tabarena datasets with at most `max_features` features and subsampled (stratified) to `new_instances` instances.
+    Load OpenML tabarena datasets with optional feature and row subsampling.
+
+    Parameters
+    ----------
+    max_features_eval : int | None
+        Maximum number of features a dataset may have to be included. None = no filter.
+    new_instances_eval : int | None
+        Maximum number of instances to keep via stratified subsampling. None = no subsampling.
+    target_classes_filter : int | None
+        Maximum number of target classes (0 = regression). None = no filter.
+    eval_subsample_features : int | None
+        If set and the dataset has more features than this value, randomly
+        subsample down to this many features (seeded).
+    eval_subsample_samples : int | None
+        If set and the dataset has more rows than this value, stratified-
+        subsample down to this many rows (seeded).
+    seed : int
+        Global random seed used for all stochastic operations.
+
+    Returns
+    -------
+    dict mapping dataset name -> (X, y) as numpy arrays.
     """
     task_ids = [
         363612, 363613, 363614, 363615, 363616, 363618, 363619, 363620,
@@ -79,50 +106,76 @@ def get_openml_datasets(
         363676, 363677, 363678, 363679, 363681, 363682, 363683, 363684,
         363685, 363686, 363689, 363691, 363693, 363694, 363696, 363697,
         363698, 363699, 363700, 363702, 363704, 363705, 363706, 363707,
-        363708, 363711, 363712
-    ] # TabArena v0.1
+        363708, 363711, 363712,
+    ]  # TabArena v0.1
 
-    classification: bool = target_classes_filter > 0
+    classification: bool = target_classes_filter is None or target_classes_filter > 0
 
     datasets = {}
-    for task_id in task_ids:
+    for task_counter, task_id in enumerate(task_ids):
         task = openml.tasks.get_task(task_id, download_splits=False)
+
+        # ── task-type filter ────────────────────────────────────────────────
         if classification and task.task_type_id != TaskType.SUPERVISED_CLASSIFICATION:
-            continue # skip task, only classification
+            continue
         if not classification and task.task_type_id != TaskType.SUPERVISED_REGRESSION:
-            continue # skip task, only regression
+            continue
+
         dataset = task.get_dataset(download_data=False)
 
-        if dataset.qualities["NumberOfFeatures"] > max_features_eval or (dataset.qualities["NumberOfClasses"] > target_classes_filter) or dataset.qualities["PercentageOfInstancesWithMissingValues"] > 0 or dataset.qualities["MinorityClassPercentage"] < 2.5:
+        # ── quality filter ──────────────────────────────────────────────────
+        q = dataset.qualities
+        if max_features_eval is not None and q["NumberOfFeatures"] > max_features_eval:
             continue
+        if new_instances_eval is not None and q["NumberOfInstances"] > new_instances_eval:
+            continue
+        if target_classes_filter is not None and q["NumberOfClasses"] > target_classes_filter:
+            continue
+        if dataset.qualities["MinorityClassPercentage"] <= 2.5:
+            continue
+
         X, y, categorical_indicator, attribute_names = dataset.get_data(
             target=task.target_name, dataset_format="dataframe"
         )
-        y_stratify = y if classification else pd.qcut(y, q=5, labels=False, duplicates='drop')
-        if new_instances_eval < len(y):
-            _, X_sub, _, y_sub = train_test_split(
+
+        # ── feature subsampling ─────────────────────────────────────────────
+        len_features = X.shape[1]
+        if eval_subsample_features is not None and len_features > eval_subsample_features:
+            rng = np.random.default_rng(seed)
+            feature_choices = rng.choice(len_features, size=eval_subsample_features, replace=False)
+            X = X.iloc[:, feature_choices]
+
+        # ── row subsampling ─────────────────────────────────────────────────
+        if eval_subsample_samples is not None and eval_subsample_samples < len(y):
+            y_stratify_sub = y if classification else pd.qcut(y, q=5, labels=False, duplicates="drop")
+            _, X, _, y = train_test_split(
                 X, y,
-                test_size=new_instances_eval,
-                stratify=y_stratify,
-                random_state=0,
+                test_size=eval_subsample_samples,
+                stratify=y_stratify_sub,
+                random_state=seed,
             )
-        else:
-            X_sub = X
-            y_sub = y
-        
-        X = X_sub.to_numpy(copy=True)
-        y = y_sub.to_numpy(copy=True)
+            X = X.reset_index(drop=True)
+            y = y.reset_index(drop=True)
+
+        # ── preprocessing & encoding ────────────────────────────────────────
+        X = X.to_numpy(copy=True)
+        y = y.to_numpy(copy=True)
+
         if classification:
             label_encoder = LabelEncoder()
             y = label_encoder.fit_transform(y)
         else:
-            label_encoder = StandardScaler() # for regression we standardize the target
-            y = label_encoder.fit_transform(y.reshape(-1, 1)).reshape(-1)
+            target_scaler = StandardScaler()
+            y = target_scaler.fit_transform(y.reshape(-1, 1)).reshape(-1)
 
         preprocessor = get_feature_preprocessor(X)
         X = preprocessor.fit_transform(X)
+
         datasets[dataset.name] = (X, y)
+
+    task_counter += 1
     return datasets
+
 
 """
 =================== EVALUATION ===================
@@ -134,7 +187,7 @@ def eval_model(model, datasets, classification: bool):
     _skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
     metrics = {}
     avg_metrics = {}
-    for dataset_name, (X,y)  in datasets.items():
+    for dataset_name, (X, y) in tqdm(datasets.items(), desc=f"Evaluating {model}", total=len(datasets), leave=False):
         targets = []
         probabilities = []
         
@@ -290,10 +343,8 @@ def plot_run_grid(runs: list[pd.DataFrame], baselines: pd.DataFrame = None, base
     return fig, axs
 
 def get_baseline_results(
+    open_ml_datasets_kwargs: dict,
     num_seeds: int = 1,
-    max_features: int = 10,
-    new_instances: int = 200,
-    target_classes_filter: int = 2,
     include_tabpfn: bool = False,
 ) -> Tuple[Dict[str, Tuple[torch.Tensor, torch.Tensor]], pd.DataFrame, pd.DataFrame]:
     """
@@ -301,9 +352,9 @@ def get_baseline_results(
     """
     NUM_SEEDS = num_seeds
     # NUM_SEEDS = 20 # If you want to reproduce the paper results, use 20 seeds
-    DATASETS = get_openml_datasets(max_features=max_features, new_instances=new_instances, target_classes_filter=target_classes_filter)
+    datasets = get_openml_datasets(**open_ml_datasets_kwargs)
 
-    classification = target_classes_filter > 0
+    classification = open_ml_datasets_kwargs['target_classes_filter'] > 0
 
     if include_tabpfn:
         raise NotImplementedError
@@ -323,18 +374,18 @@ def get_baseline_results(
             "Random Forest": [RandomForestClassifier(random_state=i) for i in range(NUM_SEEDS)],
             "K-Nearest Neighbors": [KNeighborsClassifier()],
             "Decision Tree": [DecisionTreeClassifier(random_state=i) for i in range(NUM_SEEDS)],
-            "Linear" : [LogisticRegression(max_iter=1000) for i in range(NUM_SEEDS)],
+            "Linear" : [LogisticRegression(max_iter=1000, ) for i in range(NUM_SEEDS)],
         }
     else:
         baseline_models = {
             # "TabPFN v2": [TabPFNRegressor(random_state=i) for i in range(NUM_SEEDS)],
-            "Random Forest": [RandomForestRegressor(random_state=i) for i in range(NUM_SEEDS)],
-            "K-Nearest Neighbors": [KNeighborsRegressor()],
+            # "Random Forest": [RandomForestRegressor(random_state=i) for i in range(NUM_SEEDS)],
+            # "K-Nearest Neighbors": [KNeighborsRegressor()],
             "Decision Tree": [DecisionTreeRegressor(random_state=i) for i in range(NUM_SEEDS)],
-            "Linear" : [LinearRegression()],
+            # "Linear" : [LinearRegression()],
         }
 
-    baseline_models_eval = {name: [eval_model(model, datasets=DATASETS, classification=classification)[0] for model in models] for name, models in baseline_models.items()}
+    baseline_models_eval = {name: [eval_model(model, datasets=datasets, classification=classification)[0] for model in models] for name, models in baseline_models.items()}
 
     def apply_aggregation(eval_results: dict, func=np.mean):
         aggregated_result = {}
@@ -355,4 +406,4 @@ def get_baseline_results(
         name: apply_aggregation(models, np.std) for name, models in baseline_models_eval.items()
     }).T
 
-    return DATASETS, baselines, baselines_std
+    return datasets, baselines, baselines_std
