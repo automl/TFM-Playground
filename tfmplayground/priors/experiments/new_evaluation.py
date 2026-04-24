@@ -14,8 +14,7 @@ TOY_TASKS_CLASSIFICATION = [
     146818, 
     23, 
     31, 
-    146227, 
-    14969
+    146227
 ]
 # we hardcode the list here because even if the tasks are cached
 # openml.study.get_suite("tabarena-v0.1") might fail if there are connection issues
