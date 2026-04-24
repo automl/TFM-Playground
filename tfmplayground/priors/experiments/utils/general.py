@@ -7,7 +7,6 @@ Includes:
 - Plot styling and saving
 """
 
-import itertools
 import re
 from contextlib import contextmanager
 from pathlib import Path
@@ -158,12 +157,21 @@ def merge_variable_width_features(feature_arrays: List[np.ndarray]) -> np.ndarra
 
 # plotting utilities
 def get_prior_colors(prior_names: List[str]) -> Dict[str, str]:
-    """Map prior names to colors using tab10, cycling if there are >10 priors."""
-    base_colors = plt.cm.tab10.colors
+    """Map prior names to a deterministic palette with enough distinct colors."""
+    base_colors = np.vstack(
+        [
+            plt.cm.tab20(np.linspace(0, 1, 20)),
+            plt.cm.tab20b(np.linspace(0, 1, 20)),
+            plt.cm.tab20c(np.linspace(0, 1, 20)),
+        ]
+    )
 
-    # cycle through the 10 base colors for however many priors we have
-    color_iter = itertools.cycle(base_colors)
-    colors = [next(color_iter) for _ in prior_names]
+    n = len(prior_names)
+    if n <= len(base_colors):
+        colors = base_colors[:n]
+    else:
+        extra = plt.cm.hsv(np.linspace(0, 1, n - len(base_colors) + 1))[:-1]
+        colors = np.vstack([base_colors, extra])
 
     hex_colors = [mpl.colors.rgb2hex(c) for c in colors]
     return dict(zip(prior_names, hex_colors))
