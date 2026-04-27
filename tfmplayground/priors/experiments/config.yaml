@@ -5,6 +5,7 @@ data_generation:
   num_batches: 250000
   batch_size: 1
   max_seq_len: 200 #500
+  min_features: 10
   max_features: 10 #25
   min_eval_pos: 10
   device: "cuda"  # cpu or cuda

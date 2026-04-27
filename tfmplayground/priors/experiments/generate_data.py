@@ -76,6 +76,7 @@ def generate_prior_data(
         "--num_batches", str(effective_num_batches),
         "--batch_size", str(effective_batch_size),
         "--max_seq_len", str(gen_config['max_seq_len']),
+        "--min_features", str(gen_config['min_features']),
         "--max_features", str(gen_config['max_features']),
         "--min_eval_pos", str(gen_config['min_eval_pos']),
         "--device", gen_config['device'],
