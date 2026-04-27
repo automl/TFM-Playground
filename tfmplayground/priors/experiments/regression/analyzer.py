@@ -1,10 +1,11 @@
 """Analyzer for regression data generated from synthetic priors."""
 
 import os
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import numpy as np
 from scipy import stats
+from sklearn import config_context
 from sklearn.feature_selection import mutual_info_regression
 
 from tfmplayground.priors.experiments.base_analyzer import DataAnalyzer
@@ -119,23 +120,12 @@ class RegressionDataAnalyzer(DataAnalyzer):
         return target_stats
     
 
-    def analyze_target_feature_relationships(self, n_samples: int = 100) -> Dict:
+    def analyze_target_feature_relationships(self) -> Dict:
         """Analyze relationships between features and targets.
-        
-        Args:
-            n_samples: Number of samples to analyze (analyzing all is costly)
-            
+
         Returns:
             Dictionary with relationship statistics
         """
-
-        # sample n_samples to analyze
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(n_samples, len(self.data["X"])), 
-            replace=False
-        )
-
         # measures linear correlation (Pearson)
         # close to 1 or -1 means strong linear relationship 
         pearson_corrs = []
@@ -143,7 +133,7 @@ class RegressionDataAnalyzer(DataAnalyzer):
         spearman_corrs = []
 
         # get rid of the padding
-        for i in sample_indices:
+        for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
             n_features = self.data["num_features"][i]
             
@@ -168,6 +158,9 @@ class RegressionDataAnalyzer(DataAnalyzer):
                 if not np.isnan(spearman_corr):
                     spearman_corrs.append(spearman_corr)
         
+        if len(pearson_corrs) == 0 or len(spearman_corrs) == 0:
+            return {}
+
         pearson_corrs = np.array(pearson_corrs)
         spearman_corrs = np.array(spearman_corrs)
         
@@ -206,26 +199,26 @@ class RegressionDataAnalyzer(DataAnalyzer):
         return rel_stats
     
 
-    def analyze_mutual_information(self, n_samples: int = 100) -> Dict:
+    def analyze_mutual_information(self) -> Dict:
         """Analyze mutual information between features and targets.
         
         Mutual information captures both linear and nonlinear dependencies.
-        
-        Args:
-            n_samples: Number of samples to analyze
-            
+
         Returns:
             Dictionary with mutual information statistics
         """
         mi_scores = []
-        
-        # sample n_samples to analyze
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(n_samples, len(self.data["X"])), 
-            replace=False
+        n_samples = int(self.analysis_config["n_samples_mi"])
+        if n_samples <= 0:
+            return {}
+
+        rng = np.random.default_rng(self.random_state)
+        sample_indices = rng.choice(
+            len(self.data["X"]),
+            min(n_samples, len(self.data["X"])),
+            replace=False,
         )
-        
+
         for i in sample_indices:
             n_points = self.data["num_datapoints"][i]
             n_features = self.data["num_features"][i]
@@ -242,7 +235,14 @@ class RegressionDataAnalyzer(DataAnalyzer):
             # basically the KL divergence between the joint distribution p(xi, y) and the product of marginals p(xi)p(y).
             # MI is larger if knowing feature xi reduces uncertainty about y more
             try:
-                mi = mutual_info_regression(X_sample, y_sample, random_state=42)
+                X_sample = np.ascontiguousarray(X_sample, dtype=np.float64)
+                y_sample = np.ascontiguousarray(y_sample, dtype=np.float64)
+                with config_context(enable_cython_pairwise_dist=False):
+                    mi = mutual_info_regression(
+                        X_sample,
+                        y_sample,
+                        random_state=self.random_state,
+                    )
                 # this returns an array of length n_features
                 mi_scores.extend(mi)
             except Exception:
@@ -268,26 +268,16 @@ class RegressionDataAnalyzer(DataAnalyzer):
         return mi_stats
     
     
-    def analyze_target_scale_and_deviation(self, n_samples: int = 100) -> Dict:
+    def analyze_target_scale_and_deviation(self) -> Dict:
         """Analyze the target scale and deviation of the regression functions.
-        
-        Args:
-            n_samples: Number of samples to analyze
-            
+
         Returns:
             Dictionary with deviation metrics
         """
         target_deviations = []
         target_ranges = []
-        
-        # sample n_samples to analyze
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(n_samples, len(self.data["X"])), 
-            replace=False
-        )
-        
-        for i in sample_indices:
+
+        for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
             y_sample = self.data["y"][i, :n_points]
             
@@ -305,30 +295,20 @@ class RegressionDataAnalyzer(DataAnalyzer):
         return deviation_stats
     
     
-    def analyze_noise_characteristics(self, n_samples: int = 100) -> Dict:
+    def analyze_noise_characteristics(self) -> Dict:
         """Analyze the added noise in the regression functions.
         
         We approximate the noise level by fitting a simple linear model to each dataset
         and treating the remaining residual variance (the part the model cannot explain)
         as an estimate of noise.
-                
-        Args:
-            n_samples: Number of samples to analyze
-            
+
         Returns:
             Dictionary with noise statistics
         """
-
         noise_estimates = []
         r2_estimates = []
-        
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(n_samples, len(self.data["X"])), 
-            replace=False
-        )
-        
-        for i in sample_indices:
+
+        for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
             n_features = self.data["num_features"][i]
             
@@ -378,6 +358,44 @@ class RegressionDataAnalyzer(DataAnalyzer):
                 noise_stats["median_linear_r2"] = float(np.median(r2_estimates))
         
         return noise_stats
+
+    def prior_summary_vector(self) -> Tuple[np.ndarray, List[str]]:
+        """Build a fixed-length numeric summary vector for this regression prior."""
+        target_stats = self.analyze_target_distribution()
+        feature_stats = self.analyze_feature_distributions()
+        rel_stats = self.analyze_target_feature_relationships()
+        mi_stats = self.analyze_mutual_information()
+        red_stats = self.analyze_feature_redundancy()
+        dev_stats = self.analyze_target_scale_and_deviation()
+        noise_stats = self.analyze_noise_characteristics()
+
+        metrics: Dict[str, float] = {
+            "t_mean": float(target_stats.get("mean", 0.0)),
+            "t_std": float(target_stats.get("std", 0.0)),
+            "t_range": float(target_stats.get("range", 0.0)),
+            "t_skew": float(target_stats.get("skewness", 0.0)),
+            "f_mean": float(feature_stats.get("mean", 0.0)),
+            "f_std": float(feature_stats.get("std", 0.0)),
+            "f_zero_ratio": float(feature_stats.get("zero_ratio", 0.0)),
+            "rel_pearson_mean": float(rel_stats.get("pearson_mean_abs", 0.0)),
+            "rel_spearman_mean": float(rel_stats.get("spearman_mean_abs", 0.0)),
+            "rel_nonlin": float(rel_stats.get("nonlinearity_score", 0.0)),
+            "rel_inf_ratio": float(rel_stats.get("informative_features_ratio", 0.0)),
+            "mi_mean": float(mi_stats.get("mean", 0.0)),
+            "mi_q75": float(mi_stats.get("q75", 0.0)),
+            "red_mean_abs_corr": float(red_stats.get("mean_abs_correlation", 0.0)),
+            "red_high_corr_ratio": float(red_stats.get("high_correlation_ratio", 0.0)),
+            "dev_mean_std": float(dev_stats.get("mean_target_deviation", 0.0)),
+            "dev_mean_range": float(dev_stats.get("mean_target_range", 0.0)),
+            "noise_mean_std": float(noise_stats.get("mean_noise_std", 0.0)),
+            "noise_mean_r2": float(noise_stats.get("mean_linear_r2", 0.0)),
+        }
+
+        metric_names: List[str] = list(metrics.keys())
+        vec = np.array([metrics[name] for name in metric_names], dtype=float)
+        vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return vec, metric_names
 
     def generate_report(self) -> str:
         """Generate a comprehensive text report of the analysis.
@@ -505,7 +523,7 @@ class RegressionDataAnalyzer(DataAnalyzer):
 
 
 def compare_regression_priors(analyzer1: RegressionDataAnalyzer, analyzer2: RegressionDataAnalyzer, 
-                   name1: str, name2: str) -> str:
+	                   name1: str, name2: str) -> str:
     """Compare two different priors side by side.
     
     Args:

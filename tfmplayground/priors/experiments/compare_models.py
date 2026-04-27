@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -29,6 +30,13 @@ from tfmplayground.priors.experiments.new_evaluation import (
     get_openml_predictions,
     TABARENA_TASKS,
 )
+from tfmplayground.priors.experiments.base_analyzer import (
+    compute_summary_similarity_matrix,
+)
+from tfmplayground.priors.experiments.classification.analyzer import (
+    ClassificationDataAnalyzer,
+)
+from tfmplayground.priors.experiments.regression.analyzer import RegressionDataAnalyzer
 from tfmplayground.priors.experiments.utils.training import (
     _build_metrics_payload,
     _json_safe,
@@ -42,32 +50,18 @@ from tfmplayground.priors.experiments.utils.visualization import (
     plot_time_budget_metrics,
     plot_tabarena_performance_heatmap,
     plot_prior_correlation_heatmap,
+    compute_performance_similarity_matrix,
+    plot_data_similarity_heatmap,
+    plot_data_vs_performance_similarity,
 )
 from tfmplayground.priors.experiments.utils.general import load_config
+from tfmplayground.priors.experiments.utils.general import (
+    discover_h5_files,
+    discover_trained_models,
+)
 from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 from tfmplayground.model import NanoTabPFNModel
 from tfmplayground.utils import get_default_device
-
-
-def _discover_trained_models(models_dir: str):
-    """Scan models_dir for subdirectories containing metadata.json."""
-    models_dir_path = os.path.abspath(models_dir)
-    if not os.path.isdir(models_dir_path):
-        return []
-
-    found = []
-    for entry in sorted(os.listdir(models_dir_path)):
-        entry_path = os.path.join(models_dir_path, entry)
-        meta_path = os.path.join(entry_path, "metadata.json")
-        if os.path.isdir(entry_path) and os.path.isfile(meta_path):
-            with open(meta_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-            found.append({
-                "dir": entry_path,
-                "dir_name": entry,
-                "metadata": metadata,
-            })
-    return found
 
 
 def _select_models_interactively(available):
@@ -130,7 +124,7 @@ def _select_models_noninteractive(available, models_arg):
     """Resolve --models CLI argument to a list of model items.
 
     Args:
-        available: List of discovered model dicts from _discover_trained_models.
+        available: List of discovered model dicts from discover_trained_models.
         models_arg: List of model directory names, or ['all'].
 
     Returns:
@@ -261,6 +255,11 @@ def main():
         help="Skip TabArena evaluation and heatmap generation.",
     )
     parser.add_argument(
+        "--skip_data_similarity",
+        action="store_true",
+        help="Skip prior data-similarity plots after TabArena evaluation.",
+    )
+    parser.add_argument(
         "--tabarena_cache_dir",
         type=str,
         default=None,
@@ -276,6 +275,7 @@ def main():
         )
 
     results_dir = os.path.join(os.path.dirname(__file__), args.problem_type, "results")
+    data_dir = os.path.join(results_dir, "data")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if args.plot_output is None:
         os.makedirs(os.path.join(results_dir, "plots"), exist_ok=True)
@@ -285,7 +285,8 @@ def main():
         args.metrics_output = os.path.join(results_dir, "metrics", f"comparison_{stamp}_metrics.json")
 
     # Discover and select trained models
-    available = _discover_trained_models(args.models_dir)
+    available = discover_trained_models(args.models_dir)
+    available_priors = discover_h5_files(data_dir)
     if not available:
         print(f"No trained models found in {args.models_dir}")
         print("Run train_single_model.py first to train and save models.")
@@ -564,6 +565,141 @@ def main():
                     prior_names_ordered,
                     output_path=corr_output,
                 )
+
+                if not args.skip_data_similarity:
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                    summary_vectors = []
+                    summary_metric_names = None
+                    aligned_prior_names = []
+                    aligned_rows = []
+
+                    for i, pname in enumerate(prior_names_ordered):
+                        resolved_prior_path = available_priors.get(pname)
+
+                        if resolved_prior_path is None:
+                            print(
+                                f"  {pname}: SKIPPED data-similarity "
+                                f"(could not find generated prior in {data_dir})"
+                            )
+                            continue
+
+                        print(f"  {pname}: computing data-similarity summary", flush=True)
+                        analyzer = None
+                        try:
+                            if is_regression:
+                                analyzer = RegressionDataAnalyzer(resolved_prior_path)
+                            else:
+                                analyzer = ClassificationDataAnalyzer(resolved_prior_path)
+                            vec, metric_names = analyzer.prior_summary_vector()
+                        finally:
+                            del analyzer
+                            gc.collect()
+
+                        if summary_metric_names is None:
+                            summary_metric_names = metric_names
+
+                        aligned_prior_names.append(pname)
+                        summary_vectors.append(vec)
+                        aligned_rows.append(perf_matrix[i])
+
+                    if len(summary_vectors) >= 2:
+                        data_sim_matrix = compute_summary_similarity_matrix(
+                            np.vstack(summary_vectors)
+                        )
+                        data_similarity_path = os.path.join(
+                            results_dir,
+                            "metrics",
+                            f"prior_data_similarity_{stamp}.json",
+                        )
+                        os.makedirs(os.path.dirname(data_similarity_path), exist_ok=True)
+                        with open(data_similarity_path, "w", encoding="utf-8") as f:
+                            json.dump(
+                                {
+                                    "prior_names": aligned_prior_names,
+                                    "metric_names": summary_metric_names or [],
+                                    "data_similarity_matrix": data_sim_matrix.tolist(),
+                                },
+                                f,
+                                indent=2,
+                            )
+                        print(
+                            f"  Saved prior data similarity matrix to: {data_similarity_path}"
+                        )
+
+                        data_sim_output = os.path.join(
+                            results_dir,
+                            "plots",
+                            f"prior_data_similarity_{stamp}.png",
+                        )
+                        plot_data_similarity_heatmap(
+                            data_similarity_matrix=data_sim_matrix,
+                            prior_names=aligned_prior_names,
+                            output_path=data_sim_output,
+                        )
+
+                        perf_sim_matrix = compute_performance_similarity_matrix(
+                            np.vstack(aligned_rows)
+                        )
+
+                        if perf_sim_matrix is None:
+                            print(
+                                "⚠️  Not enough complete TabArena datasets for "
+                                "similarity-vs-similarity plot."
+                            )
+                        else:
+                            sim_output = os.path.join(
+                                results_dir,
+                                "plots",
+                                f"data_vs_performance_similarity_{stamp}.png",
+                            )
+                            stats_payload = plot_data_vs_performance_similarity(
+                                data_similarity_matrix=data_sim_matrix,
+                                performance_similarity_matrix=perf_sim_matrix,
+                                prior_names=aligned_prior_names,
+                                output_path=sim_output,
+                            )
+                            print(
+                                "  Similarity readability plot generated for "
+                                f"{stats_payload['num_pairs']} prior pairs"
+                            )
+
+                            ranked_pairs = stats_payload.get("ranked_pairs", [])
+                            if ranked_pairs:
+                                print("  Top pairs with largest data/performance mismatch:")
+                                for row in ranked_pairs[:10]:
+                                    print(
+                                        f"    - {row['pair']}: "
+                                        f"data={row['data_similarity']:.3f}, "
+                                        f"perf={row['performance_similarity']:.3f}, "
+                                        f"mismatch={row['gap']:.3f}"
+                                    )
+
+                                disagreement_path = os.path.join(
+                                    results_dir,
+                                    "metrics",
+                                    f"data_vs_performance_disagreement_{stamp}.json",
+                                )
+                                os.makedirs(os.path.dirname(disagreement_path), exist_ok=True)
+                                with open(disagreement_path, "w", encoding="utf-8") as f:
+                                    json.dump(
+                                        {
+                                            "prior_names": aligned_prior_names,
+                                            "pairs": ranked_pairs,
+                                        },
+                                        f,
+                                        indent=2,
+                                    )
+                                print(f"  Saved mismatch ranking to: {disagreement_path}")
+                            else:
+                                print("  No valid prior-pair rows to report.")
+                    else:
+                        print(
+                            "⚠️  Need at least 2 priors with valid prior files for "
+                            "similarity scatter/table."
+                        )
             else:
                 print("⚠️  Need >= 2 priors for the correlation heatmap, skipping.")
         else:

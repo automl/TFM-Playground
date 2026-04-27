@@ -25,31 +25,11 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tfmplayground.priors.experiments.utils.general import load_config
+from tfmplayground.priors.experiments.utils.general import (
+    discover_trained_models,
+    load_config,
+)
 from tfmplayground.priors.experiments.utils.visualization import _get_n_colors
-
-
-def _discover_trained_models(models_dir: str):
-    """Scan models_dir for subdirectories containing metadata.json."""
-    models_dir_path = os.path.abspath(models_dir)
-    if not os.path.isdir(models_dir_path):
-        return []
-
-    found = []
-    for entry in sorted(os.listdir(models_dir_path)):
-        entry_path = os.path.join(models_dir_path, entry)
-        meta_path = os.path.join(entry_path, "metadata.json")
-        if os.path.isdir(entry_path) and os.path.isfile(meta_path):
-            with open(meta_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-            found.append(
-                {
-                    "dir": entry_path,
-                    "dir_name": entry,
-                    "metadata": metadata,
-                }
-            )
-    return found
 
 
 def _select_models_noninteractive(available, priors_arg):
@@ -458,7 +438,7 @@ def main():
     os.makedirs(args.plots_dir, exist_ok=True)
     os.makedirs(args.metrics_dir, exist_ok=True)
 
-    available = _discover_trained_models(args.models_dir)
+    available = discover_trained_models(args.models_dir)
     if not available:
         print(f"No trained models found in {args.models_dir}")
         raise SystemExit(1)

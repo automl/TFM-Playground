@@ -5,12 +5,13 @@ Includes both individual prior sample visualizations and statistical comparisons
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 
 from typing import Dict, List, Tuple, Optional
-from scipy import stats
 from sklearn.decomposition import PCA
 
+from tfmplayground.priors.experiments.base_analyzer import (
+    compute_prior_similarity_matrix,
+)
 from tfmplayground.priors.experiments.classification.analyzer import (
     ClassificationDataAnalyzer,
 )
@@ -65,7 +66,6 @@ def plot_class_samples(
             )
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-        color = "tab:blue"
 
         # left: class distribution across samples
         ax = axes[0]
@@ -260,16 +260,26 @@ def plot_single_prior_overview(
                 feature_indices.append(i)
                 if len(feature_data) >= 10:  # Show up to 10 features
                     break
-        bp = ax2.boxplot(feature_data, patch_artist=True)
-        for patch in bp["boxes"]:
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
-        ax2.set_xlabel("Feature Index")
-        ax2.set_ylabel("Feature Value")
-        ax2.set_title(f"Feature Distributions ({len(feature_data)} features with data)")
-        ax2.set_xticks(range(1, len(feature_data) + 1))
-        ax2.set_xticklabels(feature_indices)
-        ax2.grid(True, alpha=0.3, axis="y")
+        if not feature_data:
+            ax2.text(
+                0.5,
+                0.5,
+                "No non-constant features",
+                ha="center",
+                va="center",
+            )
+            ax2.axis("off")
+        else:
+            bp = ax2.boxplot(feature_data, patch_artist=True)
+            for patch in bp["boxes"]:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            ax2.set_xlabel("Feature Index")
+            ax2.set_ylabel("Feature Value")
+            ax2.set_title(f"Feature Distributions ({len(feature_data)} features with data)")
+            ax2.set_xticks(range(1, len(feature_data) + 1))
+            ax2.set_xticklabels(feature_indices)
+            ax2.grid(True, alpha=0.3, axis="y")
 
         # middle-right: class distribution
         ax3 = fig.add_subplot(gs[1, 1])
@@ -343,10 +353,10 @@ def plot_single_prior_overview(
         {prior_name} Summary Statistics
         
         Class Statistics:
-        Num Classes: {target_stats['num_classes']}
+        Num Classes: {target_stats['num_classes']:.2f}
         Imbalance Ratio: {target_stats['imbalance_ratio']:.3f}
-        Majority Class: {target_stats['majority_class']} ({target_stats['majority_ratio']:.1%})
-        Minority Class: {target_stats['minority_class']} ({target_stats['minority_ratio']:.1%})
+        Majority Ratio: {target_stats['majority_ratio']:.1%}
+        Minority Ratio: {target_stats['minority_ratio']:.1%}
         
         Dataset Info:
         Num Samples: {len(data['X'])}
@@ -478,7 +488,7 @@ def plot_feature_distributions(
 
         for prior_name in prior_names:
             features = analyzers[prior_name].get_all_features()
-            feature_means.append(np.mean(features))
+            feature_means.append(np.nanmean(features))
 
         ax.bar(
             positions, feature_means, color=[colors[p] for p in prior_names], alpha=0.7
@@ -496,7 +506,7 @@ def plot_feature_distributions(
 
         for prior_name in prior_names:
             features = analyzers[prior_name].get_all_features()
-            feature_stds.append(np.std(features))
+            feature_stds.append(np.nanstd(features))
 
         ax.bar(
             positions, feature_stds, color=[colors[p] for p in prior_names], alpha=0.7
@@ -515,9 +525,9 @@ def plot_feature_distributions(
 def plot_class_separability(
     analyzers: Dict[str, ClassificationDataAnalyzer],
 ) -> Tuple[plt.Figure, np.ndarray]:
-    """Plot class separability metrics across priors.
+    """Plot ANOVA F feature-label association metrics across priors.
 
-    Shows Fisher discriminant ratio and between/within class variance ratio.
+    Shows the mean and median F-statistics from per-task feature-label tests.
 
     Args:
         analyzers: Dict mapping prior names to ClassificationDataAnalyzer instances
@@ -532,58 +542,42 @@ def plot_class_separability(
         prior_names = list(analyzers.keys())
         positions = np.arange(len(prior_names))
 
-        # left: Fisher discriminant ratio distribution (using F-statistics as proxy)
+        # left: mean ANOVA F-statistic
         ax = axes[0]
-        fisher_ratios = []
+        f_means = []
+        f_medians = []
 
         for prior_name in prior_names:
-            # Use ANOVA F-statistics as a proxy for separability
             rel_stats = analyzers[prior_name].analyze_target_feature_relationships()
-            # Use F-mean as representative value, create a small distribution for visualization
-            if rel_stats and "f_mean" in rel_stats:
-                f_mean = rel_stats["f_mean"]
-                f_std = rel_stats.get("f_std", f_mean * 0.2)
-                # Generate approximate samples
-                fisher_ratios.append(
-                    [f_mean] * 10
-                )  # Use mean value for consistent visualization
-            else:
-                fisher_ratios.append([0.0])
-
-        vp = ax.violinplot(
-            fisher_ratios,
-            positions=positions,
-            widths=0.7,
-            showmeans=True,
-            showmedians=True,
-        )
-
-        for i, pc in enumerate(vp["bodies"]):
-            pc.set_facecolor(colors[prior_names[i]])
-            pc.set_alpha(0.7)
-
-        ax.set_xticks(positions)
-        ax.set_xticklabels(prior_names, rotation=45)
-        ax.set_xlabel("Prior")
-        ax.set_ylabel("Fisher Discriminant Ratio")
-        ax.set_title("Class Separability (Fisher Ratio)")
-        ax.grid(True, alpha=0.3, axis="y")
-
-        # right: mean separability
-        ax = axes[1]
-        mean_separability = [np.mean(fr) if len(fr) > 0 else 0 for fr in fisher_ratios]
+            f_means.append(float(rel_stats.get("f_mean", 0.0)) if rel_stats else 0.0)
+            f_medians.append(float(rel_stats.get("f_median", 0.0)) if rel_stats else 0.0)
 
         ax.bar(
             positions,
-            mean_separability,
+            f_means,
             color=[colors[p] for p in prior_names],
             alpha=0.7,
         )
         ax.set_xticks(positions)
         ax.set_xticklabels(prior_names, rotation=45)
         ax.set_xlabel("Prior")
-        ax.set_ylabel("Mean Fisher Ratio")
-        ax.set_title("Average Class Separability")
+        ax.set_ylabel("Mean ANOVA F")
+        ax.set_title("Feature-Label Association (Mean F)")
+        ax.grid(True, alpha=0.3, axis="y")
+
+        # right: median ANOVA F-statistic
+        ax = axes[1]
+        ax.bar(
+            positions,
+            f_medians,
+            color=[colors[p] for p in prior_names],
+            alpha=0.7,
+        )
+        ax.set_xticks(positions)
+        ax.set_xticklabels(prior_names, rotation=45)
+        ax.set_xlabel("Prior")
+        ax.set_ylabel("Median ANOVA F")
+        ax.set_title("Feature-Label Association (Median F)")
         ax.grid(True, alpha=0.3, axis="y")
 
         plt.tight_layout()
@@ -732,7 +726,10 @@ def plot_feature_redundancy(
 
             # compute correlation matrix
             if features.shape[1] > 1:
-                corr_matrix = np.corrcoef(features.T)
+                masked_features = np.ma.masked_invalid(features)
+                corr_matrix = np.ma.corrcoef(masked_features, rowvar=False).filled(0.0)
+                corr_matrix = np.nan_to_num(corr_matrix, nan=0.0, posinf=0.0, neginf=0.0)
+                np.fill_diagonal(corr_matrix, 1.0)
             else:
                 corr_matrix = np.array([[1.0]])
 
@@ -750,14 +747,8 @@ def plot_feature_redundancy(
         mean_corrs = []
 
         for prior_name in prior_names:
-            features = analyzers[prior_name].get_all_features()
-            if features.shape[1] > 1:
-                corr_matrix = np.corrcoef(features.T)
-                # exclude diagonal
-                mask = ~np.eye(corr_matrix.shape[0], dtype=bool)
-                mean_corrs.append(np.abs(corr_matrix[mask]).mean())
-            else:
-                mean_corrs.append(0.0)
+            red_stats = analyzers[prior_name].analyze_feature_redundancy()
+            mean_corrs.append(float(red_stats.get("mean_abs_correlation", 0.0)))
 
         ax.bar(positions, mean_corrs, color=[colors[p] for p in prior_names], alpha=0.7)
         ax.set_xticks(positions)
@@ -776,85 +767,27 @@ def plot_feature_redundancy(
         return fig, axes
 
 
-def prior_summary_vector(
-    analyzer: ClassificationDataAnalyzer,
-) -> Tuple[np.ndarray, List[str]]:
-    """Build a fixed-length numeric summary vector for one classification prior.
-
-    Returns:
-        (vector, metric_names) for consistent ordering
-    """
-    # get statistics from analyzer
-    basic = analyzer.get_basic_statistics()
-    target_stats = analyzer.analyze_target_distribution()
-    rel_stats = analyzer.analyze_target_feature_relationships()
-
-    # extract scalar metrics
-    features = analyzer.get_all_features()
-
-    metrics: Dict[str, float] = {
-        # dimensionality
-        "dim_num_features_mean": float(basic["num_features"].get("mean", 0.0)),
-        "dim_num_features_std": float(basic["num_features"].get("std", 0.0)),
-        "dim_seq_len_mean": float(basic["seq_lengths"].get("mean", 0.0)),
-        "dim_seq_len_std": float(basic["seq_lengths"].get("std", 0.0)),
-        "dim_eval_pos_mean": float(basic["eval_positions"].get("mean", 0.0)),
-        # class distribution
-        "class_num_classes": float(target_stats.get("num_classes", 0.0)),
-        "class_imbalance_ratio": float(target_stats.get("imbalance_ratio", 0.0)),
-        "class_entropy": float(target_stats.get("entropy_bits", 0.0)),
-        # feature statistics
-        "feat_mean": float(np.mean(features)),
-        "feat_std": float(np.std(features)),
-        # separability (using F-statistics)
-        "sep_mean_f": float(rel_stats.get("f_mean", 0.0)),
-        "sep_median_f": float(rel_stats.get("f_median", 0.0)),
-    }
-
-    metric_names: List[str] = list(metrics.keys())
-    vec = np.array([metrics[name] for name in metric_names], dtype=float)
-    vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
-
-    return vec, metric_names
-
-
 def plot_prior_similarity(
     analyzers: Dict[str, ClassificationDataAnalyzer],
+    annotate: bool = False,
 ) -> Tuple[plt.Figure, plt.Axes]:
-    """Compare priors based on summary statistics.
-
-    Builds a summary vector per prior and plots correlation heatmap.
+    """Compare priors based on standardized summary-statistic proximity.
 
     Args:
         analyzers: Dict mapping prior names to ClassificationDataAnalyzer instances
+        annotate: Whether to print numeric similarity values in heatmap cells.
 
     Returns:
         Tuple of (figure, axes)
     """
+
     with apply_plot_style():
-        prior_names = list(analyzers.keys())
+        prior_names, sim_matrix = compute_prior_similarity_matrix(analyzers)
         n_priors = len(prior_names)
-
-        # build summary matrix
-        summary_vectors = []
-        for name in prior_names:
-            vec, _ = prior_summary_vector(analyzers[name])
-            summary_vectors.append(vec)
-
-        summary_matrix = np.vstack(summary_vectors)
-
-        # standardize for scale invariance
-        mean = summary_matrix.mean(axis=0, keepdims=True)
-        std = summary_matrix.std(axis=0, keepdims=True) + 1e-8
-        summary_z = (summary_matrix - mean) / std
-
-        # compute similarity via correlation
-        sim_matrix = np.corrcoef(summary_z)
-        sim_matrix = np.nan_to_num(sim_matrix, nan=0.0, posinf=0.0, neginf=0.0)
 
         # heatmap
         fig, ax = plt.subplots(figsize=(6 + 0.5 * n_priors, 5))
-        im = ax.imshow(sim_matrix, vmin=-1, vmax=1, cmap="RdBu_r")
+        im = ax.imshow(sim_matrix, vmin=0.0, vmax=1.0, cmap="coolwarm")
 
         ax.set_xticks(np.arange(n_priors))
         ax.set_yticks(np.arange(n_priors))
@@ -862,10 +795,24 @@ def plot_prior_similarity(
         ax.set_yticklabels(prior_names)
         ax.set_xlabel("Prior")
         ax.set_ylabel("Prior")
-        ax.set_title("Prior Similarity (correlation of summary statistics)")
+        ax.set_title("Prior Similarity (distance-based meta-feature similarity)")
+
+        if annotate:
+            for i in range(n_priors):
+                for j in range(n_priors):
+                    ax.text(
+                        j,
+                        i,
+                        f"{sim_matrix[i, j]:.2f}",
+                        ha="center",
+                        va="center",
+                        fontsize=9,
+                        fontweight="bold",
+                        color="white",
+                    )
 
         cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label("Correlation")
+        cbar.set_label("Similarity")
 
         plt.tight_layout()
         return fig, ax

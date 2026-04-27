@@ -1,10 +1,15 @@
 """Analyzer for classification data generated from synthetic priors."""
 
 import os
-from typing import Dict, Any
+import warnings
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
+from scipy import stats as scipy_stats
+from sklearn import config_context
 from sklearn.feature_selection import mutual_info_classif, f_classif
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import balanced_accuracy_score
 
 from tfmplayground.priors.experiments.base_analyzer import DataAnalyzer
 
@@ -18,6 +23,7 @@ class ClassificationDataAnalyzer(DataAnalyzer):
     - Feature–label relationships (ANOVA F)
     - Feature redundancy (correlation structure)
     - Mutual information between features and labels
+    - Linear model training fit (logistic regression balanced accuracy)
 
     Assumes the same HDF5 structure as RegressionDataAnalyzer, but with
     discrete class labels in ``y``.
@@ -76,54 +82,59 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         """Analyze the distribution of class labels.
 
         Returns:
-            Dictionary with class distribution statistics.
+            Dictionary with per-task-averaged class distribution statistics.
         """
-        # collect all non-padded labels
-        labels = self._filter_valid_labels(self.get_all_targets())
-        if labels.size == 0:
+        per_task_num_classes: List[float] = []
+        per_task_majority_ratio: List[float] = []
+        per_task_minority_ratio: List[float] = []
+        per_task_imbalance_ratio: List[float] = []
+        per_task_entropy: List[float] = []
+        total_points = 0
+
+        for i in range(len(self.data["y"])):
+            n_points = int(self.data["num_datapoints"][i])
+            raw = self.data["y"][i, :n_points]
+            labels = self._filter_valid_labels(raw)
+            if labels.size == 0:
+                continue
+
+            values, counts = np.unique(labels, return_counts=True)
+            total = counts.sum()
+            total_points += total
+            probs = counts / total
+
+            per_task_num_classes.append(float(len(values)))
+            per_task_majority_ratio.append(float(counts.max() / total))
+            per_task_minority_ratio.append(float(counts.min() / total))
+            per_task_imbalance_ratio.append(float(counts.max() / max(1, counts.min())))
+            entropy = -(probs * np.log2(probs + 1e-12)).sum()
+            per_task_entropy.append(float(entropy))
+
+        n_tasks = len(per_task_num_classes)
+        if n_tasks == 0:
             return {
                 "num_classes": 0,
-                "n_samples": 0,
-                "classes": [],
-                "class_counts": [],
-                "class_probs": [],
-                "majority_class": None,
-                "minority_class": None,
+                "n_tasks": 0,
+                "n_samples_total": 0,
                 "majority_ratio": 0.0,
                 "minority_ratio": 0.0,
                 "imbalance_ratio": 0.0,
                 "entropy_bits": 0.0,
             }
-        values, counts = np.unique(labels, return_counts=True)
-        total = counts.sum()
-        probs = counts / total
 
-        # basic distribution info
-        stats_dict: Dict[str, Any] = {
-            "num_classes": int(len(values)),
-            "n_samples": int(total),
-            "classes": values.tolist(),
-            "class_counts": counts.tolist(),
-            "class_probs": probs.tolist(),
+        return {
+            "num_classes": float(np.mean(per_task_num_classes)),
+            "num_classes_std": float(np.std(per_task_num_classes)),
+            "n_tasks": n_tasks,
+            "n_samples_total": int(total_points),
+            "majority_ratio": float(np.mean(per_task_majority_ratio)),
+            "minority_ratio": float(np.mean(per_task_minority_ratio)),
+            "imbalance_ratio": float(np.mean(per_task_imbalance_ratio)),
+            "entropy_bits": float(np.mean(per_task_entropy)),
         }
 
-        # imbalance metrics
-        max_count = counts.max()
-        min_count = counts.min()
-        stats_dict["majority_class"] = int(values[np.argmax(counts)])
-        stats_dict["minority_class"] = int(values[np.argmin(counts)])
-        stats_dict["majority_ratio"] = float(max_count / total)
-        stats_dict["minority_ratio"] = float(min_count / total)
-        stats_dict["imbalance_ratio"] = float(max_count / max(1, min_count))
 
-        # entropy of label distribution
-        entropy = -(probs * np.log2(probs + 1e-12)).sum()
-        stats_dict["entropy_bits"] = float(entropy)
-
-        return stats_dict
-
-
-    def analyze_target_feature_relationships(self, n_samples: int = 100) -> Dict:
+    def analyze_target_feature_relationships(self) -> Dict:
         """Analyze relationships between features and class labels.
 
         Uses ANOVA F-statistics aggregated across tasks as a proxy for how
@@ -131,20 +142,26 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         """
         f_scores = []
 
-        sample_indices = np.random.choice(
-            len(self.data["X"]),
-            min(n_samples, len(self.data["X"])),
-            replace=False,
-        )
-
-        for i in sample_indices:
+        for i in range(len(self.data["X"])):
             n_points = int(self.data["num_datapoints"][i])
             n_features = int(self.data["num_features"][i])
             if n_points < 5 or n_features < 1:
                 continue
 
             X_sample = self.data["X"][i, :n_points, :n_features]
-            y_sample = self.data["y"][i, :n_points].astype(int)
+            y_raw = self.data["y"][i, :n_points]
+
+            # filter rows with invalid y or X values before F-test
+            valid_rows = (
+                np.isfinite(y_raw)
+                & (y_raw >= 0)
+                & np.all(np.isfinite(X_sample), axis=1)
+            )
+            if valid_rows.sum() < 5:
+                continue
+
+            X_sample = X_sample[valid_rows]
+            y_sample = y_raw[valid_rows].astype(int)
 
             # need at least 2 classes to compute F-statistics
             if len(np.unique(y_sample)) < 2:
@@ -160,7 +177,6 @@ class ClassificationDataAnalyzer(DataAnalyzer):
 
                 X_nc = X_sample[:, non_constant]
                 
-                import warnings
                 with warnings.catch_warnings():
                     # synthetic priors (like tabforest) often generate zero-variance sets 
                     # for identical classes, pushing MSW=0. Scikit-learn will warn and return inf.
@@ -171,6 +187,7 @@ class ClassificationDataAnalyzer(DataAnalyzer):
                 
                 # cap the infinite F-scores to a numerical bound
                 f_vals = np.nan_to_num(f_vals, nan=0.0, posinf=1e6, neginf=0.0)
+                f_vals = np.clip(f_vals, 0.0, None)
                 f_scores.extend(f_vals)
             except Exception:
                 continue
@@ -189,15 +206,19 @@ class ClassificationDataAnalyzer(DataAnalyzer):
 
         return rel_stats
 
-    def analyze_mutual_information(self, n_samples: int = 100) -> Dict:
+    def analyze_mutual_information(self) -> Dict:
         """Analyze mutual information between features and class labels.
 
         Uses sklearn's ``mutual_info_classif`` to capture nonlinear
         dependencies between continuous features and discrete labels.
         """
         mi_scores = []
+        n_samples = int(self.analysis_config["n_samples_mi"])
+        if n_samples <= 0:
+            return {}
 
-        sample_indices = np.random.choice(
+        rng = np.random.default_rng(self.random_state)
+        sample_indices = rng.choice(
             len(self.data["X"]),
             min(n_samples, len(self.data["X"])),
             replace=False,
@@ -210,13 +231,32 @@ class ClassificationDataAnalyzer(DataAnalyzer):
                 continue
 
             X_sample = self.data["X"][i, :n_points, :n_features]
-            y_sample = self.data["y"][i, :n_points].astype(int)
+            y_raw = self.data["y"][i, :n_points]
+            valid_rows = np.isfinite(y_raw) & (y_raw >= 0) & np.all(np.isfinite(X_sample), axis=1)
+            if valid_rows.sum() < 10:
+                continue
+
+            X_sample = X_sample[valid_rows]
+            y_sample = y_raw[valid_rows].astype(int)
 
             if len(np.unique(y_sample)) < 2:
                 continue
 
             try:
-                mi = mutual_info_classif(X_sample, y_sample, random_state=42)
+                non_constant = np.nanvar(X_sample, axis=0) > 1e-12
+                if non_constant.sum() < 1:
+                    continue
+
+                X_mi = np.ascontiguousarray(
+                    X_sample[:, non_constant],
+                    dtype=np.float64,
+                )
+                with config_context(enable_cython_pairwise_dist=False):
+                    mi = mutual_info_classif(
+                        X_mi,
+                        y_sample,
+                        random_state=self.random_state,
+                    )
                 mi_scores.extend(mi)
             except Exception:
                 continue
@@ -236,6 +276,45 @@ class ClassificationDataAnalyzer(DataAnalyzer):
 
         return mi_stats
 
+
+    def prior_summary_vector(self) -> Tuple[np.ndarray, List[str]]:
+        """Build a fixed-length numeric summary vector for this classification prior."""
+        target_stats = self.analyze_target_distribution()
+        rel_stats = self.analyze_target_feature_relationships()
+        mi_stats = self.analyze_mutual_information()
+        red_stats = self.analyze_feature_redundancy()
+        derived = _compute_classification_similarity_features(self)
+
+        # log-transform F-statistics to compress scale and avoid outliers
+        f_mean = max(0.0, float(rel_stats.get("f_mean", 0.0)))
+        f_median = max(0.0, float(rel_stats.get("f_median", 0.0)))
+        log_f_mean = float(np.log1p(f_mean))
+        log_f_median = float(np.log1p(f_median))
+
+        metrics: Dict[str, float] = {
+            "class_num_classes": float(target_stats.get("num_classes", 0.0)),
+            "class_majority_ratio": float(target_stats.get("majority_ratio", 0.0)),
+            "class_entropy": float(target_stats.get("entropy_bits", 0.0)),
+            "sep_log_f_mean": log_f_mean,
+            "sep_log_f_median": log_f_median,
+            "mi_mean": float(mi_stats.get("mean", 0.0)),
+            "mi_q75": float(mi_stats.get("q75", 0.0)),
+            "class_sep_smd_median": float(derived.get("class_sep_smd_median", 0.0)),
+            "red_mean_abs_corr": float(red_stats.get("mean_abs_correlation", 0.0)),
+            "pca_top1_var": float(derived.get("pca_top1_var", 0.0)),
+            "effective_rank_ratio": float(derived.get("effective_rank_ratio", 0.0)),
+            "nonlinear_gap": float(derived.get("nonlinear_feature_target_gap", 0.0)),
+            # Feature distribution shape
+            "feat_kurtosis_median": float(derived.get("feat_kurtosis_median", 0.0)),
+            "feat_discrete_ratio": float(derived.get("feat_discrete_ratio", 0.0)),
+            "linear_train_bal_acc": float(derived.get("linear_train_bal_acc", 0.0)),
+        }
+
+        metric_names: List[str] = list(metrics.keys())
+        vec = np.array([metrics[name] for name in metric_names], dtype=float)
+        vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return vec, metric_names
 
     def generate_report(self) -> str:
         """Generate a comprehensive text report for classification data.
@@ -280,7 +359,9 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         report_lines.append("-" * 50)
         label_stats = self.analyze_target_distribution()
         for key, val in label_stats.items():
-            report_lines.append(f"{key}: {val}")
+            line = self._format_stat_line(key, val)
+            if line is not None:
+                report_lines.append(line)
         report_lines.append("")
 
         # feature distribution
@@ -288,12 +369,9 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         report_lines.append("-" * 50)
         feature_stats = self.analyze_feature_distributions()
         for key, val in feature_stats.items():
-            if isinstance(val, (int, np.integer)):
-                report_lines.append(f"{key}: {val}")
-            elif np.isinf(val):
-                report_lines.append(f"{key}: inf")
-            else:
-                report_lines.append(f"{key}: {val:.4f}")
+            line = self._format_stat_line(key, val)
+            if line is not None:
+                report_lines.append(line)
         report_lines.append("")
 
         # redundancy
@@ -302,7 +380,9 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         redundancy_stats = self.analyze_feature_redundancy()
         if redundancy_stats:
             for key, val in redundancy_stats.items():
-                report_lines.append(f"{key}: {val:.4f}")
+                line = self._format_stat_line(key, val)
+                if line is not None:
+                    report_lines.append(line)
         else:
             report_lines.append("No redundancy data available")
         report_lines.append("")
@@ -313,7 +393,9 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         rel_stats = self.analyze_target_feature_relationships()
         if rel_stats:
             for key, val in rel_stats.items():
-                report_lines.append(f"{key}: {val:.4f}")
+                line = self._format_stat_line(key, val)
+                if line is not None:
+                    report_lines.append(line)
         else:
             report_lines.append("No relationship data available")
         report_lines.append("")
@@ -324,7 +406,9 @@ class ClassificationDataAnalyzer(DataAnalyzer):
         mi_stats = self.analyze_mutual_information()
         if mi_stats:
             for key, val in mi_stats.items():
-                report_lines.append(f"{key}: {val:.4f}")
+                line = self._format_stat_line(key, val)
+                if line is not None:
+                    report_lines.append(line)
         else:
             report_lines.append("No mutual information data available")
         report_lines.append("")
@@ -495,3 +579,223 @@ def compare_classification_priors(
     report_lines.append("")
     report_lines.append("=" * 80)
     return "\n".join(report_lines)
+
+
+# prior similarity computation
+def _pairwise_class_smd_values(X: np.ndarray, y: np.ndarray) -> List[float]:
+    """Compute absolute pairwise class SMD values across all features."""
+    classes = np.unique(y)
+    if classes.size < 2:
+        return []
+
+    smd_values: List[float] = []
+    for idx_a in range(len(classes)):
+        for idx_b in range(idx_a + 1, len(classes)):
+            a = X[y == classes[idx_a]]
+            b = X[y == classes[idx_b]]
+            if a.shape[0] < 2 or b.shape[0] < 2:
+                continue
+            mean_diff = np.abs(np.nanmean(a, axis=0) - np.nanmean(b, axis=0))
+            var_a = np.nanvar(a, axis=0)
+            var_b = np.nanvar(b, axis=0)
+            pooled_std = np.sqrt(0.5 * (var_a + var_b)) + 1e-12
+            smd = np.nan_to_num(mean_diff / pooled_std, nan=0.0, posinf=0.0, neginf=0.0)
+            smd_values.extend(smd.tolist())
+
+    return smd_values
+
+
+def _compute_classification_similarity_features(
+    analyzer: ClassificationDataAnalyzer,
+    mi_signal_threshold: float = 1e-3,
+) -> Dict[str, float]:
+    """Compute data-only derived metrics for prior similarity.
+
+    Args:
+        analyzer: A loaded classification analyzer.
+        mi_signal_threshold: MI cutoff used to decide whether a feature
+            carries signal.
+    """
+    sample_count = len(analyzer.data["X"])
+    if sample_count == 0:
+        return {}
+
+    mi_top1_ratios: List[float] = []
+    mi_top5_ratios: List[float] = []
+    frac_signal_features_values: List[float] = []
+    class_sep_smd_mean_values: List[float] = []
+    class_sep_smd_median_values: List[float] = []
+    class_sep_smd_q75_values: List[float] = []
+    pca_top1_values: List[float] = []
+    pca_top5_values: List[float] = []
+    effective_rank_values: List[float] = []
+    effective_rank_ratio_values: List[float] = []
+    nonlinear_gap_values: List[float] = []
+    kurtosis_values: List[float] = []
+    discrete_ratio_values: List[float] = []
+    lin_sep_acc_values: List[float] = []
+    lin_task_count = 0
+    max_lin_tasks = 100  # cap for the LogisticRegression cost
+
+
+    for i in range(sample_count):
+        n_points = int(analyzer.data["num_datapoints"][i])
+        n_features = int(analyzer.data["num_features"][i])
+        if n_points < 10 or n_features < 1:
+            continue
+
+        X = analyzer.data["X"][i, :n_points, :n_features]
+        y_raw = analyzer.data["y"][i, :n_points]
+
+        valid_mask = (
+            np.isfinite(y_raw)
+            & (y_raw >= 0)
+            & np.all(np.isfinite(X), axis=1)
+        )
+        if valid_mask.sum() < 10:
+            continue
+
+        y = y_raw[valid_mask].astype(int)
+        X = X[valid_mask]
+        if np.unique(y).size < 2:
+            continue
+
+        col_std = np.std(X, axis=0)
+        non_constant = col_std > 1e-12
+        if non_constant.sum() < 1:
+            continue
+        X_nc = X[:, non_constant]
+
+        # feature distribution shape
+        try:
+            kurt_per_feat = scipy_stats.kurtosis(X_nc, axis=0)
+            kurtosis_values.append(float(np.median(np.nan_to_num(kurt_per_feat, nan=0.0))))
+        except Exception:
+            pass
+        n_unique = np.array([len(np.unique(X_nc[:, j])) for j in range(X_nc.shape[1])])
+        discrete_ratio_values.append(float(np.mean(n_unique <= 10)))
+
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning)
+                f_vals, _ = f_classif(X_nc, y)
+
+            # after row filtering, some columns may have become constant; drop those before MI
+            non_constant_mi = np.var(X_nc, axis=0) > 1e-12
+            if non_constant_mi.sum() < 1:
+                continue
+            X_mi = np.ascontiguousarray(
+                X_nc[:, non_constant_mi],
+                dtype=np.float64,
+            )
+            with config_context(enable_cython_pairwise_dist=False):
+                mi = mutual_info_classif(
+                    X_mi,
+                    y,
+                    random_state=analyzer.random_state,
+                )
+            f_vals = f_vals[non_constant_mi]
+        except Exception:
+            continue
+
+        f_vals = np.nan_to_num(f_vals, nan=0.0, posinf=1e6, neginf=0.0)
+        mi = np.nan_to_num(mi, nan=0.0, posinf=0.0, neginf=0.0)
+
+        mi_sorted = np.sort(mi)[::-1]
+        mi_sum = float(mi_sorted.sum())
+        if mi_sum > 0.0:
+            mi_top1_ratios.append(float(mi_sorted[0] / mi_sum))
+            mi_top5_ratios.append(float(mi_sorted[:5].sum() / mi_sum))
+        else:
+            mi_top1_ratios.append(0.0)
+            mi_top5_ratios.append(0.0)
+        frac_signal_features_values.append(float(np.mean(mi > mi_signal_threshold)))
+
+        if mi.size > 0 and f_vals.size > 0:
+            mi_cut = np.percentile(mi, 75)
+            f_cut = np.percentile(f_vals, 25)
+            nonlinear_gap_values.append(float(np.mean((mi >= mi_cut) & (f_vals <= f_cut))))
+
+        task_smd = _pairwise_class_smd_values(X_nc, y)
+        if task_smd:
+            task_smd_arr = np.array(task_smd, dtype=float)
+            class_sep_smd_mean_values.append(float(np.mean(task_smd_arr)))
+            class_sep_smd_median_values.append(float(np.median(task_smd_arr)))
+            class_sep_smd_q75_values.append(float(np.percentile(task_smd_arr, 75)))
+
+        # In-sample logistic regression balanced accuracy.
+        if lin_task_count < max_lin_tasks:
+            try:
+                lr = LogisticRegression(
+                    max_iter=300, random_state=analyzer.random_state,
+                    C=1.0, solver="lbfgs",
+                )
+                lr.fit(X_nc, y)
+                y_pred = lr.predict(X_nc)
+                lin_sep_acc_values.append(
+                    float(balanced_accuracy_score(y, y_pred))
+                )
+                lin_task_count += 1
+            except Exception:
+                pass
+
+        X_centered = X_nc - np.nanmean(X_nc, axis=0, keepdims=True)
+        try:
+            cov = np.cov(X_centered, rowvar=False)
+            eigvals = np.linalg.eigvalsh(cov)
+        except Exception:
+            continue
+
+        eigvals = np.clip(np.nan_to_num(eigvals, nan=0.0, posinf=0.0, neginf=0.0), a_min=0.0, a_max=None)
+        total_var = float(eigvals.sum())
+        if total_var <= 0.0:
+            continue
+
+        eigvals_desc = eigvals[::-1]
+        pca_top1_values.append(float(eigvals_desc[0] / total_var))
+        pca_top5_values.append(float(eigvals_desc[:5].sum() / total_var))
+
+        probs = eigvals_desc / total_var
+        probs = probs[probs > 1e-12]
+        eff_rank = float(np.exp(-np.sum(probs * np.log(probs))))
+        effective_rank_values.append(eff_rank)
+        n_nonconstant = int(X_nc.shape[1])
+        effective_rank_ratio_values.append(
+            eff_rank / n_nonconstant if n_nonconstant > 0 else 0.0
+        )
+
+    result: Dict[str, float] = {}
+
+    if mi_top1_ratios:
+        result["mi_top1_ratio"] = float(np.mean(mi_top1_ratios))
+    if mi_top5_ratios:
+        result["mi_top5_ratio"] = float(np.mean(mi_top5_ratios))
+    if frac_signal_features_values:
+        result["frac_signal_features"] = float(np.mean(frac_signal_features_values))
+
+    if class_sep_smd_mean_values:
+        result["class_sep_smd_mean"] = float(np.mean(class_sep_smd_mean_values))
+    if class_sep_smd_median_values:
+        result["class_sep_smd_median"] = float(np.mean(class_sep_smd_median_values))
+    if class_sep_smd_q75_values:
+        result["class_sep_smd_q75"] = float(np.mean(class_sep_smd_q75_values))
+
+    if pca_top1_values:
+        result["pca_top1_var"] = float(np.mean(pca_top1_values))
+    if pca_top5_values:
+        result["pca_top5_var"] = float(np.mean(pca_top5_values))
+    if effective_rank_values:
+        result["effective_rank"] = float(np.mean(effective_rank_values))
+    if effective_rank_ratio_values:
+        result["effective_rank_ratio"] = float(np.mean(effective_rank_ratio_values))
+    if nonlinear_gap_values:
+        result["nonlinear_feature_target_gap"] = float(np.mean(nonlinear_gap_values))
+
+    if kurtosis_values:
+        result["feat_kurtosis_median"] = float(np.median(kurtosis_values))
+    if discrete_ratio_values:
+        result["feat_discrete_ratio"] = float(np.mean(discrete_ratio_values))
+    if lin_sep_acc_values:
+        result["linear_train_bal_acc"] = float(np.mean(lin_sep_acc_values))
+
+    return result

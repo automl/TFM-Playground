@@ -2,11 +2,14 @@
 
 import numbers
 from abc import ABC
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import h5py
 import numpy as np
 from scipy import stats
+
+from tfmplayground.priors.experiments.utils.general import load_config
 
 
 class DataAnalyzer(ABC):
@@ -18,6 +21,11 @@ class DataAnalyzer(ABC):
 
     def __init__(self, h5_path: str):
         self.h5_path = h5_path
+        config = load_config(str(Path(__file__).resolve().parent / "config.yaml"))
+        self.analysis_config = config["analysis"]
+        self.sample_size = self.analysis_config["analyzer_sample_size"]
+        self.random_state = self.analysis_config["random_state"]
+
         self.data: Dict[str, np.ndarray] = {}
         self.metadata: Dict[str, Any] = {}
         self._load_data()
@@ -47,7 +55,21 @@ class DataAnalyzer(ABC):
                 else:
                     self.metadata["problem_type"] = str(raw)
 
-        print(f"  Loaded {len(self.data['X'])} samples")
+        total_samples = len(self.data["X"])
+        if 0 < self.sample_size < total_samples:
+            # read the HDF5 arrays sequentially first, then subsample in memory.
+            # this was faster than asking
+            # h5py for many random rows, ofc assuming the full read fits in RAM.
+            rng = np.random.default_rng(self.random_state)
+            idx = np.sort(
+                rng.choice(total_samples, size=self.sample_size, replace=False)
+            )
+            for key in self.data:
+                self.data[key] = self.data[key][idx]
+            print(f"  Loaded {self.sample_size} / {total_samples} samples")
+        else:
+            print(f"  Loaded {total_samples} samples")
+
         if "problem_type" in self.metadata:
             print(f"  Problem type: {self.metadata['problem_type']}")
 
@@ -125,30 +147,22 @@ class DataAnalyzer(ABC):
         return f"{key}: {val}"
 
 
-    def analyze_feature_distributions(self, sample_size: int = 100) -> Dict[str, Any]:
+    def analyze_feature_distributions(self) -> Dict[str, Any]:
         """Analyze the distribution of feature values.
-        
-        Args:
-            sample_size: Number of samples to use for analysis
-            
+
         Returns:
             Dictionary with feature distribution statistics
         """
-        # randomly choose sample_size amount of indices to keep it memory efficient
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(sample_size, len(self.data["X"])), 
-            replace=False
-        )
-        
-        # obtain the feature values for those indices & get rid of the paddings
         features = []
-        for i in sample_indices:
+        for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
             n_features = self.data["num_features"][i]
-            features.extend(self.data["X"][i, :n_points, :n_features].flatten())
+            features.append(self.data["X"][i, :n_points, :n_features].ravel())
 
-        features = np.array(features)
+        if not features:
+            return {}
+
+        features = np.concatenate(features)
 
         feature_stats: Dict[str, Any] = {
             "mean": float(features.mean()),
@@ -183,12 +197,9 @@ class DataAnalyzer(ABC):
         return feature_stats
 
 
-    def analyze_feature_redundancy(self, n_samples: int = 100) -> Dict[str, Any]:
+    def analyze_feature_redundancy(self) -> Dict[str, Any]:
         """Analyze redundancy and collinearity among features.
-        
-        Args:
-            n_samples: Number of samples to analyze
-            
+
         Returns:
             Dictionary with redundancy metrics
         """
@@ -196,13 +207,7 @@ class DataAnalyzer(ABC):
         all_corr = []
         high_corr_pair_counts = []
         
-        sample_indices = np.random.choice(
-            len(self.data["X"]), 
-            min(n_samples, len(self.data["X"])), 
-            replace=False
-        )
-        
-        for i in sample_indices:
+        for i in range(len(self.data["X"])):
             n_points = self.data["num_datapoints"][i]
             n_features = self.data["num_features"][i]
             
@@ -258,3 +263,73 @@ class DataAnalyzer(ABC):
             redundancy_stats = {}
         
         return redundancy_stats
+
+    def prior_summary_vector(self) -> Tuple[np.ndarray, List[str]]:
+        """Build the analyzer-specific summary vector used for prior similarity."""
+        raise NotImplementedError("Subclasses must implement prior_summary_vector().")
+
+
+# prior similarity computations
+
+def compute_summary_similarity_matrix(summary_matrix: np.ndarray) -> np.ndarray:
+    """Convert summary vectors into a distance-based similarity matrix.
+
+    Steps:
+    1. z-score each summary metric across priors
+    2. compute pairwise Euclidean distances
+    3. turn distances into similarities with an RBF kernel
+    """
+    summary_matrix = np.asarray(summary_matrix, dtype=float)
+    if summary_matrix.ndim != 2:
+        raise ValueError("summary_matrix must be 2-D")
+    if summary_matrix.shape[0] == 1:
+        return np.array([[1.0]], dtype=float)
+
+    mean = summary_matrix.mean(axis=0, keepdims=True)
+    std = summary_matrix.std(axis=0, keepdims=True)
+    summary_z = (summary_matrix - mean) / np.where(std > 1e-8, std, 1.0)
+
+    diffs = summary_z[:, None, :] - summary_z[None, :, :]
+    distances = np.sqrt(np.sum(diffs * diffs, axis=2))
+
+    tri = np.triu_indices_from(distances, k=1)
+    nonzero_distances = distances[tri]
+    nonzero_distances = nonzero_distances[
+        np.isfinite(nonzero_distances) & (nonzero_distances > 0)
+    ]
+
+    if nonzero_distances.size == 0:
+        return np.ones_like(distances, dtype=float)
+
+    sigma = float(np.median(nonzero_distances))
+    if not np.isfinite(sigma) or sigma <= 1e-8:
+        sigma = float(np.mean(nonzero_distances))
+    if not np.isfinite(sigma) or sigma <= 1e-8:
+        sigma = 1.0
+
+    sim_matrix = np.exp(-(distances ** 2) / (2.0 * sigma ** 2))
+    sim_matrix = np.clip(
+        np.nan_to_num(sim_matrix, nan=0.0, posinf=0.0, neginf=0.0),
+        0.0,
+        1.0,
+    )
+    np.fill_diagonal(sim_matrix, 1.0)
+    return sim_matrix
+
+
+def compute_prior_similarity_matrix(
+    analyzers: Dict[str, DataAnalyzer],
+) -> Tuple[List[str], np.ndarray]:
+    """Compute prior-prior similarity from analyzer summary vectors."""
+    prior_names = list(analyzers.keys())
+
+    summary_vectors = []
+    for name in prior_names:
+        vec, _ = analyzers[name].prior_summary_vector()
+        summary_vectors.append(vec)
+
+    summary_matrix = np.vstack(summary_vectors)
+    if summary_matrix.shape[0] == 1:
+        return prior_names, np.array([[1.0]], dtype=float)
+
+    return prior_names, compute_summary_similarity_matrix(summary_matrix)

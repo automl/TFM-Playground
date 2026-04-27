@@ -34,8 +34,16 @@ COLORS = [
     "#e377c2",  # pink
     "#7f7f7f",  # gray
     "#bcbd22",  # olive
-    "#17becf",  # cyan
+    "#60c8d3",  # cyan
+    "#29043E",  # dark purple
+    "#063042",  # ocean
+    "#274720",  # forest green
 ]
+
+
+def _get_n_colors(n: int) -> List[str]:
+    """Return colors by cycling the configured palette."""
+    return [COLORS[i % len(COLORS)] for i in range(n)]
 
 
 def plot_comparison_multi(
@@ -46,17 +54,24 @@ def plot_comparison_multi(
 ):
     """Create comparison plots for loss and metric curves for N runs."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    colors = _get_n_colors(len(prior_names))
 
     # Plot loss curves
-    for cb, name in zip(callbacks, prior_names):
-        ax1.plot(cb.epoch_history, cb.loss_history, label=name, linewidth=2)
+    for i, (cb, name) in enumerate(zip(callbacks, prior_names)):
+        ax1.plot(
+            cb.epoch_history,
+            cb.loss_history,
+            label=name,
+            linewidth=2,
+            color=colors[i],
+        )
     ax1.set_xlabel("Epoch", fontsize=12)
     ax1.set_ylabel("Loss", fontsize=12)
     ax1.set_title("Training Loss Comparison", fontsize=14, fontweight="bold")
     ax1.grid(True, alpha=0.3)
 
     # Plot metric curves (skip None values)
-    for cb, name in zip(callbacks, prior_names):
+    for i, (cb, name) in enumerate(zip(callbacks, prior_names)):
         metric_history = (
             cb.roc_auc_history if hasattr(cb, "roc_auc_history") else cb.rmse_history
         )
@@ -66,7 +81,7 @@ def plot_comparison_multi(
                 continue
             xs.append(e)
             ys.append(m)
-        ax2.plot(xs, ys, label=name, linewidth=2)
+        ax2.plot(xs, ys, label=name, linewidth=2, color=colors[i])
 
     ax2.set_xlabel("Epoch", fontsize=12)
     ax2.set_ylabel(metric_name, fontsize=12)
@@ -145,6 +160,7 @@ def plot_per_task_comparison(
 
     n_tasks = len(all_tasks)
     n_models = len(final_task_scores)
+    colors = _get_n_colors(n_models)
 
     fig, ax = plt.subplots(figsize=(max(10, n_tasks * 2), 6))
     x = range(n_tasks)
@@ -153,7 +169,7 @@ def plot_per_task_comparison(
     for i, (record, scores_dict) in enumerate(final_task_scores):
         scores = [scores_dict.get(task, 0.0) for task in all_tasks]
         offset = (i - n_models / 2 + 0.5) * bar_width
-        color = COLORS[i % len(COLORS)]
+        color = colors[i]
         short_name = record.get("prior_name", record.get("model_name", "Model"))
 
         bars = ax.bar(
@@ -205,7 +221,7 @@ def plot_time_budget_metrics(
 
     model_series = []
     epoch_times = []
-    for record in run_records:
+    for run_idx, record in enumerate(run_records):
         metric_history = record.get("metric_history", [])
         loss_history = record.get("loss_history", [])
         train_time = record.get("train_time", 0.0)
@@ -227,6 +243,7 @@ def plot_time_budget_metrics(
 
         model_series.append(
             {
+                "key": f"run_{run_idx}",
                 "name": record.get("prior_name", record.get("model_name", "Model")),
                 "epoch_time": epoch_time,
                 "metrics": filled,
@@ -236,6 +253,14 @@ def plot_time_budget_metrics(
     if not model_series:
         return
 
+    seen = {}
+    for model in model_series:
+        name = model["name"]
+        seen[name] = seen.get(name, 0) + 1
+        model["display_name"] = name if seen[name] == 1 else f"{name} ({seen[name]})"
+
+    colors = _get_n_colors(len(model_series))
+
     min_epoch_time = min(epoch_times) if epoch_times else 0.01
     max_time = max(r.get("train_time", 0.0) for r in run_records)
     min_time = max(min_epoch_time, 1e-3)
@@ -244,9 +269,9 @@ def plot_time_budget_metrics(
     else:
         budgets = np.logspace(np.log10(min_time), np.log10(max_time), n_budgets)
 
-    metric_by_budget = {m["name"]: [] for m in model_series}
-    win_share_by_budget = {m["name"]: [] for m in model_series}
-    rank_by_budget = {m["name"]: [] for m in model_series}
+    metric_by_budget = {m["key"]: [] for m in model_series}
+    win_share_by_budget = {m["key"]: [] for m in model_series}
+    rank_by_budget = {m["key"]: [] for m in model_series}
 
     for budget in budgets:
         current_metrics = []
@@ -255,20 +280,20 @@ def plot_time_budget_metrics(
             epoch_idx = max(0, min(epoch_idx, len(model["metrics"]) - 1))
             metric_val = model["metrics"][epoch_idx]
             current_metrics.append(metric_val)
-            metric_by_budget[model["name"]].append(metric_val)
+            metric_by_budget[model["key"]].append(metric_val)
 
         valid = [m for m in current_metrics if m is not None]
         if not valid:
             for model in model_series:
-                win_share_by_budget[model["name"]].append(np.nan)
-                rank_by_budget[model["name"]].append(np.nan)
+                win_share_by_budget[model["key"]].append(np.nan)
+                rank_by_budget[model["key"]].append(np.nan)
             continue
 
         max_val = max(valid)
         winners = [i for i, m in enumerate(current_metrics) if m == max_val]
         win_share = 1.0 / len(winners) if winners else 0.0
         for i, model in enumerate(model_series):
-            win_share_by_budget[model["name"]].append(
+            win_share_by_budget[model["key"]].append(
                 win_share if i in winners else 0.0
             )
 
@@ -291,13 +316,13 @@ def plot_time_budget_metrics(
             i = j
 
         for i, model in enumerate(model_series):
-            rank_by_budget[model["name"]].append(ranks[i])
+            rank_by_budget[model["key"]].append(ranks[i])
 
     fig, ax = plt.subplots(figsize=(7, 5))
     for i, model in enumerate(model_series):
-        name = model["name"]
+        key = model["key"]
         ax.plot(
-            budgets, metric_by_budget[name], label=name, color=COLORS[i % len(COLORS)]
+            budgets, metric_by_budget[key], label=model["display_name"], color=colors[i]
         )
     ax.set_xscale("log")
     ax.set_xlabel("Time Budget (s)", fontsize=12)
@@ -313,12 +338,12 @@ def plot_time_budget_metrics(
 
     fig, ax = plt.subplots(figsize=(7, 5))
     for i, model in enumerate(model_series):
-        name = model["name"]
+        key = model["key"]
         ax.plot(
             budgets,
-            win_share_by_budget[name],
-            label=name,
-            color=COLORS[i % len(COLORS)],
+            win_share_by_budget[key],
+            label=model["display_name"],
+            color=colors[i],
         )
     ax.set_xscale("log")
     ax.set_xlabel("Time Budget (s)", fontsize=12)
@@ -336,9 +361,9 @@ def plot_time_budget_metrics(
 
     fig, ax = plt.subplots(figsize=(7, 5))
     for i, model in enumerate(model_series):
-        name = model["name"]
+        key = model["key"]
         ax.plot(
-            budgets, rank_by_budget[name], label=name, color=COLORS[i % len(COLORS)]
+            budgets, rank_by_budget[key], label=model["display_name"], color=colors[i]
         )
     ax.set_xscale("log")
     ax.set_xlabel("Time Budget (s)", fontsize=12)
@@ -730,8 +755,8 @@ def plot_all_regression_predictions(
         {"name": "SVR (RBF)", "model": SVR(kernel="rbf")},
     ]
 
-    n_tabpfn_models = len(run_records)
-    n_total_models = n_tabpfn_models + len(baseline_models)
+    n_trained_models = len(run_records)
+    n_total_models = n_trained_models + len(baseline_models)
     n_datasets = len(datasets)
 
     fig, axes = plt.subplots(
@@ -781,7 +806,7 @@ def plot_all_regression_predictions(
                     rotation=90,
                 )
 
-        # Plot TabPFN models
+        # Plot trained models
         for model_idx, record in enumerate(run_records):
             model = record["model"]
             dist = record.get("dist")
@@ -849,8 +874,8 @@ def plot_all_decision_boundaries(
         {"name": "SVM (RBF)", "model": SVC(kernel="rbf", probability=True)},
     ]
 
-    n_tabpfn_models = len(run_records)
-    n_total_models = n_tabpfn_models + len(baseline_models)
+    n_trained_models = len(run_records)
+    n_total_models = n_trained_models + len(baseline_models)
     n_datasets = len(datasets)
 
     fig, axes = plt.subplots(
@@ -900,7 +925,7 @@ def plot_all_decision_boundaries(
                     rotation=90,
                 )
 
-        # Plot TabPFN models
+        # Plot trained models
         for model_idx, record in enumerate(run_records):
             model = record["model"]
             prior_name = record["prior_name"]
@@ -1140,11 +1165,34 @@ def plot_prior_correlation_heatmap(
         return
 
     corr = np.corrcoef(clean_matrix)
+    if n_priors > 1:
+        off_diag = corr[~np.eye(n_priors, dtype=bool)]
+        off_diag = off_diag[np.isfinite(off_diag)]
+    else:
+        off_diag = np.array([], dtype=float)
+
+    if off_diag.size:
+        # use a wider positive band so the plot keeps contrast without becoming uniformly red.
+        clip_vmin = 0.65
+        clip_vmax = 1.0
+    else:
+        clip_vmin, clip_vmax = -1.0, 1.0
+
+    if (not np.isfinite(clip_vmin)) or (not np.isfinite(clip_vmax)):
+        clip_vmin, clip_vmax = -1.0, 1.0
+
+    if clip_vmax - clip_vmin < 1e-3:
+        center = float(np.mean(off_diag)) if off_diag.size else 0.0
+        half = 0.05
+        clip_vmin = max(-1.0, center - half)
+        clip_vmax = min(1.0, center + half)
+
+    corr_plot = np.clip(corr, clip_vmin, clip_vmax)
 
     fig_size = max(5, n_priors * 0.8 + 2)
     fig, ax = plt.subplots(figsize=(fig_size, fig_size))
 
-    im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
+    im = ax.imshow(corr_plot, cmap="coolwarm", vmin=clip_vmin, vmax=clip_vmax, aspect="equal")
 
     ax.set_xticks(range(n_priors))
     ax.set_xticklabels(prior_names, rotation=45, ha="right", fontsize=10)
@@ -1155,14 +1203,17 @@ def plot_prior_correlation_heatmap(
     for i in range(n_priors):
         for j in range(n_priors):
             val = corr[i, j]
-            text_color = "white" if abs(val) > 0.7 else "black"
+            text_color = "white"
             ax.text(
                 j, i, f"{val:.2f}", ha="center", va="center",
                 fontsize=9, fontweight="bold", color=text_color,
             )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04)
-    cbar.set_label("Pearson Correlation", fontsize=11)
+    cbar.set_label(
+        f"Pearson Correlation (clipped to [{clip_vmin:.2f}, {clip_vmax:.2f}])",
+        fontsize=11,
+    )
 
     ax.set_title(
         "Prior vs Prior — Performance Correlation",
@@ -1176,3 +1227,339 @@ def plot_prior_correlation_heatmap(
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     print(f"📊 Prior correlation heatmap saved to: {output_path}")
     plt.close()
+
+
+def compute_performance_similarity_matrix(perf_matrix: np.ndarray) -> np.ndarray | None:
+    """Compute prior-prior performance similarity from TabArena matrix."""
+    valid_cols = ~np.any(np.isnan(perf_matrix), axis=0)
+    clean_matrix = perf_matrix[:, valid_cols]
+
+    if clean_matrix.shape[1] < 2:
+        return None
+
+    corr = np.corrcoef(clean_matrix)
+    return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def plot_data_similarity_heatmap(
+    data_similarity_matrix: np.ndarray,
+    prior_names: list[str],
+    output_path: str = "prior_data_similarity_heatmap.png",
+):
+    """Plot a prior-vs-prior heatmap for data similarity."""
+    n_priors = data_similarity_matrix.shape[0]
+    if data_similarity_matrix.shape[0] != data_similarity_matrix.shape[1]:
+        raise ValueError("data_similarity_matrix must be square")
+    if len(prior_names) != n_priors:
+        raise ValueError("prior_names length must match matrix shape")
+
+    fig_size = max(5, n_priors * 0.8 + 2)
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+
+    im = ax.imshow(data_similarity_matrix, cmap="coolwarm", vmin=0.0, vmax=1.0, aspect="equal")
+
+    ax.set_xticks(range(n_priors))
+    ax.set_xticklabels(prior_names, rotation=45, ha="right", fontsize=10)
+    ax.set_yticks(range(n_priors))
+    ax.set_yticklabels(prior_names, fontsize=10)
+    ax.set_xlabel("Prior", fontsize=12)
+    ax.set_ylabel("Prior", fontsize=12)
+    ax.set_title(
+        "Prior vs Prior - Data Similarity",
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
+    )
+
+    for i in range(n_priors):
+        for j in range(n_priors):
+            val = data_similarity_matrix[i, j]
+            ax.text(
+                j,
+                i,
+                f"{val:.2f}",
+                ha="center",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                color="white",
+            )
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04)
+    cbar.set_label("Distance-based similarity in standardized meta-feature space", fontsize=11)
+
+    output_path = _resolve_plot_path(output_path)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"📊 Prior data similarity heatmap saved to: {output_path}")
+    plt.close()
+
+
+def compute_data_vs_performance_stats(
+    data_similarity_matrix: np.ndarray,
+    performance_similarity_matrix: np.ndarray,
+    prior_names: list[str],
+    top_k: int = 10,
+    high_similarity_threshold: float = 0.6,
+) -> dict:
+    """Compute pairwise data/performance agreement statistics.
+
+    Returns a dict with ranked_pairs, top mismatch categories, and
+    thresholds that the plotting function can consume directly.
+    """
+    if data_similarity_matrix.shape != performance_similarity_matrix.shape:
+        raise ValueError("data and performance similarity matrices must have the same shape")
+
+    n_priors = data_similarity_matrix.shape[0]
+    if n_priors < 2:
+        raise ValueError("need at least 2 priors")
+    if len(prior_names) != n_priors:
+        raise ValueError("prior_names length must match matrix shape")
+
+    tri = np.triu_indices(n_priors, k=1)
+    data_vals = data_similarity_matrix[tri]
+    perf_vals = performance_similarity_matrix[tri]
+    pair_names = [f"{prior_names[i]} <-> {prior_names[j]}" for i, j in zip(tri[0], tri[1])]
+
+    valid = np.isfinite(data_vals) & np.isfinite(perf_vals)
+    data_vals = data_vals[valid]
+    perf_vals = perf_vals[valid]
+    pair_names = [name for name, keep in zip(pair_names, valid) if keep]
+
+    if data_vals.size == 0:
+        raise ValueError("no valid prior pairs to plot")
+
+    gap = np.abs(perf_vals - data_vals)
+    mismatch_matrix = performance_similarity_matrix - data_similarity_matrix
+
+    mismatch_scale = float(np.nanpercentile(np.abs(mismatch_matrix), 95))
+    if not np.isfinite(mismatch_scale) or mismatch_scale <= 0:
+        mismatch_scale = float(np.nanmax(np.abs(mismatch_matrix)))
+    if not np.isfinite(mismatch_scale) or mismatch_scale <= 0:
+        mismatch_scale = 1.0
+
+    mismatch_threshold = float(np.nanpercentile(gap, 75)) if gap.size else 0.0
+    if not np.isfinite(mismatch_threshold):
+        mismatch_threshold = 0.0
+
+    ranked_pairs = sorted(
+        [
+            {
+                "pair": pair,
+                "data_similarity": float(dx),
+                "performance_similarity": float(dy),
+                "gap": float(dg),
+                "signed_gap": float(dy - dx),
+                "relationship": (
+                    "data_similar_perf_different"
+                    if dx >= high_similarity_threshold and dy < high_similarity_threshold
+                    else (
+                        "data_different_perf_similar"
+                        if dx < high_similarity_threshold and dy >= high_similarity_threshold
+                        else "agreement"
+                    )
+                ),
+            }
+            for pair, dx, dy, dg in zip(pair_names, data_vals, perf_vals, gap)
+        ],
+        key=lambda row: row["gap"],
+        reverse=True,
+    )
+
+    top_data_similar_perf_diff = [
+        row for row in ranked_pairs
+        if row["data_similarity"] >= high_similarity_threshold
+        and row["performance_similarity"] < high_similarity_threshold
+    ][:top_k]
+    top_data_diff_perf_similar = [
+        row for row in ranked_pairs
+        if row["data_similarity"] < high_similarity_threshold
+        and row["performance_similarity"] >= high_similarity_threshold
+    ][:top_k]
+
+    return {
+        "num_pairs": int(data_vals.size),
+        "ranked_pairs": ranked_pairs,
+        "top_data_similar_perf_different": top_data_similar_perf_diff,
+        "top_data_different_perf_similar": top_data_diff_perf_similar,
+        "high_similarity_threshold": float(high_similarity_threshold),
+        "mismatch_threshold": float(mismatch_threshold),
+        "mismatch_scale": float(mismatch_scale),
+        "mismatch_matrix": mismatch_matrix,
+    }
+
+
+def plot_data_vs_performance_similarity(
+    data_similarity_matrix: np.ndarray,
+    performance_similarity_matrix: np.ndarray,
+    prior_names: list[str],
+    output_path: str = "data_vs_performance_similarity.png",
+    top_k: int = 10,
+):
+    """Plot data similarity, performance similarity, and their disagreement side by side."""
+    stats = compute_data_vs_performance_stats(
+        data_similarity_matrix, performance_similarity_matrix, prior_names, top_k=top_k,
+    )
+    ranked_pairs = stats["ranked_pairs"]
+    mismatch_matrix = stats["mismatch_matrix"]
+    mismatch_scale = stats["mismatch_scale"]
+    n_priors = data_similarity_matrix.shape[0]
+
+    fig = plt.figure(figsize=(20, 11))
+    gs = fig.add_gridspec(
+        2,
+        3,
+        height_ratios=[1.0, 0.9],
+        width_ratios=[1.0, 1.0, 1.0],
+        wspace=0.42,
+        hspace=0.48,
+    )
+    data_ax = fig.add_subplot(gs[0, 0])
+    perf_ax = fig.add_subplot(gs[0, 1])
+    mismatch_ax = fig.add_subplot(gs[0, 2])
+    rank_ax = fig.add_subplot(gs[1, :])
+
+    data_im = data_ax.imshow(
+        data_similarity_matrix,
+        cmap="coolwarm",
+        vmin=0.0,
+        vmax=1.0,
+        aspect="equal",
+    )
+    perf_im = perf_ax.imshow(
+        performance_similarity_matrix,
+        cmap="coolwarm",
+        vmin=-1.0,
+        vmax=1.0,
+        aspect="equal",
+    )
+
+    mismatch_im = mismatch_ax.imshow(
+        mismatch_matrix,
+        cmap="coolwarm",
+        vmin=-mismatch_scale,
+        vmax=mismatch_scale,
+        aspect="equal",
+    )
+
+    annotation_fontsize = max(6, min(8, int(95 / max(n_priors, 1))))
+
+    def _annotate_heatmap(ax, matrix, text_color, nan_label="—"):
+        for i in range(n_priors):
+            for j in range(n_priors):
+                value = matrix[i, j]
+                label = nan_label if not np.isfinite(value) else f"{value:.2f}"
+                ax.text(
+                    j,
+                    i,
+                    label,
+                    ha="center",
+                    va="center",
+                    fontsize=annotation_fontsize,
+                    color=text_color,
+                )
+
+    def _format_heatmap(ax, title, show_y_labels: bool = False):
+        ax.set_xticks(range(n_priors))
+        ax.set_xticklabels(prior_names, rotation=50, ha="right", fontsize=8)
+        ax.set_yticks(range(n_priors))
+        if show_y_labels:
+            ax.set_yticklabels(prior_names, fontsize=8)
+            ax.set_ylabel("Prior")
+        else:
+            ax.set_yticklabels([])
+            ax.tick_params(axis="y", length=0)
+        ax.set_xlabel("Prior", fontsize=10)
+        ax.set_title(title, fontsize=12, fontweight="bold")
+
+    _format_heatmap(data_ax, "Data Similarity", show_y_labels=True)
+    _format_heatmap(perf_ax, "Performance Similarity")
+    _format_heatmap(mismatch_ax, "Performance - Data")
+
+    _annotate_heatmap(data_ax, data_similarity_matrix, "white")
+    _annotate_heatmap(perf_ax, performance_similarity_matrix, "white")
+    _annotate_heatmap(mismatch_ax, mismatch_matrix, "black")
+
+    data_cbar = fig.colorbar(data_im, ax=data_ax, fraction=0.04, pad=0.02)
+    data_cbar.set_label("Data similarity", fontsize=9)
+
+    perf_cbar = fig.colorbar(perf_im, ax=perf_ax, fraction=0.04, pad=0.02)
+    perf_cbar.set_label("Performance similarity", fontsize=9)
+
+    mismatch_cbar = fig.colorbar(mismatch_im, ax=mismatch_ax, fraction=0.04, pad=0.02)
+    mismatch_cbar.set_label("Performance - data", fontsize=9)
+
+    rank_ax.set_title(
+        "Largest Data/Performance Disagreements",
+        fontsize=12,
+        fontweight="bold",
+        pad=10,
+    )
+
+    top_rows = ranked_pairs[: min(top_k, len(ranked_pairs))]
+    if top_rows:
+        y_pos = np.arange(len(top_rows))
+        signed_vals = np.array([row["signed_gap"] for row in top_rows], dtype=float)
+        labels = []
+        for idx, row in enumerate(top_rows, start=1):
+            short_pair = row["pair"]
+            if len(short_pair) > 48:
+                short_pair = short_pair[:45] + "..."
+            labels.append(f"{idx}. {short_pair}")
+
+        bar_colors = plt.cm.coolwarm(
+            0.5 + 0.5 * np.clip(signed_vals / max(mismatch_scale, 1e-9), -1.0, 1.0)
+        )
+        rank_ax.barh(y_pos, signed_vals, color=bar_colors, alpha=0.9)
+        rank_ax.axvline(0.0, color="gray", linewidth=1.0, linestyle="--", alpha=0.8)
+        rank_ax.set_yticks(y_pos)
+        rank_ax.set_yticklabels(labels, fontsize=8)
+        rank_ax.invert_yaxis()
+        rank_ax.set_xlabel("Performance similarity - data similarity")
+        rank_ax.grid(True, alpha=0.25, axis="x")
+
+        max_abs = float(np.max(np.abs(signed_vals))) if signed_vals.size else 1.0
+        margin = max(0.04, 0.18 * max_abs)
+        rank_ax.set_xlim(
+            min(0.0, float(np.min(signed_vals))) - margin,
+            max(0.0, float(np.max(signed_vals))) + margin,
+        )
+
+        for yi, row, value in zip(y_pos, top_rows, signed_vals):
+            rank_ax.text(
+                0.99,
+                yi,
+                (
+                    f"data={row['data_similarity']:.2f}, "
+                    f"perf={row['performance_similarity']:.2f}"
+                ),
+                transform=rank_ax.get_yaxis_transform(),
+                va="center",
+                ha="right",
+                fontsize=8,
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0},
+            )
+    else:
+        rank_ax.axis("off")
+
+    fig.suptitle(
+        "Data similarity vs TabArena performance similarity",
+        fontsize=15,
+        fontweight="bold",
+        y=0.98,
+    )
+
+    output_path = _resolve_plot_path(output_path)
+    fig.subplots_adjust(
+        left=0.12,
+        right=0.97,
+        top=0.88,
+        bottom=0.09,
+        wspace=0.42,
+        hspace=0.5,
+    )
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"📊 Data-vs-performance readability plot saved to: {output_path}")
+    plt.close()
+
+    return stats

@@ -8,6 +8,7 @@ Submodules:
 
 from .general import (
     discover_h5_files,
+    discover_trained_models,
     load_config,
     get_prior_colors,
     apply_plot_style,
@@ -21,6 +22,7 @@ from .visualization import (
 
 __all__ = [
     "discover_h5_files",
+    "discover_trained_models",
     "load_config",
     "get_prior_colors",
     "apply_plot_style",

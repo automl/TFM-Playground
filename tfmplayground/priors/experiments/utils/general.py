@@ -2,11 +2,13 @@
 
 Includes:
 - Config loading
+- Trained model discovery
 - HDF5 prior discovery
 - Analyzer loading
 - Plot styling and saving
 """
 
+import json
 import re
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +26,40 @@ def load_config(config_path: str = "config.yaml") -> Dict:
     """Load configuration from a YAML file."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
+
+
+def discover_trained_models(models_dir: str) -> List[Dict[str, Any]]:
+    """Discover trained model folders that contain metadata.json.
+
+    Args:
+        models_dir: Directory containing per-model subdirectories.
+
+    Returns:
+        A list of dictionaries with keys: dir, dir_name, metadata.
+    """
+    models_path = Path(models_dir)
+
+    if not models_path.is_dir():
+        return []
+
+    found: List[Dict[str, Any]] = []
+    for entry_path in sorted(models_path.iterdir()):
+        if not entry_path.is_dir():
+            continue
+
+        meta_path = entry_path / "metadata.json"
+        if meta_path.is_file():
+            with meta_path.open("r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            found.append(
+                {
+                    "dir": str(entry_path),
+                    "dir_name": entry_path.name,
+                    "metadata": metadata,
+                }
+            )
+
+    return found
 
 
 def discover_h5_files(data_dir: str) -> Dict[str, str]:
@@ -85,7 +121,7 @@ def load_multiple_analyzers(
     if verbose:
         print(f"Scanning {data_dir} for prior data files...")
 
-    discovered_files = discover_h5_files(data_dir)
+    discovered_files = dict(sorted(discover_h5_files(data_dir).items()))
 
     if not discovered_files:
         raise ValueError(
@@ -209,4 +245,3 @@ def apply_plot_style():
         yield
     finally:
         plt.rcParams.update(original_rc)
-

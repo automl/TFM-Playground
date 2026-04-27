@@ -8,11 +8,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Tuple, Optional
 from scipy import stats
 from sklearn.decomposition import PCA
 
-from tfmplayground.priors.experiments.regression.analyzer import RegressionDataAnalyzer
+from tfmplayground.priors.experiments.base_analyzer import (
+    compute_prior_similarity_matrix,
+)
+from tfmplayground.priors.experiments.regression.analyzer import (
+    RegressionDataAnalyzer,
+)
 from tfmplayground.priors.experiments.utils.general import (
     get_prior_colors, 
     apply_plot_style,
@@ -297,11 +302,18 @@ def plot_single_prior_overview(analyzer: RegressionDataAnalyzer,
         corrs = []
         for j in range(n_features_total):
             xj = all_features_matrix[:, j]
+            finite = np.isfinite(xj) & np.isfinite(all_targets_vec)
+            if finite.sum() < 2:
+                corrs.append(0.0)
+                continue
+
+            xj_valid = xj[finite]
+            y_valid = all_targets_vec[finite]
             # avoid NaNs if feature or target is 'almost' constant
-            if np.std(xj) < 1e-12:
+            if np.std(xj_valid) < 1e-12 or np.std(y_valid) < 1e-12:
                 corrs.append(0.0)
             else:
-                corr = np.corrcoef(xj, all_targets_vec)[0, 1]
+                corr = np.corrcoef(xj_valid, y_valid)[0, 1]
                 if np.isnan(corr):
                     corr = 0.0
                 # use absolute strength
@@ -319,8 +331,10 @@ def plot_single_prior_overview(analyzer: RegressionDataAnalyzer,
             y = data['y'][i, :n_points]
 
             if x.shape[1] > best_feat_idx:
-                sample_x.extend(x[:, best_feat_idx])
-                sample_y.extend(y)
+                x_best = x[:, best_feat_idx]
+                finite = np.isfinite(x_best) & np.isfinite(y)
+                sample_x.extend(x_best[finite])
+                sample_y.extend(y[finite])
 
         ax4.scatter(sample_x, sample_y, alpha=0.5, s=20, color=color)
         ax4.set_xlabel(f'Feature {best_feat_idx}')
@@ -342,8 +356,8 @@ def plot_single_prior_overview(analyzer: RegressionDataAnalyzer,
         Skewness: {stats.skew(all_targets):.3f}
         
         Feature Statistics:
-        Mean: {np.mean(all_features):.3f}
-        Std: {np.std(all_features):.3f}
+        Mean: {np.nanmean(all_features):.3f}
+        Std: {np.nanstd(all_features):.3f}
         
         Dataset Info:
         Num Samples: {len(data['X'])}
@@ -791,7 +805,10 @@ def plot_redundancy(analyzers: Dict[str, RegressionDataAnalyzer]) -> Tuple[plt.F
             
             # compute correlation matrix
             if features.shape[1] > 1:
-                corr_matrix = np.corrcoef(features.T)
+                masked_features = np.ma.masked_invalid(features)
+                corr_matrix = np.ma.corrcoef(masked_features, rowvar=False).filled(0.0)
+                corr_matrix = np.nan_to_num(corr_matrix, nan=0.0, posinf=0.0, neginf=0.0)
+                np.fill_diagonal(corr_matrix, 1.0)
             else:
                 corr_matrix = np.array([[1.0]])
             
@@ -829,114 +846,18 @@ def plot_redundancy(analyzers: Dict[str, RegressionDataAnalyzer]) -> Tuple[plt.F
         return fig, axes
     
 
-# prior summary vector for similarity comparisons
-def prior_summary_vector(
-    analyzer: RegressionDataAnalyzer,
-) -> Tuple[np.ndarray, List[str]]:
-    """Build a fixed-length numeric summary vector for one prior.
-
-    Uses existing analyzer methods and only scalar stats.
-
-    Returns:
-        (vector, metric_names) so we can keep consistent ordering.
-    """
-    # dimensionality / basic stats
-    basic = analyzer.get_basic_statistics()
-    num_feat_stats = basic["num_features"]
-    seq_len_stats = basic["seq_lengths"]
-    eval_pos_stats = basic["eval_positions"]
-
-    # grab the other stats dictionaries
-    t = analyzer.analyze_target_distribution()
-    f = analyzer.analyze_feature_distributions()
-    rel = analyzer.analyze_target_feature_relationships()
-    mi = analyzer.analyze_mutual_information()
-    red = analyzer.analyze_feature_redundancy()
-    dev = analyzer.analyze_target_scale_and_deviation()
-    noise = analyzer.analyze_noise_characteristics()
-
-    # pick a compact set of informative scalar metrics
-    metrics: Dict[str, float] = {
-        # how many features per task?
-        "dim_num_features_mean": float(num_feat_stats.get("mean", 0.0)),
-        "dim_num_features_std": float(num_feat_stats.get("std", 0.0)),
-        # how many datapoints per task?
-        "dim_seq_len_mean": float(seq_len_stats.get("mean", 0.0)),
-        "dim_seq_len_std": float(seq_len_stats.get("std", 0.0)),
-        # where in the sequence are we evaluated on average?
-        "dim_eval_pos_mean": float(eval_pos_stats.get("mean", 0.0)),
-        # target distribution (how y behaves globally)
-        "t_mean": float(t.get("mean", 0.0)),
-        "t_std": float(t.get("std", 0.0)),
-        "t_range": float(t.get("range", 0.0)),
-        "t_skew": float(t.get("skewness", 0.0)),
-        # feature distribution (how x behaves globally)
-        "f_mean": float(f.get("mean", 0.0)),
-        "f_std": float(f.get("std", 0.0)),
-        "f_zero_ratio": float(f.get("zero_ratio", 0.0)),
-        # feature–target relationships
-        "rel_pearson_mean": float(rel.get("pearson_mean_abs", 0.0)),
-        "rel_spearman_mean": float(rel.get("spearman_mean_abs", 0.0)),
-        "rel_nonlin": float(rel.get("nonlinearity_score", 0.0)),
-        "rel_inf_ratio": float(rel.get("informative_features_ratio", 0.0)),
-        # mutual information (non-linear dependence, summarized)
-        "mi_mean": float(mi.get("mean", 0.0)),
-        "mi_q75": float(mi.get("q75", 0.0)),
-        # redundancy between features
-        "red_mean_abs_corr": float(red.get("mean_abs_correlation", 0.0)),
-        "red_high_corr_ratio": float(red.get("high_correlation_ratio", 0.0)),
-        # function scale / deviation across tasks
-        "dev_mean_std": float(dev.get("mean_target_deviation", 0.0)),
-        "dev_mean_range": float(dev.get("mean_target_range", 0.0)),
-        # noise / linear fit difficulty
-        "noise_mean_std": float(noise.get("mean_noise_std", 0.0)),
-        "noise_mean_r2": float(noise.get("mean_linear_r2", 0.0)),
-    }
-
-    # keep a semantic order
-    metric_names: List[str] = list(metrics.keys())
-
-    # build the vector
-    vec = np.array([metrics[name] for name in metric_names], dtype=float)
-
-    # sanitize so similarity computations don't explode
-    vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
-
-    return vec, metric_names
-
-
-def plot_prior_similarity(analyzers: Dict[str, RegressionDataAnalyzer]) -> Tuple[plt.Figure, plt.Axes]:
-    """Compare priors to each other based on analyzer summary statistics.
-
-    Builds a summary vector per prior and plots a correlation heatmap.
-    High correlation ⇒ priors behave similarly as data generators.
-    """
+def plot_prior_similarity(
+    analyzers: Dict[str, RegressionDataAnalyzer],
+    annotate: bool = False,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Compare priors based on standardized summary-statistic proximity."""
     with apply_plot_style():
-        prior_names = list(analyzers.keys())
+        prior_names, sim_matrix = compute_prior_similarity_matrix(analyzers)
         n_priors = len(prior_names)
-
-        # build summary matrix (n_priors × n_metrics)
-        summary_vectors = []
-
-        for name in prior_names:
-            vec, _ = prior_summary_vector(analyzers[name])
-            summary_vectors.append(vec)
-
-        summary_matrix = np.vstack(summary_vectors)
-
-        # standardize metrics for scale invariance
-        mean = summary_matrix.mean(axis=0, keepdims=True)
-        std = summary_matrix.std(axis=0, keepdims=True)
-        std = std + 1e-8
-        summary_z = (summary_matrix - mean) / std
-
-        # prior–prior similarity via correlation of these vectors
-        sim_matrix = np.corrcoef(summary_z) 
-        sim_matrix = np.nan_to_num(sim_matrix, nan=0.0, posinf=0.0, neginf=0.0)
 
         # heatmap
         fig, ax = plt.subplots(figsize=(6 + 0.5 * n_priors, 5))
-        im = ax.imshow(sim_matrix, vmin=-1, vmax=1, cmap="RdBu_r")
+        im = ax.imshow(sim_matrix, vmin=0.0, vmax=1.0, cmap="coolwarm")
 
         ax.set_xticks(np.arange(n_priors))
         ax.set_yticks(np.arange(n_priors))
@@ -944,10 +865,24 @@ def plot_prior_similarity(analyzers: Dict[str, RegressionDataAnalyzer]) -> Tuple
         ax.set_yticklabels(prior_names)
         ax.set_xlabel("Prior")
         ax.set_ylabel("Prior")
-        ax.set_title("Prior Similarity (correlation of summary statistics)")
+        ax.set_title("Prior Similarity (distance-based meta-feature similarity)")
+
+        if annotate:
+            for i in range(n_priors):
+                for j in range(n_priors):
+                    ax.text(
+                        j,
+                        i,
+                        f"{sim_matrix[i, j]:.2f}",
+                        ha="center",
+                        va="center",
+                        fontsize=9,
+                        fontweight="bold",
+                        color="white",
+                    )
 
         cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label("Correlation")
+        cbar.set_label("Similarity")
 
         plt.tight_layout()
         return fig, ax

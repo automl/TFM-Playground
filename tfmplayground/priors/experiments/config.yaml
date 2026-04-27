@@ -156,12 +156,9 @@ output:
 
 # Analysis settings
 analysis:
-  n_samples_correlation: 100
+  analyzer_sample_size: 10000
   n_samples_mi: 100
-  n_samples_complexity: 100
-  n_samples_redundancy: 100
-  n_samples_noise: 100
-  feature_sample_size: 100
+  random_state: 42
 
 # Model Architecture
 model:
