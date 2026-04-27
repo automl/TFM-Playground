@@ -1380,6 +1380,7 @@ def compute_data_vs_performance_stats(
     return {
         "num_pairs": int(data_vals.size),
         "ranked_pairs": ranked_pairs,
+        "ranked_agreements": sorted(ranked_pairs, key=lambda row: row["gap"]),
         "top_data_similar_perf_different": top_data_similar_perf_diff,
         "top_data_different_perf_similar": top_data_diff_perf_similar,
         "high_similarity_threshold": float(high_similarity_threshold),
@@ -1397,19 +1398,23 @@ def plot_data_vs_performance_similarity(
     top_k: int = 10,
 ):
     """Plot data similarity, performance similarity, and their disagreement side by side."""
+
+    # Scale performance similarity from [-1, 1] to [0, 1] to match data similarity scale
+    norm_perf_matrix = (performance_similarity_matrix + 1.0) / 2.0
+
     stats = compute_data_vs_performance_stats(
-        data_similarity_matrix, performance_similarity_matrix, prior_names, top_k=top_k,
+        data_similarity_matrix, norm_perf_matrix, prior_names, top_k=top_k,
     )
     ranked_pairs = stats["ranked_pairs"]
     mismatch_matrix = stats["mismatch_matrix"]
     mismatch_scale = stats["mismatch_scale"]
     n_priors = data_similarity_matrix.shape[0]
 
-    fig = plt.figure(figsize=(20, 11))
+    fig = plt.figure(figsize=(20, 15))
     gs = fig.add_gridspec(
-        2,
         3,
-        height_ratios=[1.0, 0.9],
+        3,
+        height_ratios=[1.0, 0.9, 0.9],
         width_ratios=[1.0, 1.0, 1.0],
         wspace=0.42,
         hspace=0.48,
@@ -1418,6 +1423,7 @@ def plot_data_vs_performance_similarity(
     perf_ax = fig.add_subplot(gs[0, 1])
     mismatch_ax = fig.add_subplot(gs[0, 2])
     rank_ax = fig.add_subplot(gs[1, :])
+    agreement_ax = fig.add_subplot(gs[2, :])
 
     data_im = data_ax.imshow(
         data_similarity_matrix,
@@ -1427,9 +1433,9 @@ def plot_data_vs_performance_similarity(
         aspect="equal",
     )
     perf_im = perf_ax.imshow(
-        performance_similarity_matrix,
+        norm_perf_matrix,
         cmap="coolwarm",
-        vmin=-1.0,
+        vmin=0.0,
         vmax=1.0,
         aspect="equal",
     )
@@ -1477,31 +1483,34 @@ def plot_data_vs_performance_similarity(
     _format_heatmap(mismatch_ax, "Performance - Data")
 
     _annotate_heatmap(data_ax, data_similarity_matrix, "white")
-    _annotate_heatmap(perf_ax, performance_similarity_matrix, "white")
+    _annotate_heatmap(perf_ax, norm_perf_matrix, "white")
     _annotate_heatmap(mismatch_ax, mismatch_matrix, "black")
 
     data_cbar = fig.colorbar(data_im, ax=data_ax, fraction=0.04, pad=0.02)
     data_cbar.set_label("Data similarity", fontsize=9)
 
     perf_cbar = fig.colorbar(perf_im, ax=perf_ax, fraction=0.04, pad=0.02)
-    perf_cbar.set_label("Performance similarity", fontsize=9)
+    perf_cbar.set_label("Performance similarity (normalized 0-1)", fontsize=9)
 
     mismatch_cbar = fig.colorbar(mismatch_im, ax=mismatch_ax, fraction=0.04, pad=0.02)
     mismatch_cbar.set_label("Performance - data", fontsize=9)
 
-    rank_ax.set_title(
-        "Largest Data/Performance Disagreements",
-        fontsize=12,
-        fontweight="bold",
-        pad=10,
-    )
+    def _plot_pair_gap_bars(ax, title, rows):
+        ax.set_title(
+            title,
+            fontsize=12,
+            fontweight="bold",
+            pad=10,
+        )
 
-    top_rows = ranked_pairs[: min(top_k, len(ranked_pairs))]
-    if top_rows:
-        y_pos = np.arange(len(top_rows))
-        signed_vals = np.array([row["signed_gap"] for row in top_rows], dtype=float)
+        if not rows:
+            ax.axis("off")
+            return
+
+        y_pos = np.arange(len(rows))
+        signed_vals = np.array([row["signed_gap"] for row in rows], dtype=float)
         labels = []
-        for idx, row in enumerate(top_rows, start=1):
+        for idx, row in enumerate(rows, start=1):
             short_pair = row["pair"]
             if len(short_pair) > 48:
                 short_pair = short_pair[:45] + "..."
@@ -1510,37 +1519,40 @@ def plot_data_vs_performance_similarity(
         bar_colors = plt.cm.coolwarm(
             0.5 + 0.5 * np.clip(signed_vals / max(mismatch_scale, 1e-9), -1.0, 1.0)
         )
-        rank_ax.barh(y_pos, signed_vals, color=bar_colors, alpha=0.9)
-        rank_ax.axvline(0.0, color="gray", linewidth=1.0, linestyle="--", alpha=0.8)
-        rank_ax.set_yticks(y_pos)
-        rank_ax.set_yticklabels(labels, fontsize=8)
-        rank_ax.invert_yaxis()
-        rank_ax.set_xlabel("Performance similarity - data similarity")
-        rank_ax.grid(True, alpha=0.25, axis="x")
+        ax.barh(y_pos, signed_vals, color=bar_colors, alpha=0.9)
+        ax.axvline(0.0, color="gray", linewidth=1.0, linestyle="--", alpha=0.8)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.invert_yaxis()
+        ax.set_xlabel("Performance similarity - data similarity")
+        ax.grid(True, alpha=0.25, axis="x")
 
         max_abs = float(np.max(np.abs(signed_vals))) if signed_vals.size else 1.0
         margin = max(0.04, 0.18 * max_abs)
-        rank_ax.set_xlim(
+        ax.set_xlim(
             min(0.0, float(np.min(signed_vals))) - margin,
             max(0.0, float(np.max(signed_vals))) + margin,
         )
 
-        for yi, row, value in zip(y_pos, top_rows, signed_vals):
-            rank_ax.text(
+        for yi, row, value in zip(y_pos, rows, signed_vals):
+            ax.text(
                 0.99,
                 yi,
                 (
                     f"data={row['data_similarity']:.2f}, "
                     f"perf={row['performance_similarity']:.2f}"
                 ),
-                transform=rank_ax.get_yaxis_transform(),
+                transform=ax.get_yaxis_transform(),
                 va="center",
                 ha="right",
                 fontsize=8,
                 bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0},
             )
-    else:
-        rank_ax.axis("off")
+
+    top_rows = ranked_pairs[: min(top_k, len(ranked_pairs))]
+    agreement_rows = stats["ranked_agreements"][: min(top_k, len(ranked_pairs))]
+    _plot_pair_gap_bars(rank_ax, "Largest Data/Performance Disagreements", top_rows)
+    _plot_pair_gap_bars(agreement_ax, "Largest Data/Performance Agreements", agreement_rows)
 
     fig.suptitle(
         "Data similarity vs TabArena performance similarity",
@@ -1554,7 +1566,7 @@ def plot_data_vs_performance_similarity(
         left=0.12,
         right=0.97,
         top=0.88,
-        bottom=0.09,
+        bottom=0.07,
         wspace=0.42,
         hspace=0.5,
     )
