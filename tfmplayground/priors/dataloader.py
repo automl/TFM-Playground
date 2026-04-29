@@ -8,7 +8,7 @@ import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 # import here for future use & cleaner imports/it already handles type conversions
-from tabpfn_prior import TabPFNPriorDataLoader
+from tabpfn_prior import TabPFNPriorDataLoader as _TabPFNPriorDataLoader
 from torch.utils.data import DataLoader
 
 import numpy as np
@@ -19,6 +19,44 @@ from .vendors.tabforestpfn import (
     synthetic_dataset_generator_neighbor,
     synthetic_dataset_generator_cut,
 )
+
+
+class TabPFNPriorDataLoader(_TabPFNPriorDataLoader):
+    """TabPFN v1 loader with differentiable-mode output fixes."""
+
+    def _get_differentiable_hyperparameters(self):
+        hyperparameters = super()._get_differentiable_hyperparameters()
+        custom_hyperparameters = self.config.get("differentiable_hyperparameters")
+
+        if custom_hyperparameters is not None:
+            hyperparameters.update(custom_hyperparameters)
+
+        return hyperparameters
+
+    def _tabpfn_to_ours(self, batch_data, single_eval_pos):
+        if self.differentiable and len(batch_data) == 4:
+            x, y, target_y, differentiable_hyperparameters = batch_data
+
+            if len(x.shape) == 3:
+                x = x.transpose(0, 1)
+            if len(y.shape) == 2:
+                y = y.transpose(0, 1)
+            if len(target_y.shape) == 2:
+                target_y = target_y.transpose(0, 1)
+
+            return {
+                "x": x.to(self.device),
+                "y": y.to(self.device),
+                "target_y": target_y.to(self.device),
+                "single_eval_pos": single_eval_pos,
+                "differentiable_hyperparameters": (
+                    differentiable_hyperparameters.to(self.device)
+                    if differentiable_hyperparameters is not None
+                    else None
+                ),
+            }
+
+        return super()._tabpfn_to_ours(batch_data, single_eval_pos)
 
 
 

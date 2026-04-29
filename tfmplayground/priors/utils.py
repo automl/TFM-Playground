@@ -10,7 +10,12 @@ import torch
 from ticl.priors import GPPrior, MLPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior
 from tqdm import tqdm
 
-from .config import get_ticl_prior_config, get_tabpfn_prior_config
+from .config import (
+    TABPFN_DIFFERENTIABLE,
+    get_ticl_prior_config,
+    get_tabpfn_prior_config,
+    get_tabpfn_differentiable_prior_config,
+)
 
 
 def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: int = None) -> Union[MLPPrior, GPPrior, ClassificationAdapterPrior, BooleanConjunctionPrior, StepFunctionPrior]:
@@ -49,26 +54,37 @@ def build_ticl_prior(prior_type: str, base_prior: str = None, max_num_classes: i
         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
 
 
-def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
+def build_tabpfn_prior(prior_type: str, max_classes: int, differentiable: bool = None) -> dict:
     """Builds TabPFN prior configuration with appropriate settings for regression or classification.
         
     Args:
         prior_type: Type of TabPFN prior ('mlp', 'gp', 'prior_bag')
         max_classes: Maximum number of classes
+        differentiable: Whether to enable tabpfn-v1-prior's ranged differentiable
+            hyperparameters. Defaults to TABPFN_DIFFERENTIABLE in config.py.
         
     Returns:
         dict with 'flexible', 'max_num_classes', and 'prior_config' keys
     """
+    if differentiable is None:
+        differentiable = TABPFN_DIFFERENTIABLE
+
     is_regression = max_classes == 0
     
+    prior_config = get_tabpfn_prior_config(prior_type)
+    if differentiable:
+        prior_config = {
+            **prior_config,
+            "differentiable_hyperparameters": get_tabpfn_differentiable_prior_config(prior_type),
+        }
+
     return {
         'flexible': not is_regression,  # false for regression, true for classification
         'max_num_classes': 2 if is_regression else max_classes,  # library weirdly requires >=2 regardless of regression or classification
         # num_classes parameter in the library code is equated to max_num_classes
         # so its not varied separately here
-        'prior_config': {
-            **get_tabpfn_prior_config(prior_type),
-        },
+        'prior_config': prior_config,
+        'differentiable': differentiable,
     }
 
 

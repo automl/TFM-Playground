@@ -91,7 +91,7 @@ class EpisodeConfig:
 
     # heuristic for classification column detection in mixed_random_target mode: if a column is categorical or has few unique values, treat as classification
     unique_count_threshold: int = 10
-    npz_cache_size: int = 16
+    npz_cache_size: int = 380
 
     # retry limits for mixed_random_target mode
     max_dataset_retries: int = 3
@@ -427,9 +427,7 @@ class RealDataPrior(Dataset):
 
         # extract target column from the 'full' matrix
         y_use = data[:, target_col]
-        # use the rest as features
-        X_use = np.delete(data, target_col, axis=1)
-        n_rows = X_use.shape[0]
+        n_rows, n_cols = data.shape
 
         # pick a random sequence length for this episode, between min_seq_len and max_seq_len
         # but capped at the number of available rows
@@ -439,8 +437,16 @@ class RealDataPrior(Dataset):
         # randomly sample the rows without replacement to build the episode
         rows = rng.choice(n_rows, size=seq_len, replace=False)
 
+        feature_cols = np.concatenate(
+            (np.arange(target_col), np.arange(target_col + 1, n_cols))
+        )
+        if feature_cols.size > cfg.max_features:
+            feature_cols = feature_cols[
+                rng.choice(feature_cols.size, size=cfg.max_features, replace=False)
+            ]
+
         # subsampled episode data
-        X_ep = X_use[rows].astype(np.float32, copy=True)
+        X_ep = data[np.ix_(rows, feature_cols)].astype(np.float32, copy=True)
         y_ep = y_use[rows].astype(np.int64 if is_classification else np.float32, copy=True)
 
         # safeguard against sampling only one class for classification episodes
@@ -449,7 +455,7 @@ class RealDataPrior(Dataset):
                 if np.unique(y_ep).size >= 2:
                     break
                 rows = rng.choice(n_rows, size=seq_len, replace=False)
-                X_ep = X_use[rows].astype(np.float32, copy=True)
+                X_ep = data[np.ix_(rows, feature_cols)].astype(np.float32, copy=True)
                 y_ep = y_use[rows].astype(np.int64, copy=True)
 
         return X_ep, y_ep
@@ -546,7 +552,7 @@ class RealDataPriorDataLoader:
         mode: str = "default_targets",
         batch_size: int = 1, # required for model's loss function otherwise padding effects the loss calculation
         base_seed: int = 0,
-        npz_cache_size: int = 16,
+        npz_cache_size: int = 380,
         num_workers: int = 0,
         fallback_pool_file: Optional[str] = None,
     ):

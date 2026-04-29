@@ -1,10 +1,10 @@
-"""Compare generation/training time tradeoffs for trained priors.
+"""Compare prior generation cost against downstream performance.
 
 This script joins:
 - prior generation metrics from H5 attributes (wall_seconds, ...)
 - trained model metrics from metadata.json (train_time, final_metric, ...)
 
-It then produces time-tradeoff plots and a joined metrics JSON/CSV.
+It then produces generation-cost plots and a joined metrics JSON/CSV.
 
 Usage:
     python tfmplayground/priors/experiments/compare_time_tradeoff.py --problem_type classification
@@ -250,25 +250,23 @@ def _plot_stacked_cost(rows, output_path):
     plot_rows = [
         r
         for r in rows
-        if r.get("generation_wall_seconds") is not None and r.get("train_time") is not None
+        if r.get("generation_wall_seconds") is not None
     ]
     if not plot_rows:
-        print("Skipping stacked cost plot (no rows with both generation and train times).")
+        print("Skipping stacked cost plot (no rows with generation time).")
         return
 
     names = [r["prior_name"] for r in plot_rows]
     gen = np.array([r["generation_wall_seconds"] for r in plot_rows], dtype=float)
-    train = np.array([r["train_time"] for r in plot_rows], dtype=float)
     x = np.arange(len(names))
 
     fig, ax = plt.subplots(figsize=(max(8, 1.2 * len(names)), 5))
     ax.bar(x, gen, label="Generation time", color="#5B8FF9")
-    ax.bar(x, train, bottom=gen, label="Training time", color="#5AD8A6")
 
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=35, ha="right")
     ax.set_ylabel("Time (s)")
-    ax.set_title("Per-prior compute cost (generation + training)")
+    ax.set_title("Per-prior generation cost")
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend()
     plt.tight_layout()
@@ -281,10 +279,10 @@ def _plot_performance_vs_cost(rows, output_path):
     plot_rows = [
         r
         for r in rows
-        if r.get("total_time") is not None and r.get("final_metric") is not None
+        if r.get("generation_wall_seconds") is not None and r.get("final_metric") is not None
     ]
     if not plot_rows:
-        print("Skipping performance-vs-cost plot (no rows with total_time and final_metric).")
+        print("Skipping performance-vs-cost plot (no rows with generation time and final_metric).")
         return
 
     fig, ax = plt.subplots(figsize=(9.5, 5.5))
@@ -292,7 +290,7 @@ def _plot_performance_vs_cost(rows, output_path):
 
     for idx, row in enumerate(plot_rows):
         ax.scatter(
-            row["total_time"],
+            row["generation_wall_seconds"],
             row["final_metric"],
             s=90,
             color=colors[idx],
@@ -301,10 +299,10 @@ def _plot_performance_vs_cost(rows, output_path):
             linewidths=0.7,
         )
 
-    ax.set_xlabel("Total time (generation + training, s)")
+    ax.set_xlabel("Generation time (s)")
     metric_name = plot_rows[0].get("metric_name", "Metric")
     ax.set_ylabel(metric_name)
-    ax.set_title(f"{metric_name} vs total compute cost")
+    ax.set_title(f"{metric_name} vs generation cost")
     ax.grid(True, alpha=0.3)
     ax.legend(
         title="Prior",
@@ -332,10 +330,10 @@ def _plot_improvement_vs_cost(rows, baseline_prior, baseline_metric, output_path
     plot_rows = [
         r
         for r in rows
-        if r.get("total_time") is not None and r.get("improvement_vs_baseline") is not None
+        if r.get("generation_wall_seconds") is not None and r.get("improvement_vs_baseline") is not None
     ]
     if not plot_rows:
-        print("Skipping improvement-vs-cost plot (missing baseline improvements or total_time).")
+        print("Skipping improvement-vs-cost plot (missing baseline improvements or generation time).")
         return
 
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -343,19 +341,19 @@ def _plot_improvement_vs_cost(rows, baseline_prior, baseline_metric, output_path
         is_baseline = row["prior_name"] == baseline_prior
         marker = "*" if is_baseline else "o"
         size = 140 if is_baseline else 70
-        ax.scatter(row["total_time"], row["improvement_vs_baseline"], s=size, marker=marker)
+        ax.scatter(row["generation_wall_seconds"], row["improvement_vs_baseline"], s=size, marker=marker)
         ax.annotate(
             row["prior_name"],
-            (row["total_time"], row["improvement_vs_baseline"]),
+            (row["generation_wall_seconds"], row["improvement_vs_baseline"]),
             textcoords="offset points",
             xytext=(6, 4),
             fontsize=9,
         )
 
     ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--", alpha=0.7)
-    ax.set_xlabel("Total time (generation + training, s)")
+    ax.set_xlabel("Generation time (s)")
     ax.set_ylabel(f"Improvement vs baseline ({baseline_prior})")
-    ax.set_title(f"Metric gain vs compute cost (baseline={baseline_prior}, metric={baseline_metric:.4f})")
+    ax.set_title(f"Metric gain vs generation cost (baseline={baseline_prior}, metric={baseline_metric:.4f})")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -367,7 +365,7 @@ def main():
     config = load_config(os.path.join(os.path.dirname(__file__), "config.yaml"))
 
     parser = argparse.ArgumentParser(
-        description="Compare prior generation/training time tradeoffs",
+        description="Compare prior generation time tradeoffs",
     )
     parser.add_argument(
         "--problem_type",

@@ -4,9 +4,9 @@
 data_generation:
   num_batches: 250000
   batch_size: 1
-  max_seq_len: 200 #500
-  min_features: 10
-  max_features: 10 #25
+  max_seq_len: 512
+  min_features: 16
+  max_features: 16
   min_eval_pos: 10
   device: "cuda"  # cpu or cuda
   seed: 42
@@ -157,7 +157,7 @@ output:
 
 # Analysis settings
 analysis:
-  analyzer_sample_size: 10000
+  analyzer_sample_size: 25000
   n_samples_mi: 100
   random_state: 42
 
@@ -176,7 +176,7 @@ training:
   lr: 0.0001
   accumulate_gradients: 1
   seed: 2402
-  eval_every: 10
+  eval_every: 20
 
 # Visualization Settings
 visualization:

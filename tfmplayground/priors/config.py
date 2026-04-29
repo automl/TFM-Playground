@@ -143,6 +143,8 @@ def get_ticl_prior_config(prior_type: str) -> dict:
         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
     
 
+TABPFN_DIFFERENTIABLE = True
+
 def get_tabpfn_prior_config(prior_type: str) -> dict:
     """Return the default kwargs for TabPFN priors.
     
@@ -193,6 +195,128 @@ def get_tabpfn_prior_config(prior_type: str) -> dict:
             **gp_config,
             "prior_bag_exp_weights_1": 2.0, # GP gets weight 1.0, MLP gets this value (default 2.0).
         }
+    else:
+        raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")
+
+
+def get_tabpfn_differentiable_prior_config(prior_type: str) -> dict:
+    """Return ranged differentiable hyperparameter configs for TabPFN priors.
+
+    These dictionaries are consumed only when ``differentiable=True`` is passed.
+    """
+
+    if prior_type == "mlp":
+        return {
+            "num_layers": {
+                "distribution": "meta_gamma",
+                "max_alpha": 2,
+                "max_scale": 3,
+                "round": True,
+                "lower_bound": 2,
+            },
+            "prior_mlp_hidden_dim": {
+                "distribution": "meta_gamma",
+                "max_alpha": 3,
+                "max_scale": 100,
+                "round": True,
+                "lower_bound": 4,
+            },
+            "prior_mlp_dropout_prob": {
+                "distribution": "meta_beta",
+                "scale": 0.6,
+                "min": 0.1,
+                "max": 5.0,
+            },
+            "noise_std": {
+                "distribution": "meta_trunc_norm_log_scaled",
+                "max_mean": 0.3,
+                "min_mean": 1e-4,
+                "round": False,
+                "lower_bound": 0.0,
+            },
+            "init_std": {
+                "distribution": "meta_trunc_norm_log_scaled",
+                "max_mean": 10.0,
+                "min_mean": 1e-2,
+                "round": False,
+                "lower_bound": 0.0,
+            },
+            "num_causes": {
+                "distribution": "meta_gamma",
+                "max_alpha": 3,
+                "max_scale": 7,
+                "round": True,
+                "lower_bound": 2,
+            },
+            "is_causal": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+            "pre_sample_weights": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+            "y_is_effect": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+            "sampling": {
+                "distribution": "meta_choice",
+                "choice_values": ["normal", "mixed"],
+            },
+            "prior_mlp_activations": {
+                "distribution": "meta_choice_mixed",
+                "choice_values": [torch.nn.Tanh, torch.nn.Identity, torch.nn.ReLU],
+            },
+            "block_wise_dropout": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+            "sort_features": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+            "in_clique": {
+                "distribution": "meta_choice",
+                "choice_values": [True, False],
+            },
+        }
+
+    elif prior_type == "gp":
+        return {
+            "outputscale": {
+                "distribution": "meta_trunc_norm_log_scaled",
+                "max_mean": 10.0,
+                "min_mean": 1e-5,
+                "round": False,
+                "lower_bound": 0.0,
+            },
+            "lengthscale": {
+                "distribution": "meta_trunc_norm_log_scaled",
+                "max_mean": 10.0,
+                "min_mean": 1e-5,
+                "round": False,
+                "lower_bound": 0.0,
+            },
+            "noise": {
+                "distribution": "meta_choice",
+                "choice_values": [1e-5, 1e-4, 1e-2],
+            },
+        }
+
+    elif prior_type == "prior_bag":
+        mlp_config = get_tabpfn_differentiable_prior_config("mlp")
+        gp_config = get_tabpfn_differentiable_prior_config("gp")
+        return {
+            **mlp_config,
+            **gp_config,
+            "prior_bag_exp_weights_1": {
+                "distribution": "uniform",
+                "min": 2.0,
+                "max": 10.0,
+            },
+        }
+
     else:
         raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")
 
