@@ -49,6 +49,7 @@ from tfmplayground.priors.experiments.utils.visualization import (
     plot_per_task_comparison,
     plot_time_budget_metrics,
     plot_tabarena_performance_heatmap,
+    plot_tabarena_normalized_heatmap,
     plot_prior_correlation_heatmap,
     compute_performance_similarity_matrix,
     plot_data_similarity_heatmap,
@@ -147,6 +148,51 @@ def _select_models_noninteractive(available, models_arg):
 
     print(f"\nSelected models: {[s['dir_name'] for s in selected]}")
     return selected
+
+
+def _load_existing_prior_data_similarity(metrics_dir, expected_prior_names):
+    """Load the newest matching prior_data_similarity_*.json cache if it exists."""
+    if not os.path.isdir(metrics_dir):
+        return None
+
+    paths = [
+        os.path.join(metrics_dir, name)
+        for name in os.listdir(metrics_dir)
+        if name.startswith("prior_data_similarity_") and name.endswith(".json")
+    ]
+    for path in sorted(paths, reverse=True):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        prior_names = payload.get("prior_names")
+        data_matrix = payload.get("data_similarity_matrix")
+        if not prior_names or data_matrix is None:
+            continue
+
+        if set(prior_names) != set(expected_prior_names):
+            continue
+
+        matrix = np.asarray(data_matrix, dtype=float)
+        if matrix.shape != (len(prior_names), len(prior_names)):
+            continue
+
+        if prior_names != expected_prior_names:
+            old_idx = {name: i for i, name in enumerate(prior_names)}
+            order = [old_idx[name] for name in expected_prior_names]
+            matrix = matrix[np.ix_(order, order)]
+            prior_names = list(expected_prior_names)
+
+        return {
+            "path": path,
+            "prior_names": prior_names,
+            "metric_names": payload.get("metric_names", []),
+            "data_similarity_matrix": matrix,
+        }
+
+    return None
 
 
 def _load_model(model_dir: str, device, is_regression: bool = False):
@@ -476,7 +522,7 @@ def main():
             predictions = get_openml_predictions(
                 model=wrapped_model,
                 tasks=TABARENA_TASKS,
-                max_folds=1,
+                max_folds=5,
                 max_n_samples=5_000,
                 classification=not is_regression,
                 cache_directory=args.tabarena_cache_dir,
@@ -556,6 +602,17 @@ def main():
                 output_path=heatmap_output,
             )
 
+            normalized_heatmap_output = os.path.join(
+                results_dir, "plots", f"tabarena_normalized_{stamp}.png"
+            )
+            plot_tabarena_normalized_heatmap(
+                perf_matrix,
+                prior_names_ordered,
+                all_dataset_names_sorted,
+                metric_name=tabarena_metric,
+                output_path=normalized_heatmap_output,
+            )
+            
             if len(prior_names_ordered) >= 2:
                 corr_output = os.path.join(
                     results_dir, "plots", f"prior_correlation_{stamp}.png"
@@ -571,63 +628,81 @@ def main():
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
-                    summary_vectors = []
-                    summary_metric_names = None
-                    aligned_prior_names = []
-                    aligned_rows = []
+                    metrics_dir = os.path.join(results_dir, "metrics")
+                    cached_similarity = _load_existing_prior_data_similarity(
+                        metrics_dir, prior_names_ordered
+                    )
 
-                    for i, pname in enumerate(prior_names_ordered):
-                        resolved_prior_path = available_priors.get(pname)
-
-                        if resolved_prior_path is None:
-                            print(
-                                f"  {pname}: SKIPPED data-similarity "
-                                f"(could not find generated prior in {data_dir})"
-                            )
-                            continue
-
-                        print(f"  {pname}: computing data-similarity summary", flush=True)
-                        analyzer = None
-                        try:
-                            if is_regression:
-                                analyzer = RegressionDataAnalyzer(resolved_prior_path)
-                            else:
-                                analyzer = ClassificationDataAnalyzer(resolved_prior_path)
-                            vec, metric_names = analyzer.prior_summary_vector()
-                        finally:
-                            del analyzer
-                            gc.collect()
-
-                        if summary_metric_names is None:
-                            summary_metric_names = metric_names
-
-                        aligned_prior_names.append(pname)
-                        summary_vectors.append(vec)
-                        aligned_rows.append(perf_matrix[i])
-
-                    if len(summary_vectors) >= 2:
-                        data_sim_matrix = compute_summary_similarity_matrix(
-                            np.vstack(summary_vectors)
-                        )
-                        data_similarity_path = os.path.join(
-                            results_dir,
-                            "metrics",
-                            f"prior_data_similarity_{stamp}.json",
-                        )
-                        os.makedirs(os.path.dirname(data_similarity_path), exist_ok=True)
-                        with open(data_similarity_path, "w", encoding="utf-8") as f:
-                            json.dump(
-                                {
-                                    "prior_names": aligned_prior_names,
-                                    "metric_names": summary_metric_names or [],
-                                    "data_similarity_matrix": data_sim_matrix.tolist(),
-                                },
-                                f,
-                                indent=2,
-                            )
+                    if cached_similarity is not None:
+                        aligned_prior_names = cached_similarity["prior_names"]
+                        data_sim_matrix = cached_similarity["data_similarity_matrix"]
+                        aligned_rows = [
+                            perf_matrix[prior_names_ordered.index(pname)]
+                            for pname in aligned_prior_names
+                        ]
                         print(
-                            f"  Saved prior data similarity matrix to: {data_similarity_path}"
+                            "  prior_data_similarity_*.json already exists bro, "
+                            f"using that: {cached_similarity['path']}"
                         )
+                    else:
+                        summary_vectors = []
+                        summary_metric_names = None
+                        aligned_prior_names = []
+                        aligned_rows = []
+
+                        for i, pname in enumerate(prior_names_ordered):
+                            resolved_prior_path = available_priors.get(pname)
+
+                            if resolved_prior_path is None:
+                                print(
+                                    f"  {pname}: SKIPPED data-similarity "
+                                    f"(could not find generated prior in {data_dir})"
+                                )
+                                continue
+
+                            print(f"  {pname}: computing data-similarity summary", flush=True)
+                            analyzer = None
+                            try:
+                                if is_regression:
+                                    analyzer = RegressionDataAnalyzer(resolved_prior_path)
+                                else:
+                                    analyzer = ClassificationDataAnalyzer(resolved_prior_path)
+                                vec, metric_names = analyzer.prior_summary_vector()
+                            finally:
+                                del analyzer
+                                gc.collect()
+
+                            if summary_metric_names is None:
+                                summary_metric_names = metric_names
+
+                            aligned_prior_names.append(pname)
+                            summary_vectors.append(vec)
+                            aligned_rows.append(perf_matrix[i])
+
+                        if len(summary_vectors) >= 2:
+                            data_sim_matrix = compute_summary_similarity_matrix(
+                                np.vstack(summary_vectors)
+                            )
+                            data_similarity_path = os.path.join(
+                                metrics_dir,
+                                f"prior_data_similarity_{stamp}.json",
+                            )
+                            os.makedirs(os.path.dirname(data_similarity_path), exist_ok=True)
+                            with open(data_similarity_path, "w", encoding="utf-8") as f:
+                                json.dump(
+                                    {
+                                        "prior_names": aligned_prior_names,
+                                        "metric_names": summary_metric_names or [],
+                                        "data_similarity_matrix": data_sim_matrix.tolist(),
+                                    },
+                                    f,
+                                    indent=2,
+                                )
+                            print(
+                                f"  Saved prior data similarity matrix to: {data_similarity_path}"
+                            )
+
+                    if len(aligned_prior_names) >= 2:
 
                         data_sim_output = os.path.join(
                             results_dir,

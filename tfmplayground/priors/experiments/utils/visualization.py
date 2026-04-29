@@ -1139,6 +1139,81 @@ def plot_tabarena_performance_heatmap(
     plt.close()
 
 
+def plot_tabarena_normalized_heatmap(
+    perf_matrix: np.ndarray,
+    prior_names: list[str],
+    dataset_names: list[str],
+    metric_name: str = "ROC-AUC",
+    output_path: str = "tabarena_normalized_heatmap.png",
+):
+    """Plot a min/max-normalized heatmap of prior vs TabArena dataset performance.
+
+    For each dataset (column), scores are normalized so that the worst prior
+    maps to 0 and the best prior maps to 1.  This removes dataset difficulty
+    as a confound and highlights relative differences between priors.
+
+    Args:
+        perf_matrix: 2-D array of shape (n_priors, n_datasets).
+        prior_names: Names for each row.
+        dataset_names: Names for each column.
+        metric_name: Original metric label (used in the title).
+        output_path: File path for the saved figure.
+    """
+    n_priors, n_datasets = perf_matrix.shape
+
+    # Min/max normalize per dataset (column-wise)
+    col_min = np.nanmin(perf_matrix, axis=0, keepdims=True)
+    col_max = np.nanmax(perf_matrix, axis=0, keepdims=True)
+    col_range = col_max - col_min
+    col_range[col_range == 0] = 1.0  # avoid division by zero for constant columns
+    norm_matrix = (perf_matrix - col_min) / col_range
+
+    # Sort rows by mean normalized score (best prior on top)
+    row_means = np.nanmean(norm_matrix, axis=1)
+    sorted_idx = np.argsort(row_means)[::-1]
+    norm_matrix = norm_matrix[sorted_idx]
+    prior_names = [prior_names[i] for i in sorted_idx]
+
+    fig_width = max(10, n_datasets * 0.7 + 3)
+    fig_height = max(4, n_priors * 0.6 + 2)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    im = ax.imshow(norm_matrix, aspect="auto", cmap="RdYlGn", vmin=0, vmax=1)
+
+    ax.set_xticks(range(n_datasets))
+    ax.set_xticklabels(dataset_names, rotation=60, ha="right", fontsize=8)
+    ax.set_yticks(range(n_priors))
+    ax.set_yticklabels(prior_names, fontsize=10)
+
+    # Annotate cells
+    for i in range(n_priors):
+        for j in range(n_datasets):
+            val = norm_matrix[i, j]
+            if np.isnan(val):
+                text = "—"
+            else:
+                text = f"{val:.2f}"
+            text_color = "white" if (not np.isnan(val) and (val < 0.35 or val > 0.85)) else "black"
+            ax.text(j, i, text, ha="center", va="center", fontsize=7, color=text_color)
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.04)
+    cbar.set_label("Normalized Score (0 = worst, 1 = best)", fontsize=11)
+
+    ax.set_title(
+        f"Prior vs TabArena — Normalized {metric_name} (per-dataset min/max)",
+        fontsize=14,
+        fontweight="bold",
+        pad=12,
+    )
+    ax.set_xlabel("TabArena Dataset", fontsize=12)
+    ax.set_ylabel("Prior", fontsize=12)
+
+    output_path = _resolve_plot_path(output_path)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"📊 Normalized TabArena heatmap saved to: {output_path}")
+    plt.close()
+
 def plot_prior_correlation_heatmap(
     perf_matrix: np.ndarray,
     prior_names: list[str],

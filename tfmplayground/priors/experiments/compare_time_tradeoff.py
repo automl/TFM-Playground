@@ -246,6 +246,24 @@ def _save_csv(rows, output_path):
             writer.writerow({k: row.get(k) for k in fieldnames})
 
 
+def _format_minutes(seconds):
+    if seconds is None:
+        return "-"
+    return f"{seconds / 60.0:.2f} min"
+
+
+def _print_generation_times(rows):
+    table_rows = [r for r in rows if r.get("generation_wall_seconds") is not None]
+    if not table_rows:
+        print("\nNo generation times available.")
+        return
+
+    table_rows = sorted(table_rows, key=lambda r: r["prior_name"])
+    print("\nGeneration times:")
+    for row in table_rows:
+        print(f"{row['prior_name']}: {_format_minutes(row['generation_wall_seconds'])}")
+
+
 def _plot_stacked_cost(rows, output_path):
     plot_rows = [
         r
@@ -482,6 +500,7 @@ def main():
     _save_csv(rows, joined_csv)
     print(f"Saved joined metrics JSON: {joined_json}")
     print(f"Saved joined metrics CSV : {joined_csv}")
+    _print_generation_times(rows)
 
     plot_rows = _filter_real_priors(rows, args.exclude_real_priors)
     if args.exclude_real_priors:
