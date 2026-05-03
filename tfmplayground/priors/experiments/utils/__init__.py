@@ -17,6 +17,7 @@ from .general import (
 from .training import train_model, _build_metrics_payload, _json_safe
 from .visualization import (
     plot_tabarena_performance_heatmap,
+    plot_tabarena_normalized_heatmap,
     plot_prior_correlation_heatmap,
 )
 
@@ -31,5 +32,6 @@ __all__ = [
     "_build_metrics_payload",
     "_json_safe",
     "plot_tabarena_performance_heatmap",
+    "plot_tabarena_normalized_heatmap",
     "plot_prior_correlation_heatmap",
 ]
