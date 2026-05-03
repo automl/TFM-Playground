@@ -54,6 +54,7 @@ from tfmplayground.priors.experiments.utils.visualization import (
     compute_performance_similarity_matrix,
     plot_data_similarity_heatmap,
     plot_data_vs_performance_similarity,
+    plot_small_data_and_performance_similarity_heatmaps,
 )
 from tfmplayground.priors.experiments.utils.general import load_config
 from tfmplayground.priors.experiments.utils.general import (
@@ -739,6 +740,18 @@ def main():
                             print(
                                 "  Similarity readability plot generated for "
                                 f"{stats_payload['num_pairs']} prior pairs"
+                            )
+
+                            sim_output = os.path.join(
+                                results_dir,
+                                "plots",
+                                f"small_data_and_performance_similarity_{stamp}.png",
+                            )
+                            plot_small_data_and_performance_similarity_heatmaps(
+                                data_similarity_matrix=data_sim_matrix,
+                                performance_similarity_matrix=perf_sim_matrix,
+                                prior_names=aligned_prior_names,
+                                output_path=sim_output,
                             )
 
                             ranked_pairs = stats_payload.get("ranked_pairs", [])

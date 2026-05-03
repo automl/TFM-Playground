@@ -4,7 +4,8 @@ import os
 from typing import List
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.patches import Rectangle
+from matplotlib.colors import ListedColormap, TwoSlopeNorm
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 from sklearn.datasets import make_moons, make_circles
@@ -1161,12 +1162,7 @@ def plot_tabarena_normalized_heatmap(
     """
     n_priors, n_datasets = perf_matrix.shape
 
-    # Min/max normalize per dataset (column-wise)
-    col_min = np.nanmin(perf_matrix, axis=0, keepdims=True)
-    col_max = np.nanmax(perf_matrix, axis=0, keepdims=True)
-    col_range = col_max - col_min
-    col_range[col_range == 0] = 1.0  # avoid division by zero for constant columns
-    norm_matrix = (perf_matrix - col_min) / col_range
+    norm_matrix = normalize_per_dataset_performance(perf_matrix)
 
     # Sort rows by mean normalized score (best prior on top)
     row_means = np.nanmean(norm_matrix, axis=1)
@@ -1219,10 +1215,11 @@ def plot_prior_correlation_heatmap(
     prior_names: list[str],
     output_path: str = "prior_correlation_heatmap.png",
 ):
-    """Plot a prior-vs-prior Pearson correlation heatmap.
+    """Plot a prior-vs-prior performance similarity heatmap.
 
-    Correlation is computed between rows of *perf_matrix* (each row is
-    a prior's performance vector across datasets).
+    This uses the same definition as ``compute_performance_similarity_matrix``:
+    scores are first min/max-normalized within each dataset column, then
+    prior profile distances are converted to similarities with an RBF kernel.
 
     Args:
         perf_matrix: 2-D array of shape (n_priors, n_datasets).
@@ -1230,44 +1227,15 @@ def plot_prior_correlation_heatmap(
         output_path: File path for the saved figure.
     """
     n_priors = perf_matrix.shape[0]
-
-    # Mask NaN columns so corrcoef doesn't produce all-NaN results
-    valid_cols = ~np.any(np.isnan(perf_matrix), axis=0)
-    clean_matrix = perf_matrix[:, valid_cols]
-
-    if clean_matrix.shape[1] < 2:
-        print("⚠️  Not enough valid datasets to compute prior correlation.")
+    similarity = compute_performance_similarity_matrix(perf_matrix)
+    if similarity is None:
+        print("⚠️  Not enough valid datasets to compute prior performance similarity.")
         return
-
-    corr = np.corrcoef(clean_matrix)
-    if n_priors > 1:
-        off_diag = corr[~np.eye(n_priors, dtype=bool)]
-        off_diag = off_diag[np.isfinite(off_diag)]
-    else:
-        off_diag = np.array([], dtype=float)
-
-    if off_diag.size:
-        # use a wider positive band so the plot keeps contrast without becoming uniformly red.
-        clip_vmin = 0.65
-        clip_vmax = 1.0
-    else:
-        clip_vmin, clip_vmax = -1.0, 1.0
-
-    if (not np.isfinite(clip_vmin)) or (not np.isfinite(clip_vmax)):
-        clip_vmin, clip_vmax = -1.0, 1.0
-
-    if clip_vmax - clip_vmin < 1e-3:
-        center = float(np.mean(off_diag)) if off_diag.size else 0.0
-        half = 0.05
-        clip_vmin = max(-1.0, center - half)
-        clip_vmax = min(1.0, center + half)
-
-    corr_plot = np.clip(corr, clip_vmin, clip_vmax)
 
     fig_size = max(5, n_priors * 0.8 + 2)
     fig, ax = plt.subplots(figsize=(fig_size, fig_size))
 
-    im = ax.imshow(corr_plot, cmap="coolwarm", vmin=clip_vmin, vmax=clip_vmax, aspect="equal")
+    im = ax.imshow(similarity, cmap="coolwarm", vmin=0.0, vmax=1.0, aspect="equal")
 
     ax.set_xticks(range(n_priors))
     ax.set_xticklabels(prior_names, rotation=45, ha="right", fontsize=10)
@@ -1277,7 +1245,7 @@ def plot_prior_correlation_heatmap(
     # Annotate cells
     for i in range(n_priors):
         for j in range(n_priors):
-            val = corr[i, j]
+            val = similarity[i, j]
             text_color = "white"
             ax.text(
                 j, i, f"{val:.2f}", ha="center", va="center",
@@ -1286,12 +1254,12 @@ def plot_prior_correlation_heatmap(
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04)
     cbar.set_label(
-        f"Pearson Correlation (clipped to [{clip_vmin:.2f}, {clip_vmax:.2f}])",
+        "Similarity of per-dataset normalized performance profiles",
         fontsize=11,
     )
 
     ax.set_title(
-        "Prior vs Prior — Performance Correlation",
+        "Prior vs Prior - Performance Similarity",
         fontsize=14,
         fontweight="bold",
         pad=12,
@@ -1300,20 +1268,119 @@ def plot_prior_correlation_heatmap(
     output_path = _resolve_plot_path(output_path)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    print(f"📊 Prior correlation heatmap saved to: {output_path}")
+    print(f"📊 Prior performance similarity heatmap saved to: {output_path}")
     plt.close()
 
 
+def normalize_per_dataset_performance(perf_matrix: np.ndarray) -> np.ndarray:
+    """Min/max-normalize each dataset column across priors.
+
+    This removes dataset difficulty before comparing prior performance profiles.
+    Within each dataset, the worst finite prior score maps to 0 and the best
+    finite prior score maps to 1.
+    """
+    col_min = np.nanmin(perf_matrix, axis=0, keepdims=True)
+    col_max = np.nanmax(perf_matrix, axis=0, keepdims=True)
+    col_range = col_max - col_min
+    col_range = np.where(col_range > 1e-12, col_range, 1.0)
+    return (perf_matrix - col_min) / col_range
+
+
 def compute_performance_similarity_matrix(perf_matrix: np.ndarray) -> np.ndarray | None:
-    """Compute prior-prior performance similarity from TabArena matrix."""
+    """Compute prior-prior similarity from per-dataset normalized TabArena scores."""
     valid_cols = ~np.any(np.isnan(perf_matrix), axis=0)
     clean_matrix = perf_matrix[:, valid_cols]
 
     if clean_matrix.shape[1] < 2:
         return None
 
-    corr = np.corrcoef(clean_matrix)
-    return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+    norm_matrix = normalize_per_dataset_performance(clean_matrix)
+    diffs = norm_matrix[:, None, :] - norm_matrix[None, :, :]
+    distances = np.sqrt(np.sum(diffs * diffs, axis=2))
+
+    nonzero = distances[distances > 0]
+    sigma = float(np.median(nonzero)) if nonzero.size else 1.0
+    sigma = max(sigma, 1e-8)
+
+    similarity = np.exp(-(distances**2) / (2 * sigma**2))
+    np.fill_diagonal(similarity, 1.0)
+    return np.nan_to_num(similarity, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _family_name_for_prior(prior_name: str) -> str:
+    if prior_name.startswith("tabicl_"):
+        return "tabicl"
+    if prior_name.startswith("tabpfn_"):
+        return "tabpfn"
+    if prior_name.startswith("real_"):
+        return "real"
+    if prior_name.startswith("tabforest_"):
+        return "tabforest"
+    if prior_name.startswith("ticl_"):
+        return "ticl"
+    return prior_name.split("_", 1)[0]
+
+
+def _family_spans(prior_names: list[str]) -> list[tuple[str, int, int]]:
+    spans: list[tuple[str, int, int]] = []
+    if not prior_names:
+        return spans
+
+    start = 0
+    current_family = _family_name_for_prior(prior_names[0])
+    for idx, prior_name in enumerate(prior_names[1:], start=1):
+        family = _family_name_for_prior(prior_name)
+        if family != current_family:
+            spans.append((current_family, start, idx - 1))
+            start = idx
+            current_family = family
+
+    spans.append((current_family, start, len(prior_names) - 1))
+    return spans
+
+
+def _draw_family_boxes(ax, prior_names: list[str]) -> None:
+    spans = _family_spans(prior_names)
+    if len(spans) <= 1:
+        return
+
+    color_map = {
+        "real": "#001f3f",
+        "tabicl": "#001f3f",
+        "tabpfn": "#001f3f",
+        "tabforest": "#001f3f",
+        "ticl": "#001f3f",
+    }
+
+    for family, start, end in spans:
+        if start == end:
+            continue
+
+        edge_color = color_map.get(family, "#333333")
+        rect = Rectangle(
+            (start - 0.5, start - 0.5),
+            end - start + 1,
+            end - start + 1,
+            fill=False,
+            edgecolor=edge_color,
+            linewidth=2.2,
+            linestyle="-",
+            zorder=5,
+        )
+        ax.add_patch(rect)
+
+        ax.text(
+            start + (end - start + 1) / 2 - 0.35,
+            start - 0.72,
+            family,
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            fontweight="bold",
+            color="#001f3f",
+            clip_on=False,
+            zorder=6,
+        )
 
 
 def plot_data_similarity_heatmap(
@@ -1407,7 +1474,8 @@ def compute_data_vs_performance_stats(
     gap = np.abs(perf_vals - data_vals)
     mismatch_matrix = performance_similarity_matrix - data_similarity_matrix
 
-    mismatch_scale = float(np.nanpercentile(np.abs(mismatch_matrix), 95))
+    finite_gap = np.abs(perf_vals - data_vals)
+    mismatch_scale = float(np.nanpercentile(finite_gap, 95))
     if not np.isfinite(mismatch_scale) or mismatch_scale <= 0:
         mismatch_scale = float(np.nanmax(np.abs(mismatch_matrix)))
     if not np.isfinite(mismatch_scale) or mismatch_scale <= 0:
@@ -1474,11 +1542,8 @@ def plot_data_vs_performance_similarity(
 ):
     """Plot data similarity, performance similarity, and their disagreement side by side."""
 
-    # Scale performance similarity from [-1, 1] to [0, 1] to match data similarity scale
-    norm_perf_matrix = (performance_similarity_matrix + 1.0) / 2.0
-
     stats = compute_data_vs_performance_stats(
-        data_similarity_matrix, norm_perf_matrix, prior_names, top_k=top_k,
+        data_similarity_matrix, performance_similarity_matrix, prior_names, top_k=top_k,
     )
     ranked_pairs = stats["ranked_pairs"]
     mismatch_matrix = stats["mismatch_matrix"]
@@ -1508,18 +1573,26 @@ def plot_data_vs_performance_similarity(
         aspect="equal",
     )
     perf_im = perf_ax.imshow(
-        norm_perf_matrix,
+        performance_similarity_matrix,
         cmap="coolwarm",
         vmin=0.0,
         vmax=1.0,
         aspect="equal",
     )
 
-    mismatch_im = mismatch_ax.imshow(
-        mismatch_matrix,
-        cmap="coolwarm",
+    mismatch_plot = mismatch_matrix.copy()
+    np.fill_diagonal(mismatch_plot, np.nan)
+    mismatch_cmap = plt.get_cmap("coolwarm").copy()
+    mismatch_cmap.set_bad(color="#f2f2f2")
+    mismatch_norm = TwoSlopeNorm(
         vmin=-mismatch_scale,
+        vcenter=0.0,
         vmax=mismatch_scale,
+    )
+    mismatch_im = mismatch_ax.imshow(
+        mismatch_plot,
+        cmap=mismatch_cmap,
+        norm=mismatch_norm,
         aspect="equal",
     )
 
@@ -1555,20 +1628,20 @@ def plot_data_vs_performance_similarity(
 
     _format_heatmap(data_ax, "Data Similarity", show_y_labels=True)
     _format_heatmap(perf_ax, "Performance Similarity")
-    _format_heatmap(mismatch_ax, "Performance - Data")
+    _format_heatmap(mismatch_ax, "Performance Similarity - Data Similarity")
 
     _annotate_heatmap(data_ax, data_similarity_matrix, "white")
-    _annotate_heatmap(perf_ax, norm_perf_matrix, "white")
-    _annotate_heatmap(mismatch_ax, mismatch_matrix, "black")
+    _annotate_heatmap(perf_ax, performance_similarity_matrix, "white")
+    _annotate_heatmap(mismatch_ax, mismatch_plot, "black")
 
     data_cbar = fig.colorbar(data_im, ax=data_ax, fraction=0.04, pad=0.02)
     data_cbar.set_label("Data similarity", fontsize=9)
 
     perf_cbar = fig.colorbar(perf_im, ax=perf_ax, fraction=0.04, pad=0.02)
-    perf_cbar.set_label("Performance similarity (normalized 0-1)", fontsize=9)
+    perf_cbar.set_label("Performance similarity", fontsize=9)
 
     mismatch_cbar = fig.colorbar(mismatch_im, ax=mismatch_ax, fraction=0.04, pad=0.02)
-    mismatch_cbar.set_label("Performance - data", fontsize=9)
+    mismatch_cbar.set_label("Performance similarity - data similarity", fontsize=9)
 
     def _plot_pair_gap_bars(ax, title, rows):
         ax.set_title(
@@ -1650,3 +1723,120 @@ def plot_data_vs_performance_similarity(
     plt.close()
 
     return stats
+
+
+def plot_small_data_and_performance_similarity_heatmaps(
+    data_similarity_matrix: np.ndarray,
+    performance_similarity_matrix: np.ndarray,
+    prior_names: list[str],
+    output_path: str = "paper_prior_similarity_heatmaps.png",
+    display_names: list[str] | None = None,
+    performance_vmin: float = 0.0,
+    performance_vmax: float = 1.0,
+):
+    """Plot compact data/performance similarity heatmaps for papers.
+
+    The performance matrix is expected to already be a similarity matrix in
+    [0, 1], as returned by ``compute_performance_similarity_matrix``.
+    """
+    if data_similarity_matrix.shape != performance_similarity_matrix.shape:
+        raise ValueError("data and performance similarity matrices must have the same shape")
+
+    n_priors = data_similarity_matrix.shape[0]
+    if data_similarity_matrix.shape[0] != data_similarity_matrix.shape[1]:
+        raise ValueError("similarity matrices must be square")
+    if len(prior_names) != n_priors:
+        raise ValueError("prior_names length must match matrix shape")
+    if display_names is not None and len(display_names) != n_priors:
+        raise ValueError("display_names length must match matrix shape")
+
+    def _short_prior_name(name: str) -> str:
+        replacements = {
+            "real_default_targets": "real def.",
+            "real_random_targets": "real rand.",
+            "ticl_classification_adapter": "TICL adapter",
+            "tabpfn_prior_bag": "TabPFN bag",
+            "tabpfn_mlp": "TabPFN MLP",
+            "tabicl_mix_scm": "TabICL mix",
+            "tabicl_mlp_scm": "TabICL MLP",
+            "tabicl_tree_scm": "TabICL tree",
+            "tabforest_cuts": "TF cuts",
+            "tabforest_forest": "TF forest",
+            "tabforest_neighbor": "TF neigh.",
+        }
+        if name in replacements:
+            return replacements[name]
+        label = name.replace("_scm", "").replace("_", " ")
+        label = label.replace("tabforest", "TF").replace("tabpfn", "TabPFN")
+        label = label.replace("tabicl", "TabICL").replace("classification", "class.")
+        return label
+
+    labels = display_names or [_short_prior_name(name) for name in prior_names]
+
+    performance_similarity_matrix = np.clip(performance_similarity_matrix, 0.0, 1.0)
+    perf_vmin = float(performance_vmin)
+    perf_vmax = float(performance_vmax)
+    if perf_vmax <= perf_vmin:
+        raise ValueError("performance_vmax must be greater than performance_vmin")
+
+    cmap = "coolwarm"
+
+    fig_w = max(5.2, min(7.2, n_priors * 0.44 + 2.0))
+    fig_h = max(2.4, min(3.4, n_priors * 0.28 + 0.9))
+    fig, axes = plt.subplots(1, 2, figsize=(fig_w, fig_h), sharey=True)
+
+    ims = []
+    for ax, matrix, title, vmin, vmax in zip(
+        axes,
+        [data_similarity_matrix, performance_similarity_matrix],
+        ["Data Similarity", "Performance Similarity"],
+        [0.0, perf_vmin],
+        [1.0, perf_vmax],
+    ):
+        im = ax.imshow(matrix, cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
+        ims.append(im)
+
+        ax.set_title(title, fontsize=9, pad=6)
+        ax.set_xticks(range(n_priors))
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=5)
+        ax.set_yticks(range(n_priors))
+        ax.set_yticklabels(labels, fontsize=5)
+        ax.tick_params(axis="both", length=0, pad=1)
+
+        _draw_family_boxes(ax, prior_names)
+
+        ax.tick_params(which="minor", bottom=False, left=False)
+
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.8)
+
+    axes[1].tick_params(axis="y", labelleft=False)
+
+    data_cbar = fig.colorbar(
+        ims[0],
+        ax=axes[0],
+        fraction=0.046,
+        pad=0.025,
+        ticks=[0.0, 0.5, 1.0],
+    )
+    data_cbar.ax.tick_params(labelsize=6, length=2)
+    data_cbar.set_label("Data similarity", fontsize=7, labelpad=3)
+
+    perf_ticks = np.linspace(perf_vmin, perf_vmax, 3)
+    perf_cbar = fig.colorbar(
+        ims[1],
+        ax=axes[1],
+        fraction=0.046,
+        pad=0.025,
+        ticks=perf_ticks,
+    )
+    perf_cbar.ax.tick_params(labelsize=6, length=2)
+    perf_cbar.ax.set_yticklabels([f"{tick:.2f}" for tick in perf_ticks])
+    perf_cbar.set_label("Performance similarity", fontsize=7, labelpad=3)
+
+    output_path = _resolve_plot_path(output_path)
+    fig.subplots_adjust(left=0.14, right=0.92, top=0.9, bottom=0.28, wspace=0.36)
+    fig.savefig(output_path, dpi=600, bbox_inches="tight")
+    print(f"📊 Paper similarity heatmaps saved to: {output_path}")
+
+    plt.close(fig)

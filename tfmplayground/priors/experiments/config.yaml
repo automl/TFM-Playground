@@ -157,7 +157,7 @@ output:
 
 # Analysis settings
 analysis:
-  analyzer_sample_size: 25000
+  analyzer_sample_size: 10000
   n_samples_mi: 100
   random_state: 42
 
