@@ -14,7 +14,7 @@ import torch
 from pfns.bar_distribution import FullSupportBarDistribution
 from torch import nn
 
-from tfmplayground.priors.experiments.new_evaluation import (
+from tfmplayground.priors.experiments.experiment_evaluation import (
     TOY_TASKS_CLASSIFICATION,
     TOY_TASKS_REGRESSION,
 )
@@ -47,7 +47,7 @@ def train_model(
     embedding_size: int = 128,
     mlp_hidden_size: int = 512,
     num_layers: int = 6,
-    checkpoint_base_dir: str = 'workdir',
+    checkpoint_base_dir: str = "workdir",
     run_name: str | None = None,
 ):
     """
@@ -82,7 +82,9 @@ def train_model(
 
     # load a saved checkpoint when continuing an existing prior-specific run.
     ckpt = None
-    checkpoint_path = os.path.join(checkpoint_base_dir, run_name, "latest_checkpoint.pth")
+    checkpoint_path = os.path.join(
+        checkpoint_base_dir, run_name, "latest_checkpoint.pth"
+    )
     if checkpoint_path and os.path.isfile(checkpoint_path):
         ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
@@ -115,7 +117,6 @@ def train_model(
     else:
         criterion = nn.CrossEntropyLoss()
         num_outputs = prior.max_num_classes if prior.max_num_classes else 1
-
 
     model = NanoTabPFNModel(
         num_attention_heads=num_attention_heads,
@@ -252,7 +253,7 @@ def _build_metrics_payload(run_records, metric_name: str, is_regression: bool):
                         last_fold_values
                     )
         else:
-            #TODO: potential bug pointed out by the agent, check this
+            # TODO: potential bug pointed out by the agent, check this
             final_task_scores = {
                 dataset_name: _last_non_none(values)
                 for dataset_name, values in r["per_task_scores"].items()

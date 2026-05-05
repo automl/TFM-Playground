@@ -2,10 +2,22 @@
 
 This folder contains the experiment scripts to:
 - generate prior datasets
+- analyze the generated data
 - train one model per prior
 - compare saved models afterwards
 
-## Quick start
+## Files
+
+- `generate_data.py`: creates `.h5` prior dumps via the main `tfmplayground.priors` CLI
+- `analyze_priors.py`: interactive analysis of generated `.h5` files (distributions, feature importance, etc.)
+- `train_models.py`: trains one nanoTabPFN model per prior, saves checkpoints + metadata
+- `compare_models.py`: loads trained models and generates comparison plots, metrics, and TabArena evaluation
+- `compare_time_tradeoff.py`: analyzes prior generation cost vs downstream performance
+- `experiment_evaluation.py`: shared evaluation helpers (OpenML predictions, task ID lists)
+- `base_analyzer.py`: base class for data analyzers
+- `config.yaml`: all experiment settings (priors, hyperparameters, output paths)
+
+## Quick Start
 
 In the project root:
 
@@ -14,14 +26,6 @@ pip install -e .
 ```
 
 Edit the experiment config in [config.yaml](config.yaml).
-
-You can use the interactive launcher:
-
-```bash
-sh tfmplayground/priors/experiments/run.sh classification
-# or
-sh tfmplayground/priors/experiments/run.sh regression
-```
 
 ## Generate Data
 
@@ -47,6 +51,17 @@ Pay attention to:
 - `--mode` must match the experiment you want to train later.
 - Generated filenames depend on the config. If you change data-generation settings, check the existing `.h5` files before reusing them.
 - Re-generating with the same output path overwrites the existing prior dump.
+
+## Analyze Data
+
+Use `analyze_priors.py` to inspect the generated `.h5` files. This is always interactive.
+
+```bash
+python tfmplayground/priors/experiments/analyze_priors.py \
+  --mode regression
+```
+
+The tool lets you select which priors to analyze and whether to run individual reports, pairwise comparisons, or both.
 
 ## Train Models
 
@@ -98,7 +113,33 @@ python tfmplayground/priors/experiments/compare_models.py \
   --models_dir /path/to/trained_models
 ```
 
+Additional flags:
+- `--models all` or `--models tabpfn_mlp ticl_gp` for non-interactive model selection.
+- `--skip_tabarena` to skip the TabArena datasets evaluation.
+- `--skip_data_similarity` to skip prior data-similarity analysis.
+- `--tabarena_cache_dir` to set a custom OpenML data cache directory.
+
+## Compare Time Trade-offs
+
+Use `compare_time_tradeoff.py` to analyze prior generation cost against downstream performance.
+
+```bash
+python tfmplayground/priors/experiments/compare_time_tradeoff.py \
+  --problem_type classification
+
+# With specific priors
+python tfmplayground/priors/experiments/compare_time_tradeoff.py \
+  --problem_type regression \
+  --priors tabpfn_mlp ticl_gp
+```
+
+Additional flags:
+- `--baseline_prior` to set a reference prior for improvement calculations.
+- `--exclude_real_priors` to filter out real data priors from plots.
+- `--allow_missing_generation_time` to handle priors without timing metadata.
+
 ## Notes
 
-- Omitting `--priors` keeps the interactive selection behavior.
+- Omitting `--priors` (or `--models` for compare) keeps the interactive selection behavior.
 - If you add a new prior, expose it in [config.yaml](config.yaml) so the scripts can discover it.
+

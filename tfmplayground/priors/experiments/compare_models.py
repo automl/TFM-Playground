@@ -26,7 +26,7 @@ from tfmplayground.priors.experiments.classification.callback import (
 from tfmplayground.priors.experiments.regression.callback import (
     RegressionTrackerCallback,
 )
-from tfmplayground.priors.experiments.new_evaluation import (
+from tfmplayground.priors.experiments.experiment_evaluation import (
     get_openml_predictions,
     TABARENA_TASKS,
 )
@@ -107,7 +107,9 @@ def _select_models_interactively(available):
                     available[i - 1] for i in indices if 1 <= i <= len(available)
                 ]
             except (ValueError, IndexError):
-                print(f"  Invalid input — enter numbers between 1 and {len(available)}.")
+                print(
+                    f"  Invalid input — enter numbers between 1 and {len(available)}."
+                )
                 continue
 
         if len(selected) < 1:
@@ -218,7 +220,10 @@ def _load_model(model_dir: str, device, is_regression: bool = False):
         bucket_edges_path = os.path.join(model_dir, "bucket_edges.pth")
         if os.path.isfile(bucket_edges_path):
             from pfns.bar_distribution import FullSupportBarDistribution
-            bucket_edges = torch.load(bucket_edges_path, map_location=device, weights_only=False)
+
+            bucket_edges = torch.load(
+                bucket_edges_path, map_location=device, weights_only=False
+            )
             dist = FullSupportBarDistribution(bucket_edges).float().to(device)
 
     return model, dist
@@ -283,7 +288,10 @@ def main():
         help="Path to save detailed comparison metrics JSON (auto-generated if not set)",
     )
     parser.add_argument(
-        "--seed", type=int, default=config["training"]["seed"], help="Random seed (for decision boundary / regression toy plots)"
+        "--seed",
+        type=int,
+        default=config["training"]["seed"],
+        help="Random seed (for decision boundary / regression toy plots)",
     )
     parser.add_argument(
         "--models",
@@ -329,7 +337,9 @@ def main():
         args.plot_output = os.path.join(results_dir, "plots", f"comparison_{stamp}.png")
     if args.metrics_output is None:
         os.makedirs(os.path.join(results_dir, "metrics"), exist_ok=True)
-        args.metrics_output = os.path.join(results_dir, "metrics", f"comparison_{stamp}_metrics.json")
+        args.metrics_output = os.path.join(
+            results_dir, "metrics", f"comparison_{stamp}_metrics.json"
+        )
 
     # Discover and select trained models
     available = discover_trained_models(args.models_dir)
@@ -374,22 +384,24 @@ def main():
         prior_names.append(prior_name)
         callbacks.append(callback)
 
-        run_records.append({
-            "index": idx,
-            "model_name": f"Model {idx}",
-            "prior": meta.get("prior_path", ""),
-            "prior_name": prior_name,
-            "metric": meta.get("final_metric", 0.0),
-            "loss_history": meta.get("loss_history", []),
-            "metric_history": meta.get("metric_history", []),
-            "per_task_scores": meta.get("per_task_scores", {}),
-            "train_time": meta.get("train_time", 0.0),
-            "inference_time": meta.get("inference_time", 0.0),
-            "param_count": meta.get("param_count", 0),
-            "model": model,
-            "dist": dist,
-            "callback": callback,
-        })
+        run_records.append(
+            {
+                "index": idx,
+                "model_name": f"Model {idx}",
+                "prior": meta.get("prior_path", ""),
+                "prior_name": prior_name,
+                "metric": meta.get("final_metric", 0.0),
+                "loss_history": meta.get("loss_history", []),
+                "metric_history": meta.get("metric_history", []),
+                "per_task_scores": meta.get("per_task_scores", {}),
+                "train_time": meta.get("train_time", 0.0),
+                "inference_time": meta.get("inference_time", 0.0),
+                "param_count": meta.get("param_count", 0),
+                "model": model,
+                "dist": dist,
+                "callback": callback,
+            }
+        )
 
     # --- Print leaderboard ---
     print(f"\n{'='*80}")
@@ -492,7 +504,9 @@ def main():
 
         tabarena_metric = "ROC-AUC" if not is_regression else "R²"
         all_dataset_names: set[str] = set()
-        per_prior_scores: dict[str, dict[str, float]] = {}  # prior_name -> {dataset -> score}
+        per_prior_scores: dict[str, dict[str, float]] = (
+            {}
+        )  # prior_name -> {dataset -> score}
 
         for item in selected:
             meta = item["metadata"]
@@ -509,13 +523,19 @@ def main():
                 continue
 
             # Load model and wrap in sklearn-like interface
-            model_raw, dist = _load_model(item["dir"], device, is_regression=is_regression)
+            model_raw, dist = _load_model(
+                item["dir"], device, is_regression=is_regression
+            )
 
             if is_regression:
                 if dist is None:
-                    print(f"  {prior_name}: SKIPPED (no bucket_edges.pth for regression)")
+                    print(
+                        f"  {prior_name}: SKIPPED (no bucket_edges.pth for regression)"
+                    )
                     continue
-                wrapped_model = NanoTabPFNRegressor(model=model_raw, dist=dist, device=device)
+                wrapped_model = NanoTabPFNRegressor(
+                    model=model_raw, dist=dist, device=device
+                )
             else:
                 wrapped_model = NanoTabPFNClassifier(model=model_raw, device=device)
 
@@ -564,9 +584,11 @@ def main():
 
         # Build performance matrix
         all_dataset_names_sorted = sorted(all_dataset_names)
-        prior_names_ordered = [meta.get("prior_name", item["dir_name"]) for item, meta in
-                               [(item, item["metadata"]) for item in selected]
-                               if meta.get("prior_name", item["dir_name"]) in per_prior_scores]
+        prior_names_ordered = [
+            meta.get("prior_name", item["dir_name"])
+            for item, meta in [(item, item["metadata"]) for item in selected]
+            if meta.get("prior_name", item["dir_name"]) in per_prior_scores
+        ]
 
         if prior_names_ordered and all_dataset_names_sorted:
             perf_matrix = np.full(
@@ -583,12 +605,16 @@ def main():
             )
             os.makedirs(os.path.dirname(perf_json_path), exist_ok=True)
             with open(perf_json_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "prior_names": prior_names_ordered,
-                    "dataset_names": all_dataset_names_sorted,
-                    "metric": tabarena_metric,
-                    "performance_matrix": perf_matrix.tolist(),
-                }, f, indent=2)
+                json.dump(
+                    {
+                        "prior_names": prior_names_ordered,
+                        "dataset_names": all_dataset_names_sorted,
+                        "metric": tabarena_metric,
+                        "performance_matrix": perf_matrix.tolist(),
+                    },
+                    f,
+                    indent=2,
+                )
             print(f"\nSaved TabArena performance matrix to: {perf_json_path}")
 
             # Plot heatmaps
@@ -613,7 +639,7 @@ def main():
                 metric_name=tabarena_metric,
                 output_path=normalized_heatmap_output,
             )
-            
+
             if len(prior_names_ordered) >= 2:
                 corr_output = os.path.join(
                     results_dir, "plots", f"prior_correlation_{stamp}.png"
@@ -661,13 +687,20 @@ def main():
                                 )
                                 continue
 
-                            print(f"  {pname}: computing data-similarity summary", flush=True)
+                            print(
+                                f"  {pname}: computing data-similarity summary",
+                                flush=True,
+                            )
                             analyzer = None
                             try:
                                 if is_regression:
-                                    analyzer = RegressionDataAnalyzer(resolved_prior_path)
+                                    analyzer = RegressionDataAnalyzer(
+                                        resolved_prior_path
+                                    )
                                 else:
-                                    analyzer = ClassificationDataAnalyzer(resolved_prior_path)
+                                    analyzer = ClassificationDataAnalyzer(
+                                        resolved_prior_path
+                                    )
                                 vec, metric_names = analyzer.prior_summary_vector()
                             finally:
                                 del analyzer
@@ -688,7 +721,9 @@ def main():
                                 metrics_dir,
                                 f"prior_data_similarity_{stamp}.json",
                             )
-                            os.makedirs(os.path.dirname(data_similarity_path), exist_ok=True)
+                            os.makedirs(
+                                os.path.dirname(data_similarity_path), exist_ok=True
+                            )
                             with open(data_similarity_path, "w", encoding="utf-8") as f:
                                 json.dump(
                                     {
@@ -756,7 +791,9 @@ def main():
 
                             ranked_pairs = stats_payload.get("ranked_pairs", [])
                             if ranked_pairs:
-                                print("  Top pairs with largest data/performance mismatch:")
+                                print(
+                                    "  Top pairs with largest data/performance mismatch:"
+                                )
                                 for row in ranked_pairs[:10]:
                                     print(
                                         f"    - {row['pair']}: "
@@ -770,8 +807,12 @@ def main():
                                     "metrics",
                                     f"data_vs_performance_disagreement_{stamp}.json",
                                 )
-                                os.makedirs(os.path.dirname(disagreement_path), exist_ok=True)
-                                with open(disagreement_path, "w", encoding="utf-8") as f:
+                                os.makedirs(
+                                    os.path.dirname(disagreement_path), exist_ok=True
+                                )
+                                with open(
+                                    disagreement_path, "w", encoding="utf-8"
+                                ) as f:
                                     json.dump(
                                         {
                                             "prior_names": aligned_prior_names,
@@ -780,7 +821,9 @@ def main():
                                         f,
                                         indent=2,
                                     )
-                                print(f"  Saved mismatch ranking to: {disagreement_path}")
+                                print(
+                                    f"  Saved mismatch ranking to: {disagreement_path}"
+                                )
                             else:
                                 print("  No valid prior-pair rows to report.")
                     else:

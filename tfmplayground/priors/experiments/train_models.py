@@ -18,9 +18,12 @@ from tfmplayground.priors.experiments.utils.training import (
     _json_safe,
     train_model,
 )
-from tfmplayground.priors.experiments.utils.general import discover_h5_files, load_config
+from tfmplayground.priors.experiments.utils.general import (
+    discover_h5_files,
+    load_config,
+)
 
-from tfmplayground.priors.experiments.new_evaluation import (
+from tfmplayground.priors.experiments.experiment_evaluation import (
     TOY_TASKS_CLASSIFICATION,
     TOY_TASKS_REGRESSION,
 )
@@ -87,7 +90,9 @@ def _select_priors_interactively(problem_type: str, data_dir: Path):
                     prior_list[i - 1] for i in indices if 1 <= i <= len(prior_list)
                 ]
             except (ValueError, IndexError):
-                print(f"  Invalid input — enter numbers between 1 and {len(prior_list)}.")
+                print(
+                    f"  Invalid input — enter numbers between 1 and {len(prior_list)}."
+                )
                 continue
 
         if len(selected) < 1:
@@ -165,6 +170,7 @@ def _save_trained_model(
     # Save criterion for regression (raw bucket edges needed to rebuild FullSupportBarDistribution)
     if is_regression and criterion is not None:
         from pfns.bar_distribution import FullSupportBarDistribution
+
         if isinstance(criterion, FullSupportBarDistribution):
             torch.save(criterion.borders, os.path.join(output_dir, "bucket_edges.pth"))
             print(f"   - bucket_edges.pth")
@@ -182,29 +188,32 @@ def _save_trained_model(
         "prior_name": prior_name,
         "problem_type": problem_type,
         "is_regression": is_regression,
-        "train_time": train_time + (
-            previous_metadata.get("train_time", 0.0) if previous_metadata else 0.0
-        ),
+        "train_time": train_time
+        + (previous_metadata.get("train_time", 0.0) if previous_metadata else 0.0),
         "inference_time": inference_time,
         "param_count": param_count,
         "final_metric": metric,
         "metric_name": "RMSE" if is_regression else "ROC-AUC",
         "loss_history": (
             previous_metadata.get("loss_history", []) if previous_metadata else []
-        ) + callback.loss_history,
+        )
+        + callback.loss_history,
         "metric_history": (
             previous_metadata.get("metric_history", []) if previous_metadata else []
-        ) + metric_history,
+        )
+        + metric_history,
         "per_task_scores": _merge_per_task_scores(
             previous_metadata.get("per_task_scores", {}) if previous_metadata else {},
             per_task_scores,
         ),
         "epoch_history": (
             previous_metadata.get("epoch_history", []) if previous_metadata else []
-        ) + callback.epoch_history,
+        )
+        + callback.epoch_history,
         "epoch_times": (
             previous_metadata.get("epoch_times", []) if previous_metadata else []
-        ) + callback.epoch_times,
+        )
+        + callback.epoch_times,
         "hyperparams": {
             "epochs": args.epochs,
             "batch_size": args.batch_size,
@@ -225,7 +234,9 @@ def _save_trained_model(
         json.dump(_json_safe(metadata), f, indent=2)
 
     print(f"\n✅ Saved model to: {output_dir}")
-    print(f"   - model.pth ({os.path.getsize(os.path.join(output_dir, 'model.pth')) / 1e6:.1f} MB)")
+    print(
+        f"   - model.pth ({os.path.getsize(os.path.join(output_dir, 'model.pth')) / 1e6:.1f} MB)"
+    )
     print(f"   - metadata.json")
 
 
@@ -250,12 +261,20 @@ def main():
         help="Target total epochs for each model. Re-run with a larger value to continue from a saved checkpoint.",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=train_cfg["batch_size"], help="Batch size for training"
+        "--batch_size",
+        type=int,
+        default=train_cfg["batch_size"],
+        help="Batch size for training",
     )
     parser.add_argument(
-        "--steps", type=int, default=train_cfg["steps"], help="Number of steps per epoch"
+        "--steps",
+        type=int,
+        default=train_cfg["steps"],
+        help="Number of steps per epoch",
     )
-    parser.add_argument("--lr", type=float, default=train_cfg["lr"], help="Learning rate")
+    parser.add_argument(
+        "--lr", type=float, default=train_cfg["lr"], help="Learning rate"
+    )
     parser.add_argument(
         "--accumulate_gradients",
         type=int,
@@ -263,7 +282,10 @@ def main():
         help="Number of gradients to accumulate before updating weights",
     )
     parser.add_argument(
-        "--seed", type=int, default=train_cfg["seed"], help="Random seed for reproducibility"
+        "--seed",
+        type=int,
+        default=train_cfg["seed"],
+        help="Random seed for reproducibility",
     )
     parser.add_argument(
         "--eval_every",
@@ -349,25 +371,31 @@ def main():
         previous_metadata = (
             _load_metadata(metadata_path) if os.path.isfile(checkpoint_path) else None
         )
-        trained_model, metric, callback, train_time, inference_time, param_count, criterion = (
-            train_model(
-                prior_path=prior_path,
-                model_name=model_name,
-                epochs=args.epochs,
-                batch_size=args.batch_size,
-                steps=args.steps,
-                lr=args.lr,
-                device=device,
-                eval_every=args.eval_every,
-                tasks=use_tasks,
-                accumulate_gradients=args.accumulate_gradients,
-                num_attention_heads=config["model"]["num_attention_heads"],
-                embedding_size=config["model"]["embedding_size"],
-                mlp_hidden_size=config["model"]["mlp_hidden_size"],
-                num_layers=config["model"]["num_layers"],
-                checkpoint_base_dir=model_output_base_dir,
-                run_name=run_name,
-            )
+        (
+            trained_model,
+            metric,
+            callback,
+            train_time,
+            inference_time,
+            param_count,
+            criterion,
+        ) = train_model(
+            prior_path=prior_path,
+            model_name=model_name,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            steps=args.steps,
+            lr=args.lr,
+            device=device,
+            eval_every=args.eval_every,
+            tasks=use_tasks,
+            accumulate_gradients=args.accumulate_gradients,
+            num_attention_heads=config["model"]["num_attention_heads"],
+            embedding_size=config["model"]["embedding_size"],
+            mlp_hidden_size=config["model"]["mlp_hidden_size"],
+            num_layers=config["model"]["num_layers"],
+            checkpoint_base_dir=model_output_base_dir,
+            run_name=run_name,
         )
 
         _save_trained_model(
@@ -388,7 +416,9 @@ def main():
         )
 
     print(f"\n{'='*80}")
-    print(f"All {len(selected_priors)} model(s) trained and saved to: {model_output_base_dir}")
+    print(
+        f"All {len(selected_priors)} model(s) trained and saved to: {model_output_base_dir}"
+    )
     print(f"{'='*80}\n")
 
 
