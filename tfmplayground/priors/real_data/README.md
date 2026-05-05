@@ -52,7 +52,7 @@ This writes:
 
 Run through `tfmplayground.priors` with `--lib real`.
 
-### Classification, original-target only
+### Classification, default targets
 
 ```bash
 python -m tfmplayground.priors \
@@ -61,10 +61,10 @@ python -m tfmplayground.priors \
   --max_classes 10 \
   --cache_dir tfmplayground/priors/real_data/data/cache \
   --train_pool tfmplayground/priors/real_data/data/pools/train_pool_classification.txt \
-  --mode only
+  --mode default_targets
 ```
 
-### Regression, original-target only
+### Regression, default targets
 
 ```bash
 python -m tfmplayground.priors \
@@ -73,10 +73,10 @@ python -m tfmplayground.priors \
   --max_classes 0 \
   --cache_dir tfmplayground/priors/real_data/data/cache \
   --train_pool tfmplayground/priors/real_data/data/pools/train_pool_regression.txt \
-  --mode only
+  --mode default_targets
 ```
 
-### Mixed target-column mode with fallback pool
+### Random targets with fallback pool
 
 Use this when you want to sample target columns from broad datasets (`train_pool_all.txt`) while keeping episode task type fixed.
 
@@ -87,15 +87,16 @@ python -m tfmplayground.priors \
   --max_classes 0 \
   --cache_dir tfmplayground/priors/real_data/data/cache \
   --train_pool tfmplayground/priors/real_data/data/pools/train_pool_all.txt \
-  --mode mixed \
+  --mode random_targets \
   --fallback_pool tfmplayground/priors/real_data/data/pools/train_pool_regression.txt
 ```
 
-Notes:
+Pay attention to:
 - Task type is inferred from `--max_classes`:
   - `> 0` -> classification
   - `0` -> regression
-- In `mode=mixed`, the generator enforces target type strictly.
+- `--mode default_targets` uses each dataset's original target column. Match the pool to the task type (`train_pool_classification.txt` or `train_pool_regression.txt`).
+- `--mode random_targets` randomly selects a column matching the requested task type. The generator enforces target type strictly.
 - If no valid target column is found in primary/fallback pools, it raises an error (it does not silently switch task type).
 
 ## Data Layout
