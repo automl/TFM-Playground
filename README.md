@@ -1,103 +1,26 @@
 # TFM-Playground
 
-The purpose of this repository is to provide a fully open source playground for tabular foundation models.
-It contains a much smaller and simpler implementation of the TabPFNv2 architecture (nanoTabPFN) as well as a training loop, multiple interfaces to load prior data and an evaluation pipeline. We are planning to rapidly extend the repository with more features, prior interfaces and architectures.
-It is supposed to be a good starting point for students and researchers that are interested in learning about how Tabular foundation models work under the hood.
+This repository builds on nanotabpfn, an open-source tabular foundation model. The base repository provides a compact implementation of the TabPFNv2 architecture (nanoTabPFN), a training loop, and an evaluation pipeline.
 
-Clone the repository, afterwards install dependencies via:
-```
+**Our contribution** lives in [`tfmplayground/priors/`](tfmplayground/priors/): a unified prior interface that wraps multiple synthetic data generators, together with a complete experiment pipeline in [`tfmplayground/priors/experiments/`](tfmplayground/priors/experiments/) for systematically comparing priors across regression and classification tasks.
+
+## Getting Started
+
+```bash
+git clone <repo-url> && cd TFM-Playground
 pip install -e .
 ```
 
-We offer the same interface as TabPFN:
-```python
-from sklearn.datasets import load_breast_cancer
-from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import train_test_split
+All experiment settings are in a single config file: [`tfmplayground/priors/experiments/config.yaml`](tfmplayground/priors/experiments/config.yaml).
 
-from tfmplayground import NanoTabPFNClassifier
+## Our Contribution: Prior Interface & Experiments
 
-# Load data
-X, y = load_breast_cancer(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
+### Unified Prior Interface
 
-# Initialize a classifier
-clf = NanoTabPFNClassifier()
-clf.fit(X_train, y_train)
+The `tfmplayground.priors` package provides a single CLI and Python API to generate data from any supported prior family. Data can be generated on-the-fly during training or dumped to HDF5 for offline use.
 
-# Predict probabilities
-prediction_probabilities = clf.predict_proba(X_test)
-print("ROC AUC:", roc_auc_score(y_test, prediction_probabilities[:, 1]))
-
-# Predict labels
-predictions = clf.predict(X_test)
-print("Accuracy", accuracy_score(y_test, predictions))
-```
-
-### Our Code
-
-`tfmplayground/model.py` contains the implementation of the architecture in less than 250 lines of code. `tfmplayground/train.py` implements a simple training loop in under 100 lines and `tfmplayground/priors.py` implements a dataloader that allows you to load a dump pre-generated from a prior.
-We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
-
-### Pretrain your own small nanoTabPFN
-First we download 100k pre-generated datasets with 50 datapoints, 3 features and up to 3 classes each from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5).
-
-Then you can run:
-```
-python pretrain_classification.py --epochs 80 --steps 25 --batchsize 50 --priordump 50x3_3_100k_classification.h5
-```
-This should take less than 5 min on a modern NVIDIA GPU (around 10 minutes on Macbook M4 Pro GPU and around 40 min on M4 Pro CPU).
-
-We also offer a pre-generated dataset containing 1.28M tables with 50 datapoints and 3 features each for regression [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5).
-
-You can pretrain on it using `python pretrain_regressor.py`.
-
-#### Step by Step Explanation (Classifier)
-
-First we import our Architecture, Prior interface and training loop, etc.
-```python
-from tfmplayground.model import NanoTabPFNModel
-from tfmplayground.priors import PriorDumpDataLoader
-from tfmplayground.train import train
-from tfmplayground.utils import get_default_device
-from tfmplayground.interface import NanoTabPFNClassifier
-from tfmplayground.callbacks import ConsoleLoggerCallback
-
-from torch.nn import CrossEntropyLoss
-```
-then we instantiate our model and loss criterion:
-```python
-model = NanoTabPFNModel(
-    num_attention_heads=6,
-    embedding_size=192,
-    mlp_hidden_size=768,
-    num_layers=6,
-    num_outputs=10,
-)
-criterion = CrossEntropyLoss()
-```
-then we instantiate our prior:
-```python
-device = get_default_device()
-prior = PriorDumpDataLoader(filename='50x3_3_100k_classification.h5', num_steps=25, batch_size=50, device=device)
-```
-and finally train our model:
-```python
-trained_model, loss = train(
-    model=model,
-    prior=prior,
-    criterion=criterion,
-    epochs=80,
-    device=device,
-    callbacks=[ConsoleLoggerCallback()]
-)
-```
-
-### Creating your own datasets
-Check out [tfmplayground.priors](https://github.com/automl/TFM-Playground/tree/main/tfmplayground/priors) to create your own data using publicly available priors.
-
-You can use tfmplayground.priors as a command-line-tool to pre-generate data from a prior, e.g. via
-```
+**CLI example** — generate an HDF5 prior dump:
+```bash
 python -m tfmplayground.priors --lib tabicl \
        --prior_type mix_scm \
        --num_batches 1000 --batch_size 4 \
@@ -105,29 +28,112 @@ python -m tfmplayground.priors --lib tabicl \
        --max_seq_len 50 --max_classes 3 \
        --save_path tabicl_4k_50x3.h5
 ```
-which can afterwards be loaded via
+
+**Python example** — load a dump or generate on-the-fly:
 ```python
-from tfmplayground.priors.dataloader import PriorDumpDataLoader
-prior = PriorDumpDataLoader('tabicl_4k_50x3.h5', num_steps=20, batch_size=4, device='cpu')
-```
-You can also just let it create the data on-the-fly via:
-```python
-from tfmplayground.priors.dataloader import TabICLPriorDataLoader
+from tfmplayground.priors import PriorDumpDataLoader, TabICLPriorDataLoader
+
+# From a pre-generated dump
+prior = PriorDumpDataLoader("tabicl_4k_50x3.h5", num_steps=20, batch_size=4, device="cpu")
+
+# On-the-fly generation
 prior = TabICLPriorDataLoader(
-    num_steps=20,
-    batch_size=4,
-    num_datapoints_max=50,
-    min_features=3,
-    max_features=3,
-    max_num_classes=3,
-    device='cpu'
+    num_steps=20, batch_size=4,
+    num_datapoints_max=50, min_features=3, max_features=3,
+    max_num_classes=3, device="cpu",
 )
 ```
-You can check out `next(iter(prior))` if you want to see an example batch.
 
-Check out `prior_visualization.ipynb` for some more examples.
+See [`prior_visualization.ipynb`](prior_visualization.ipynb) for more examples.
 
 ### Supported Priors
 
-- [TabICL](https://github.com/soda-inria/tabicl) (Classification)
-- [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
+#### Regression
+
+| Library | Prior types | Description |
+|---|---|---|
+| TICL | `ticl_gp`, `ticl_mlp` | Gaussian Process, Multi-Layer Perceptron |
+| TabPFN | `tabpfn_mlp`, `tabpfn_gp`, `tabpfn_prior_bag` | MLP, Gaussian Process, Prior Bag (ensemble) |
+| Real data | `real_default_targets`, `real_random_targets` | Original target column; any matching target column |
+
+#### Classification
+
+| Library | Prior types | Description |
+|---|---|---|
+| TICL | `ticl_classification_adapter` | Classification Adapter with MLP/GP base |
+| TabPFN | `tabpfn_mlp`, `tabpfn_gp`, `tabpfn_prior_bag` | MLP, Gaussian Process, Prior Bag (ensemble) |
+| TabICL | `tabicl_mlp_scm`, `tabicl_tree_scm`, `tabicl_mix_scm` | MLP SCM, Tree SCM, Mix SCM (ensemble of MLP and Tree) |
+| TabForestPFN | `tabforest_forest`, `tabforest_neighbor`, `tabforest_cuts` | Decision Tree Forest, KNN Neighbor, Random Cuts |
+| Real data | `real_default_targets`, `real_random_targets` | Original target column; any matching target column |
+
+### Experiment Pipeline
+
+The full experiment workflow is in [`tfmplayground/priors/experiments/`](tfmplayground/priors/experiments/). It consists of four steps:
+
+1. **Generate data** — create `.h5` prior dumps for all or selected priors:
+   ```bash
+   python tfmplayground/priors/experiments/generate_data.py --mode classification --priors all
+   ```
+
+2. **Analyze data** — interactively inspect distributions, feature importance, etc.:
+   ```bash
+   python tfmplayground/priors/experiments/analyze_priors.py --mode classification
+   ```
+
+3. **Train models** — train one nanoTabPFN per prior (supports resuming):
+   ```bash
+   python tfmplayground/priors/experiments/train_models.py --problem_type classification --priors all --epochs 50 --steps 100
+   ```
+
+4. **Compare models** — generate comparison plots, metrics, and TabArena evaluation:
+   ```bash
+   python tfmplayground/priors/experiments/compare_models.py --problem_type classification
+   ```
+
+See the full experiment documentation in [`tfmplayground/priors/experiments/README.md`](tfmplayground/priors/experiments/README.md).
+
+---
+
+## Base Repository: nanoTabPFN
+
+The sections below document the original TFM-Playground functionality that our work builds on.
+
+<details>
+<summary>nanoTabPFN usage and pretraining</summary>
+
+### Inference
+
+```python
+from sklearn.datasets import load_breast_cancer
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+
+from tfmplayground import NanoTabPFNClassifier
+
+X, y = load_breast_cancer(return_X_y=True)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
+
+clf = NanoTabPFNClassifier()
+clf.fit(X_train, y_train)
+
+prediction_probabilities = clf.predict_proba(X_test)
+print("ROC AUC:", roc_auc_score(y_test, prediction_probabilities[:, 1]))
+
+predictions = clf.predict(X_test)
+print("Accuracy", accuracy_score(y_test, predictions))
+```
+
+### Architecture
+
+`tfmplayground/model.py` contains the architecture in less than 250 lines of code. `tfmplayground/train.py` implements a simple training loop in under 100 lines.
+
+### Pretraining
+
+Download 100k pre-generated classification datasets from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5), then:
+```bash
+python pretrain_classification.py --epochs 80 --steps 25 --batchsize 50 --priordump 50x3_3_100k_classification.h5
+```
+
+For regression, download 1.28M tables from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5) and run `python pretrain_regressor.py`.
+
+</details>
