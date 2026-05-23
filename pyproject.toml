@@ -41,7 +41,7 @@ Homepage = "https://github.com/automl/TFM-Playground"
 Issues = "https://github.com/automl/TFM-Playground/issues"
 
 [tool.setuptools]
-packages = { find = { include = ["tfmplayground"] } }
+packages = { find = { include = ["tfmplayground*"] } }
 
 [tool.ruff]
 line-length = 120
