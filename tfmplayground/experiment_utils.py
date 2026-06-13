@@ -520,12 +520,12 @@ def update_and_build_result_scores_for_plot(
 ):
     
     """
-    Save the latest run result for one NanoTabPFN variant.
+    Save the latest run result for one NanoTabPFN variant
 
     Each time this function is called, it adds one row to the run-level table: model, run_id, epoch, final_roc_auc, group 
     Then it summarizes all saved runs
 
-    Finally, it combines NanoTabPFN variant summaries with classical baselines.
+    Finally, it combines NanoTabPFN variant summaries with classical baselines
     """
 
     # Create output folders if they do not exist
@@ -605,15 +605,9 @@ def update_and_build_result_scores_for_plot(
     return result_scores
 
 
-def extract_per_dataset_variant_scores(
-    histories,
-    metric: str = "roc_auc",
-    epoch: int = 20,
-) -> pd.Series:
+def extract_per_dataset_variant_scores(histories, metric: str = "roc_auc", epoch: int = 20) -> pd.Series:
     
-    """
-    Extract per-dataset scores from the latest run at the selected epoch.
-    """
+    """Extract per-dataset scores from the latest run at the selected epoch"""
 
     if isinstance(histories, list):
         run = histories[-1]
@@ -644,13 +638,7 @@ def extract_per_dataset_variant_scores(
 
 def extract_per_dataset_classical_scores(baselines, metric: str = "roc_auc"):
 
-    """
-    Convert classical baselines into per-dataset wide format.
-
-    Output:
-    - rows = datasets
-    - columns = classical models
-    """
+    """Convert classical baselines into per-dataset wide format"""
 
     metric_cols = []
 
@@ -683,15 +671,13 @@ def update_per_dataset_variant_csv(
     metric: str = "roc_auc",
     epoch: int = 20,
     results_csv: str = "../logs/store/final_results/per_dataset_variant_roc_auc_subsample.csv",
-    # results_csv: str = "../logs/store/final_results/per_dataset_variant_roc_auc_subsample.csv"
+    # results_csv: str = "../logs/store/final_results/per_dataset_variant_roc_auc_full.csv"
     run_scores_csv: str = "../logs/store/final_results/per_dataset_variant_run_scores_subsample.csv",
-    # run_scores_csv: str = "../logs/store/final_results/per_dataset_variant_run_scores_subsample.csv"
+    # run_scores_csv: str = "../logs/store/final_results/per_dataset_variant_run_scores_full.csv"
 ):
     """
-    Save per-dataset ROC-AUC scores for the latest run of one variant.
-
+    Save per-dataset ROC-AUC scores for the latest run of one variant
     Each call adds multiple rows to the run-level table: model, run_id, epoch, dataset, score
-
     Then it summarizes all saved runs
     """
 
@@ -764,14 +750,9 @@ def update_per_dataset_variant_csv(
     return result_df
 
 
-def combine_per_dataset_variant_and_classical_scores(
-    variant_per_dataset_scores: pd.DataFrame,
-    classical_per_dataset_scores: pd.DataFrame,
-) -> pd.DataFrame:
+def combine_per_dataset_variant_and_classical_scores(variant_per_dataset_scores: pd.DataFrame, classical_per_dataset_scores: pd.DataFrame) -> pd.DataFrame:
     
-    """
-    Combine per-dataset scores from NanoTabPFN variants and classical baselines.
-    """
+    """Combine per-dataset scores from NanoTabPFN variants and classical baselines"""
 
     variant_scores = variant_per_dataset_scores.copy()
     classical_scores = classical_per_dataset_scores.copy()
@@ -858,21 +839,11 @@ def plot_final_roc_auc_all_models_vertical(
     max_rank = plot_df["overall_rank"].max()
     plot_df["rank_strength"] = max_rank + 1 - plot_df["overall_rank"]
 
-    norm = mpl.colors.PowerNorm(
-        gamma=0.8,
-        vmin=plot_df["rank_strength"].min(),
-        vmax=plot_df["rank_strength"].max(),
-    )
+    norm = mpl.colors.PowerNorm(gamma=0.8, vmin=plot_df["rank_strength"].min(), vmax=plot_df["rank_strength"].max())
 
-    blue_cmap = mpl.colors.LinearSegmentedColormap.from_list(
-        "blue_rank",
-        plt.cm.Blues(np.linspace(0.60, 1.00, 256)),
-    )
+    blue_cmap = mpl.colors.LinearSegmentedColormap.from_list("blue_rank", plt.cm.Blues(np.linspace(0.60, 1.00, 256)))
 
-    orange_cmap = mpl.colors.LinearSegmentedColormap.from_list(
-        "orange_rank",
-        plt.cm.Oranges(np.linspace(0.45, 0.98, 256)),
-    )
+    orange_cmap = mpl.colors.LinearSegmentedColormap.from_list("orange_rank", plt.cm.Oranges(np.linspace(0.45, 0.98, 256)))
 
     plot_colors = []
 
@@ -897,17 +868,7 @@ def plot_final_roc_auc_all_models_vertical(
     for group_name, group_df in plot_df.groupby("group", sort=False):
         idx = group_df.index.to_numpy()
 
-        ax.scatter(
-            idx,
-            group_df["final_roc_auc"],
-            s=75,
-            marker=marker_map.get(group_name, "o"),
-            c=group_df["plot_color"].tolist(),
-            edgecolor="black",
-            linewidth=0.35,
-            label=group_name,
-            zorder=3,
-        )
+        ax.scatter(idx, group_df["final_roc_auc"], s=75, marker=marker_map.get(group_name, "o"), c=group_df["plot_color"].tolist(), edgecolor="black", linewidth=0.35, label=group_name, zorder=3)
 
     # Error bars
     error_mask = plot_df["error"].notna()
@@ -927,7 +888,7 @@ def plot_final_roc_auc_all_models_vertical(
                 capsize=4,
                 elinewidth=1.25,
                 alpha=0.95,
-                zorder=2,
+                zorder=2
             )
 
     # Value labels
@@ -939,7 +900,7 @@ def plot_final_roc_auc_all_models_vertical(
             textcoords="offset points",
             ha="left",
             va="center",
-            fontsize=8,
+            fontsize=8
         )
 
     # Axis settings
@@ -990,7 +951,6 @@ def plot_final_roc_auc_all_models_vertical(
     cbar2 = fig.colorbar(sm_orange, cax=cax2)
 
     cbar1.set_label("NanoTabPFN rank\n(darker = better)", fontsize=8)
-
     cbar2.set_label("Classical rank\n(darker = better)", fontsize=8)
 
     cbar1.ax.tick_params(labelsize=8)
@@ -1011,7 +971,7 @@ def plot_per_dataset_rank_heatmap(
     save_path: str | None = "../logs/store/final_results/per_dataset_rank_heatmap_subsample.png",
     # save_path: str | None = "../logs/store/final_results/per_dataset_rank_heatmap_full.png"
     figsize=(10, 8),
-    title: str = "Per-dataset rank heatmap",
+    title: str = "Per-dataset rank heatmap"
 ):
     
     """
@@ -1077,13 +1037,7 @@ def plot_combined_group_rank_heatmap(
 
     df = ranked_df.copy()
 
-    required_cols = {
-        "dataset",
-        "group",
-        "variant",
-        "score",
-        "rank_per_group",
-    }
+    required_cols = {"dataset", "group", "variant", "score", "rank_per_group"}
 
     missing_cols = required_cols - set(df.columns)
 
@@ -1092,12 +1046,7 @@ def plot_combined_group_rank_heatmap(
 
     # Group order
     if group_order is None:
-        group_order = [
-            "single_distribution",
-            "mixture_vs_single",
-            "pareto_vs_baseline",
-            "endo_level",
-        ]
+        group_order = ["single_distribution", "mixture_vs_single", "pareto_vs_baseline", "endo_level"]
 
     final_group_order = []
 
@@ -1113,19 +1062,10 @@ def plot_combined_group_rank_heatmap(
 
     # Variant order by group
     if variant_order_by_group is None:
-        variant_order_by_group = {"mixture_vs_single": ["Baseline",
-                                                        "Normal-only",
-                                                        "Laplace-only",
-                                                        "Student-T-only"],
-                                  "single_distribution": ["Normal-only",
-                                                          "Laplace-only",
-                                                          "Student-T-only"],
-                                  "pareto_vs_baseline": ["Baseline",
-                                                         "Pareto-std"],
-                                  "endo_level": ["No-endo",
-                                                 "Baseline",
-                                                 "Endo-medium",
-                                                 "Endo-large"]}
+        variant_order_by_group = {"mixture_vs_single": ["Baseline", "Normal-only", "Laplace-only", "Student-T-only"],
+                                  "single_distribution": ["Normal-only", "Laplace-only", "Student-T-only"],
+                                  "pareto_vs_baseline": ["Baseline", "Pareto-std"],
+                                  "endo_level": ["No-endo", "Baseline", "Endo-medium", "Endo-large"]}
 
     # Create wide rank table
     wide_rank = df.pivot_table(index="dataset", columns=["group", "variant"], values="rank_per_group", aggfunc="first")
@@ -1292,9 +1232,8 @@ def plot_combined_group_rank_heatmap(
 
 
 def sort_results_by_model_order(result_scores: pd.DataFrame) -> pd.DataFrame:
-    """
-    Sort result scores by a fixed model order.
-    """
+    
+    """Sort result scores by a fixed model order"""
 
     desired_order = [
         "Baseline",
@@ -1325,11 +1264,7 @@ def sort_results_by_model_order(result_scores: pd.DataFrame) -> pd.DataFrame:
 
     final_order = existing_order + other_models
 
-    result_scores["model"] = pd.Categorical(
-        result_scores["model"],
-        categories=final_order,
-        ordered=True,
-    )
+    result_scores["model"] = pd.Categorical(result_scores["model"], categories=final_order, ordered=True)
 
     result_scores = result_scores.sort_values("model")
     result_scores = result_scores.reset_index(drop=True)
