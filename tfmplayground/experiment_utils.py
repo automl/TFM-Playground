@@ -802,23 +802,14 @@ def plot_final_roc_auc_all_models_vertical(
     figsize=(12, 6),
     ymin: float = 0.55,
     use_se: bool = True,
-    label_offset: tuple = (8, 0),
+    label_offset: tuple = (0, 4),
 ):
     
-    """
-    Plot final ROC-AUC values for saved variants and classical baselines.
-
-    Color shading:
-    - darker marker means better overall rank.
-    - NanoTabPFN variants get blue shades.
-    - Classical baselines get orange shades.
-    """
+    """Plot final ROC-AUC as a bar chart with SE or STD error bars"""
 
     plot_df = result_scores.copy()
 
-    # 1. Compute SE / STD
-    plot_df = result_scores.copy()
-
+    # Select error column
     if use_se:
         if "se" in plot_df.columns:
             plot_df["error"] = plot_df["se"]
@@ -830,102 +821,76 @@ def plot_final_roc_auc_all_models_vertical(
         else:
             plot_df["error"] = np.nan
 
+    plot_df["final_roc_auc"] = pd.to_numeric(plot_df["final_roc_auc"], errors="coerce")
+    plot_df["error"] = pd.to_numeric(plot_df["error"], errors="coerce")
+    plot_df = plot_df.dropna(subset=["final_roc_auc"])
+
     # Sort model order
     plot_df = sort_results_by_model_order(plot_df)
+    plot_df = plot_df.reset_index(drop=True)
 
-    # Ranking color intensity
-    plot_df["overall_rank"] = plot_df["final_roc_auc"].rank(ascending=False, method="min")
-
-    max_rank = plot_df["overall_rank"].max()
-    plot_df["rank_strength"] = max_rank + 1 - plot_df["overall_rank"]
-
-    norm = mpl.colors.PowerNorm(gamma=0.8, vmin=plot_df["rank_strength"].min(), vmax=plot_df["rank_strength"].max())
-
-    blue_cmap = mpl.colors.LinearSegmentedColormap.from_list("blue_rank", plt.cm.Blues(np.linspace(0.60, 1.00, 256)))
-
-    orange_cmap = mpl.colors.LinearSegmentedColormap.from_list("orange_rank", plt.cm.Oranges(np.linspace(0.45, 0.98, 256)))
-
+    # Bar colors by group
     plot_colors = []
 
     for _, row in plot_df.iterrows():
         if row["group"] == "NanoTabPFN variant":
-            color = blue_cmap(norm(row["rank_strength"]))
+            plot_colors.append("#4C78A8")
         else:
-            color = orange_cmap(norm(row["rank_strength"]))
-
-        plot_colors.append(color)
+            plot_colors.append("#F58518")
 
     plot_df["plot_color"] = plot_colors
 
-    # Plot markers
+    # Plot bar chart
     fig, ax = plt.subplots(figsize=figsize, dpi=180)
 
     x = np.arange(len(plot_df))
+    bar_width = 0.78
 
-    marker_map = {"NanoTabPFN variant": "o",
-                  "Classical baseline": "s"}
+    bars = ax.bar(x, plot_df["final_roc_auc"], width=bar_width, color=plot_df["plot_color"], edgecolor="black", linewidth=0.4, alpha=0.88, zorder=2)
 
-    for group_name, group_df in plot_df.groupby("group", sort=False):
-        idx = group_df.index.to_numpy()
+    # Blurred SE / STD band + mean line
+    for i in range(len(plot_df)):
+        score = plot_df.loc[i, "final_roc_auc"]
+        error = plot_df.loc[i, "error"]
+        color = plot_df.loc[i, "plot_color"]
 
-        ax.scatter(idx, group_df["final_roc_auc"], s=75, marker=marker_map.get(group_name, "o"), c=group_df["plot_color"].tolist(), edgecolor="black", linewidth=0.35, label=group_name, zorder=3)
+        if error > 0:
 
-    # Error bars
-    error_mask = plot_df["error"].notna()
+            # soft uncertainty band
+            ax.fill_between([x[i] - bar_width / 2, x[i] + bar_width / 2], score - error, score + error, color=color, alpha=0.28, zorder=4)
+    
+        # mean line
+        ax.hlines(y=score, xmin=x[i] - bar_width / 2, xmax=x[i] + bar_width / 2, color="black", linewidth=1.0, zorder=5)
 
-    if error_mask.any():
-        for i in plot_df.index[error_mask]:
-            yi = plot_df.loc[i, "final_roc_auc"]
-            err = plot_df.loc[i, "error"]
-            color = plot_df.loc[i, "plot_color"]
-
-            ax.errorbar(
-                x[i],
-                yi,
-                yerr=err,
-                fmt="none",
-                ecolor=color,
-                capsize=4,
-                elinewidth=1.25,
-                alpha=0.95,
-                zorder=2
-            )
-
-    # Value labels
-    for xi, yi in zip(x, plot_df["final_roc_auc"]):
-        ax.annotate(
-            f"{yi:.3f}",
-            xy=(xi, yi),
-            xytext=label_offset,
-            textcoords="offset points",
-            ha="left",
-            va="center",
-            fontsize=8
-        )
+        # value label: centered on bar, slightly above mean line
+        ax.annotate(f"{score:.4f}", xy=(x[i], score), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=8, color="black", zorder=6)
 
     # Axis settings
     ax.set_xticks(x)
     ax.set_xticklabels(plot_df["model"], rotation=35, ha="right", fontsize=8)
-    ax.set_xlim(-0.7, len(plot_df) - 0.1)
 
-    if error_mask.any():
-        upper = (plot_df.loc[error_mask, "final_roc_auc"] + plot_df.loc[error_mask, "error"]).max()
-        lower = (plot_df.loc[error_mask, "final_roc_auc"] - plot_df.loc[error_mask, "error"]).min()
+    score_max = plot_df["final_roc_auc"].max()
+    score_min = plot_df["final_roc_auc"].min()
 
-        ymax = upper + 0.02
-        ymin_final = min(ymin, lower - 0.015)
+    upper_error = (plot_df["final_roc_auc"] + plot_df["error"]).max()
+    lower_error = (plot_df["final_roc_auc"] - plot_df["error"]).min()
 
-    else:
-        ymax = max(plot_df["final_roc_auc"].max() + 0.02, 0.65)
-        ymin_final = ymin
+    ymax = max(score_max, upper_error) + 0.02
+    ymin_final = min(ymin, score_min, lower_error - 0.015)
 
     ax.set_ylim(ymin_final, ymax)
+
     ax.set_ylabel("Final ROC-AUC", fontsize=9)
-
     ax.set_xlabel("Model / noise-generation configuration", fontsize=9)
-    ax.set_title("Final ROC-AUC comparison across noise configurations and baseline models", fontsize=11, pad=18)
 
-    ax.grid(axis="y", linewidth=0.15, alpha=0.18)
+    if use_se:
+        title_error = "SE"
+    else:
+        title_error = "STD"
+
+    ax.set_title(f"Final ROC-AUC comparison with {title_error} error bars", fontsize=11, pad=14)
+
+    ax.grid(axis="y", linewidth=0.2, alpha=0.25, zorder=0)
     ax.grid(axis="x", visible=False)
 
     ax.spines["top"].set_visible(False)
@@ -933,33 +898,21 @@ def plot_final_roc_auc_all_models_vertical(
 
     ax.tick_params(axis="y", labelsize=8)
 
-    ax.legend(fontsize=8, frameon=True, loc="upper right")
+    # Legend
+    legend_handles = [
+        mpl.patches.Patch(facecolor="#4C78A8", edgecolor="black", label="NanoTabPFN variant"),
+        mpl.patches.Patch(facecolor="#F58518", edgecolor="black", label="Classical baseline")]
 
-    # Colorbars
-    plt.tight_layout(rect=[0, 0, 0.88, 1])
+    ax.legend(handles=legend_handles, fontsize=8, frameon=True, loc="upper right")
 
-    sm_blue = mpl.cm.ScalarMappable(cmap=blue_cmap, norm=norm)
-    sm_blue.set_array([])
-
-    sm_orange = mpl.cm.ScalarMappable(cmap=orange_cmap, norm=norm)
-    sm_orange.set_array([])
-
-    cax1 = fig.add_axes([0.89, 0.54, 0.018, 0.34])
-    cax2 = fig.add_axes([0.89, 0.14, 0.018, 0.34])
-
-    cbar1 = fig.colorbar(sm_blue, cax=cax1)
-    cbar2 = fig.colorbar(sm_orange, cax=cax2)
-
-    cbar1.set_label("NanoTabPFN rank\n(darker = better)", fontsize=8)
-    cbar2.set_label("Classical rank\n(darker = better)", fontsize=8)
-
-    cbar1.ax.tick_params(labelsize=8)
-    cbar2.ax.tick_params(labelsize=8)
+    plt.tight_layout()
 
     # Save
     if save_path is not None:
         save_folder = os.path.dirname(save_path)
-        os.makedirs(save_folder, exist_ok=True)
+
+        if save_folder != "":
+            os.makedirs(save_folder, exist_ok=True)
 
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
 
