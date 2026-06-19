@@ -48,7 +48,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
     def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
-        log_dict = {"epoch": epoch, "loss": loss, " epoch_time": epoch_time}
+        log_dict = {"epoch": epoch, "loss": loss, "epoch_time": epoch_time}
         self.wandb.log(log_dict)
 
     def close(self):
