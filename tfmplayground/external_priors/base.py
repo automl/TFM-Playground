@@ -103,7 +103,7 @@ class PriorDumpDataLoader(DataLoader):
                 yield dict(
                     x=x.to(self.device),
                     y=y.to(self.device),
-                    target_y=y.to(self.device),  # target_y is identical to y (for downstream compatibility)
+                    target_y=y.to(self.device),
                     train_test_split_index=train_test_split_index[0].item(),
                 )
 
@@ -149,7 +149,6 @@ def dump_prior_to_h5(
             if isinstance(train_test_split_index, torch.Tensor):
                 train_test_split_index = train_test_split_index.item()
 
-            # pad x and y to the maximum sequence length and number of features needed for tabicl
             x_padded = np.pad(
                 x, ((0, 0), (0, max_seq_len - x.shape[1]), (0, max_features - x.shape[2])), mode="constant"
             )

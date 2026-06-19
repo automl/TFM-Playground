@@ -28,7 +28,6 @@ class NanoTabPFNModel(nn.Module):
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
-    # TODO: consider getting rid of this and just provide a single interface
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """
         Provides two interfaces:
@@ -55,40 +54,26 @@ class NanoTabPFNModel(nn.Module):
                            which represent the predicted logits
         """
         if len(args) == 3:
-            # case model(train_x, train_y, test_x)
             x = args[0]
             if args[2] is not None:
                 x = torch.cat((x, args[2]), dim=1)
             return self._forward((x, args[1]), train_test_split_index=args[0].shape[1], **kwargs)
         elif len(args) == 1 and isinstance(args[0], tuple):
-            # case model((x,y), train_test_split_index=None)
             return self._forward(*args, **kwargs)
 
     def _forward(
         self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int, num_mem_chunks: int = 1
     ) -> torch.Tensor:
         x_src, y_src = src
-        # we expect the labels to look like (batches, num_train_datapoints, 1),
-        # so we add the last dimension if it is missing
         if len(y_src.shape) < len(x_src.shape):
             y_src = y_src.unsqueeze(-1)
-        # from here on B=Batches, R=Rows, C=Columns, E=embedding size
-        # converts scalar values to embeddings, so (B,R,C-1) -> (B,R,C-1,E)
         x_src = self.feature_encoder(x_src, train_test_split_index)
         num_rows = x_src.shape[1]
-        # padds the y_train up to y by using the mean,
-        # then converts scalar values to embeddings (B,R,1,E)
         y_src = self.target_encoder(y_src, num_rows)
-        # concatenates the feature embeddings with the target embeddings
-        # to give us the full table of embeddings (B,R,C,E))
         src = torch.cat([x_src, y_src], 2)
-        # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             src = block(src, train_test_split_index=train_test_split_index)
-        # selects the target embeddings (B,num_targets,1,E)
         output = src[:, train_test_split_index:, -1, :]
-        # runs the embeddings through the decoder to get
-        # the logits of our predictions (B,num_targets,num_classes)
         output = self.decoder(output)
         return output
 
@@ -113,7 +98,7 @@ class FeatureEncoder(nn.Module):
         """
         x = x.unsqueeze(-1)
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
+        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8
         x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)
@@ -136,7 +121,6 @@ class TargetEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, embedding_size), representing
                            the embeddings of the targets
         """
-        # nan padding & nan handler instead?
         mean = torch.mean(y_train, axis=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
@@ -190,7 +174,6 @@ class TransformerEncoderLayer(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
         """
         batch_size, rows_size, col_size, embedding_size = src.shape
-        # attention between features
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
         @memory_chunking(num_mem_chunks)
@@ -200,19 +183,16 @@ class TransformerEncoderLayer(nn.Module):
         src = feature_attention(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm1(src)
-        # attention between datapoints
         src = src.transpose(1, 2)
         src = src.reshape(batch_size * col_size, rows_size, embedding_size)
 
         @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
-            # training data attends to itself
             x_left = self.self_attention_between_datapoints(
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
             )[0]
-            # test data attends to the training data
             x_right = self.self_attention_between_datapoints(
                 x[:, train_test_split_index:],
                 x[:, :train_test_split_index],
@@ -224,7 +204,6 @@ class TransformerEncoderLayer(nn.Module):
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
         src = src.transpose(2, 1)
         src = self.norm2(src)
-        # MLP after attention
         src = src.reshape(-1, embedding_size)
 
         @memory_chunking(num_mem_chunks)
@@ -261,7 +240,7 @@ def memory_chunking(num_mem_chunks: int) -> callable:
             for x_split in torch.split(x, split_size_or_sections=chunk_size, dim=0):
                 x_split[:] = func(
                     x_split
-                )  # in-place modification to save memory, will cause wrong gradients if used during training
+                )
             return x
 
         return wrapper

@@ -31,8 +31,6 @@ def init_model_from_state_dict_file(file_path):
     return model
 
 
-# doing these as lambdas would cause NanoTabPFNClassifier to not be pickle-able,
-# which would cause issues if we want to run it inside the tabarena codebase
 def to_pandas(x):
     return pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x
 
@@ -57,22 +55,21 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
         non_nan_entries = X[col].notna().sum()
         numeric_entries = (
             pd.to_numeric(X[col], errors="coerce").notna().sum()
-        )  # in case numeric columns are stored as strings
+        )
         num_mask.append(non_nan_entries == numeric_entries)
         cat_mask.append(non_nan_entries != numeric_entries)
-        # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
 
     num_mask = np.array(num_mask)
     cat_mask = np.array(cat_mask)
 
     num_transformer = Pipeline(
         [
-            ("to_pandas", FunctionTransformer(to_pandas)),  # to apply pd.to_numeric of pandas
-            ("to_numeric", FunctionTransformer(to_numeric)),  # in case numeric columns are stored as strings
+            ("to_pandas", FunctionTransformer(to_pandas)),
+            ("to_numeric", FunctionTransformer(to_numeric)),
             (
                 "imputer",
                 SimpleImputer(strategy="mean", add_indicator=True),
-            ),  # median might be better because of outliers
+            ),
         ]
     )
     cat_transformer = Pipeline(
@@ -135,14 +132,12 @@ class NanoTabPFNClassifier:
         x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train
         with torch.no_grad():
-            x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)  # introduce batch size 1
+            x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
             y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
             out = self.model(
                 (x, y), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
-            ).squeeze(0)  # remove batch size 1
-            # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
+            ).squeeze(0)
             out = out[:, : self.num_classes]
-            # apply softmax to get a probability distribution
             probabilities = F.softmax(out, dim=1)
             return probabilities.to("cpu").numpy()
 

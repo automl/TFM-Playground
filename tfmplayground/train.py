@@ -64,7 +64,7 @@ def train(
     try:
         for epoch in range(ckpt["epoch"] + 1 if ckpt else 1, epochs + 1):
             epoch_start_time = time.time()
-            model.train()  # Turn on the train mode
+            model.train()
             optimizer.train()
             total_loss = 0.0
             for i, full_data in enumerate(prior):

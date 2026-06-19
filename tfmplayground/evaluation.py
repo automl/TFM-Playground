@@ -11,17 +11,15 @@ from sklearn.preprocessing import LabelEncoder
 from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
 
 TOY_TASKS_REGRESSION = [
-    362443,  # diabetes
+    362443,
 ]
 
 TOY_TASKS_CLASSIFICATION = [
-    59,  # iris
-    2382,  # wine
-    9946,  # breast_cancer
+    59,
+    2382,
+    9946,
 ]
 
-# we hardcode the list here because even if the tasks are cached
-# openml.study.get_suite("tabarena-v0.1") might fail if there are connection issues
 TABARENA_TASKS = [
     363612,
     363613,
@@ -111,7 +109,7 @@ def get_openml_predictions(
             (true targets, predicted labels, predicted probabilities).
     """
     if classification is None:
-        classification = isinstance(model, NanoTabPFNClassifier)  # TODO: change this once we support different models
+        classification = isinstance(model, NanoTabPFNClassifier)
 
     if cache_directory is not None:
         set_root_cache_directory(cache_directory)
@@ -128,22 +126,22 @@ def get_openml_predictions(
         task = openml.tasks.get_task(task_id, download_splits=False)
 
         if classification and task.task_type_id != TaskType.SUPERVISED_CLASSIFICATION:
-            continue  # skip task, only classification
+            continue
         if not classification and task.task_type_id != TaskType.SUPERVISED_REGRESSION:
-            continue  # skip task, only regression
+            continue
 
         dataset = task.get_dataset(download_data=False)
 
         n_features = dataset.qualities["NumberOfFeatures"]
         n_samples = dataset.qualities["NumberOfInstances"]
         if n_features > max_n_features or n_samples > max_n_samples:
-            continue  # skip task, too big
+            continue
 
         _, folds, _ = task.get_split_dimensions()
         tabarena_light = True
         if tabarena_light:
-            folds = 1  # code supports multiple folds but tabarena_light only has one
-        repeat = 0  # code only supports one repeat
+            folds = 1
+        repeat = 0
         targets = []
         predictions = []
         probabilities = []
@@ -168,7 +166,7 @@ def get_openml_predictions(
             predictions.append(y_pred)
             if classification:
                 y_proba = model.predict_proba(X_test)
-                if y_proba.shape[1] == 2:  # binary classification
+                if y_proba.shape[1] == 2:
                     y_proba = y_proba[:, 1]
                 probabilities.append(y_proba)
 

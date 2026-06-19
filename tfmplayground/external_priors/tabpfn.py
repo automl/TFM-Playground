@@ -46,13 +46,12 @@ def _get_tabpfn_prior_config(prior_type: str) -> dict:
             "sampling": "uniform",
         }
     elif prior_type == "prior_bag":
-        # prior bag combines MLP and GP priors
         mlp_config = _get_tabpfn_prior_config("mlp")
         gp_config = _get_tabpfn_prior_config("gp")
         return {
             **mlp_config,
             **gp_config,
-            "prior_bag_exp_weights_1": 2.0,  # GP gets weight 1.0, MLP gets this value (default 2.0).
+            "prior_bag_exp_weights_1": 2.0,
         }
     else:
         raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")
@@ -71,12 +70,10 @@ def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
     is_regression = max_classes == 0
 
     return {
-        "flexible": not is_regression,  # false for regression, true for classification
+        "flexible": not is_regression,
         "max_num_classes": 2
         if is_regression
-        else max_classes,  # library weirdly requires >=2 regardless of regression or classification
-        # num_classes parameter in the library code is equated to max_num_classes
-        # so its not varied separately here
+        else max_classes,
         "prior_config": {
             **_get_tabpfn_prior_config(prior_type),
         },

@@ -74,7 +74,6 @@ def main():
             f"{args.num_batches}x{args.batch_size}_{args.max_seq_len}x{args.max_features}.h5"
         )
 
-    # infer the problem_type from max_classes
     problem_type = "classification" if args.max_classes > 0 else "regression"
 
     if args.lib == "ticl":
@@ -98,7 +97,7 @@ def main():
             device=device,
             **tabpfn_config,
         )
-    else:  # tabicl
+    else:
         prior = TabICLPriorDataLoader(
             num_steps=args.num_batches,
             batch_size=args.batch_size,

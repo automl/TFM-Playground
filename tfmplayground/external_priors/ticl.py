@@ -84,14 +84,9 @@ def build_ticl_prior(
         return GPPrior(cfg)
     elif prior_type == "classification_adapter":
         if base_prior is None:
-            base_prior = "mlp"  # default to MLP
-        # build the base regression prior
+            base_prior = "mlp"
         base_prior_obj = build_ticl_prior(base_prior)
 
-        # we equate them rather than treating num_classes as a separate parameter because:
-        # - max_num_classes serves as the upper bound for TICL's internal sampling
-        # - even with num_classes set to a constant, TICL's class_sampler_f() will internally
-        #   vary the actual number of classes (50% chance of 2, 50% chance of uniform(2, num_classes))
         cfg["max_num_classes"] = max_num_classes
         cfg["num_classes"] = max_num_classes
         return ClassificationAdapterPrior(base_prior_obj, **cfg)
@@ -148,7 +143,7 @@ class TICLPriorDataLoader(DataLoader):
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),
-            target_y=target_y.to(self.device),  # target_y is identical to y (for downstream compatibility)
+            target_y=target_y.to(self.device),
             train_test_split_index=train_test_split_index,
         )
 
