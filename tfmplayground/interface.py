@@ -82,7 +82,6 @@ class NanoTabPFNClassifier:
         self,
         model=None,
         device=None,
-        num_mem_chunks=8,
     ):
         if device is None:
             device = get_default_device()
@@ -100,7 +99,6 @@ class NanoTabPFNClassifier:
             model = init_model_from_state_dict_file(model)
         self.model = model.to(device)
         self.device = device
-        self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train, y_train):
         self.feature_preprocessor = get_feature_preprocessor(X_train)
@@ -118,9 +116,7 @@ class NanoTabPFNClassifier:
         with torch.no_grad():
             x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
             y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model(
-                (x, y), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
-            ).squeeze(0)
+            out = self.model((x, y), train_test_split_index=len(self.X_train)).squeeze(0)
             out = out[:, : self.num_classes]
             probabilities = F.softmax(out, dim=1)
             return probabilities.to("cpu").numpy()
@@ -132,7 +128,6 @@ class NanoTabPFNRegressor:
         model=None,
         dist=None,
         device=None,
-        num_mem_chunks=8,
     ):
         if device is None:
             device = get_default_device()
@@ -164,7 +159,6 @@ class NanoTabPFNRegressor:
         self.model = model.to(device)
         self.device = device
         self.dist = dist
-        self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train, y_train):
         self.feature_preprocessor = get_feature_preprocessor(X_train)
@@ -183,9 +177,7 @@ class NanoTabPFNRegressor:
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device).unsqueeze(0)
             y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-            logits = self.model(
-                (X_tensor, y_tensor), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
-            ).squeeze(0)
+            logits = self.model((X_tensor, y_tensor), train_test_split_index=len(self.X_train)).squeeze(0)
             preds_n = self.dist.mean(logits)
             preds = preds_n * self.y_train_std + self.y_train_mean
 

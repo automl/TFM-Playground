@@ -200,18 +200,12 @@ if __name__ == "__main__":
         default=10_000,
         help="Maximum number of instances allowed for a task. Tasks exceeding this limit are skipped.",
     )
-    parser.add_argument(
-        "-num_mem_chunks",
-        type=int,
-        default=8,
-        help="Chunks attention computation into `num_mem_chunks` many chunks to reduce memory usage.",
-    )
     args = parser.parse_args()
 
     if args.model_type == "classification":
-        model = NanoTabPFNClassifier(model=args.checkpoint, num_mem_chunks=args.num_mem_chunks)
+        model = NanoTabPFNClassifier(model=args.checkpoint)
     else:
-        model = NanoTabPFNRegressor(model=args.checkpoint, dist=args.dist_path, num_mem_chunks=args.num_mem_chunks)
+        model = NanoTabPFNRegressor(model=args.checkpoint, dist=args.dist_path)
     model.model.eval()
 
     if args.tasks == "toy_tasks" and args.model_type == "regression":

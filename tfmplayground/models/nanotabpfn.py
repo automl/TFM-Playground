@@ -1,5 +1,3 @@
-import math
-import warnings
 from collections.abc import Callable
 
 import torch
@@ -34,7 +32,7 @@ class NanoTabPFNModel(nn.Module):
         elif len(args) == 1 and isinstance(args[0], tuple):
             return self._forward(*args, **kwargs)
 
-    def _forward(self, src, train_test_split_index, num_mem_chunks=1):
+    def _forward(self, src, train_test_split_index):
         x_src, y_src = src
         if len(y_src.shape) < len(x_src.shape):
             y_src = y_src.unsqueeze(-1)
@@ -102,11 +100,10 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
-    def forward(self, src, train_test_split_index, num_mem_chunks=1):
+    def forward(self, src, train_test_split_index):
         batch_size, rows_size, col_size, embedding_size = src.shape
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
-        @memory_chunking(num_mem_chunks)
         def feature_attention(x):
             return self.self_attention_between_features(x, x, x)[0] + x
 
@@ -116,7 +113,6 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(1, 2)
         src = src.reshape(batch_size * col_size, rows_size, embedding_size)
 
-        @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
             x_left = self.self_attention_between_datapoints(
                 x[:, :train_test_split_index],
@@ -136,7 +132,6 @@ class TransformerEncoderLayer(nn.Module):
         src = self.norm2(src)
         src = src.reshape(-1, embedding_size)
 
-        @memory_chunking(num_mem_chunks)
         def mlp(x):
             return self.linear2(F.gelu(self.linear1(x))) + x
 
@@ -144,29 +139,6 @@ class TransformerEncoderLayer(nn.Module):
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm3(src)
         return src
-
-
-def memory_chunking(num_mem_chunks):
-
-    def decorator(func):
-        def wrapper(x):
-            if num_mem_chunks <= 1 or x.shape[0] == 0:
-                return func(x)
-            elif torch.is_grad_enabled():
-                warnings.warn(
-                    "Memory chunking is disabled since gradient computation is enabled to avoid incorrect gradients. "
-                    "Please use `with torch.no_grad():` during inference to enable chunking.",
-                    stacklevel=2,
-                )
-                return func(x)
-            chunk_size = max(1, math.ceil(x.shape[0] / num_mem_chunks))
-            for x_split in torch.split(x, split_size_or_sections=chunk_size, dim=0):
-                x_split[:] = func(x_split)
-            return x
-
-        return wrapper
-
-    return decorator
 
 
 class Decoder(nn.Module):
