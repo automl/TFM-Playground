@@ -1,4 +1,3 @@
-import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 from torch.utils.data import DataLoader
 

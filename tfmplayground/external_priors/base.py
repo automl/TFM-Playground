@@ -1,4 +1,3 @@
-from collections.abc import Callable, Iterator
 
 import h5py
 import numpy as np
