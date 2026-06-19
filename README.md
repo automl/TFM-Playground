@@ -50,7 +50,7 @@ This should take less than 5 min on a modern NVIDIA GPU (around 10 minutes on Ma
 
 We also offer a pre-generated dataset containing 1.28M tables with 50 datapoints and 3 features each for regression [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5).
 
-You can pretrain on it using `python pretrain_regressor.py`.
+You can pretrain on it using `python pretrain_regression.py`.
 
 #### Step by Step Explanation (Classifier)
 
