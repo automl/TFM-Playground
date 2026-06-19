@@ -1,4 +1,3 @@
-"""Interfaces to external prior libraries (TabICL, TICL, TabPFN v1)."""
 
 from .base import PriorDataLoader, PriorDumpDataLoader
 from .tabicl import TabICLPriorDataLoader

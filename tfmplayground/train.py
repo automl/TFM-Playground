@@ -25,25 +25,6 @@ def train(
     multi_gpu: bool = False,
     run_name: str = "tfmplayground",
 ):
-    """
-    Trains our model on the given prior using the given criterion.
-
-    Args:
-        model: (NanoTabPFNModel) our PyTorch model
-        prior: (DataLoader) torch-compatible dataloader
-        criterion: (nn.CrossEntropyLoss | FullSupportBarDistribution) our loss criterion
-        epochs: (int) the number of epochs we train for,
-            the number of steps that constitute an epoch are decided by the prior
-        accumulate_gradients: (int) the number of gradients to accumulate before updating the weights
-        device: (torch.device) the device we are using
-        callbacks: A list of callback instances to execute at the end of each epoch. These can be used for
-            logging, validation, or other custom actions.
-        ckpt (Dict[str, torch.Tensor], optional): A checkpoint dictionary containing the model and optimizer states,
-            as well as the last completed epoch. If provided, training resumes from this checkpoint.
-
-    Returns:
-        (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
-    """
     work_dir = "workdir/" + run_name
     os.makedirs(work_dir, exist_ok=True)
     if multi_gpu:

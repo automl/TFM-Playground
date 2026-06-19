@@ -12,7 +12,6 @@ class NanoTabPFNModel(nn.Module):
     def __init__(
         self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int
     ):
-        """Initializes the feature/target encoder, transformer blocks and decoder"""
         super().__init__()
         self.embedding_size = embedding_size
         self.num_attention_heads = num_attention_heads
@@ -29,30 +28,6 @@ class NanoTabPFNModel(nn.Module):
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
-        """
-        Provides two interfaces:
-        model(X_train, y_train, X_test)
-            Args:
-                X_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, num_features)
-                y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
-                X_test: (torch.Tensor) a tensor of shape (batch_size, num_test_datapoints, num_features)
-
-        model((x,y), train_test_split_index)
-            Args:
-                x: (torch.Tensor) a tensor of shape (batch_size, num_datapoints, num_features)
-                y: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
-
-
-        The former is similar to the sklearn interface.
-        In the latter x is the concatenation of X_train and X_test, y is y_train and
-        train_test_split_index is the length of X_train.
-        Our model internally works with the latter representation, so we convert the former into
-        the latter and forward it to _forward.
-
-        Returns:
-            (torch.Tensor) a tensor of shape (batch_size, num_test_datapoints, num_classes),
-                           which represent the predicted logits
-        """
         if len(args) == 3:
             x = args[0]
             if args[2] is not None:
@@ -80,22 +55,10 @@ class NanoTabPFNModel(nn.Module):
 
 class FeatureEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """Creates the linear layer that we will use to embed our features."""
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
     def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
-        """
-        Normalizes all the features based on the mean and std of the features of the training data,
-        clips them between -100 and 100, then applies a linear layer to embed the features.
-
-        Args:
-            x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
-            train_test_split_index: (int) the number of datapoints in X_train
-        Returns:
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size), representing
-                           the embeddings of the features
-        """
         x = x.unsqueeze(-1)
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
         std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8
@@ -106,21 +69,10 @@ class FeatureEncoder(nn.Module):
 
 class TargetEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """Creates the linear layer that we will use to embed our targets."""
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
     def forward(self, y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
-        """
-        Pads up y_train to the full length of y using the mean per dataset and then embeds it using a linear layer
-
-        Args:
-            y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
-            num_rows: (int) the full length of y
-        Returns:
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, embedding_size), representing
-                           the embeddings of the targets
-        """
         mean = torch.mean(y_train, axis=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
@@ -129,9 +81,6 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    """
-    Modified version of older version of https://github.com/pytorch/pytorch/blob/v2.6.0/torch/nn/modules/transformer.py#L630
-    """
 
     def __init__(
         self,
@@ -159,20 +108,6 @@ class TransformerEncoderLayer(nn.Module):
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
     def forward(self, src: torch.Tensor, train_test_split_index: int, num_mem_chunks: int = 1) -> torch.Tensor:
-        """
-        Takes the embeddings of the table as input and applies self-attention between features
-        and self-attention between datapoints followed by a simple 2 layer MLP.
-
-        Args:
-            src: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
-                                that contains all the embeddings for all the cells in the table
-            train_test_split_index: (int) the length of X_train
-            num_mem_chunks: (int) Number of chunks that memory-intense operations will be split into.
-                                  Higher values use less memory but are slower. Needs to be set to 1
-                                  during training to get correct gradients.
-        Returns
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
-        """
         batch_size, rows_size, col_size, embedding_size = src.shape
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
@@ -217,13 +152,6 @@ class TransformerEncoderLayer(nn.Module):
 
 
 def memory_chunking(num_mem_chunks: int) -> callable:
-    """
-    This decorator will split the first dimension of the input into chunks and apply the wrapped function
-    to each chunk separately.
-    Args:
-        num_mem_chunks: (int) Number of chunks to split the input into, higher values use less memory but are slower.
-                          Needs to be set to 1 during training to disable chunking and get correct gradients.
-    """
 
     def decorator(func: Callable[[torch.Tensor], torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
         def wrapper(x: torch.Tensor) -> torch.Tensor:
@@ -250,18 +178,9 @@ def memory_chunking(num_mem_chunks: int) -> callable:
 
 class Decoder(nn.Module):
     def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int):
-        """Initializes the linear layers for use in the forward"""
         super().__init__()
         self.linear1 = nn.Linear(embedding_size, mlp_hidden_size)
         self.linear2 = nn.Linear(mlp_hidden_size, num_outputs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Applies an MLP to the embeddings to get the logits
-
-        Args:
-            x: (torch.Tensor) a tensor of shape (batch_size, num_rows, embedding_size)
-        Returns:
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, num_outputs)
-        """
         return self.linear2(F.gelu(self.linear1(x)))

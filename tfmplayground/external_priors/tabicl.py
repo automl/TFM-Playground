@@ -1,4 +1,3 @@
-"""DataLoader and configuration for TabICL-based priors."""
 
 import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
@@ -6,19 +5,6 @@ from torch.utils.data import DataLoader
 
 
 class TabICLPriorDataLoader(DataLoader):
-    """DataLoader sampling synthetic prior data on-the-fly from TabICL's PriorDataset.
-
-    Args:
-        num_steps (int): Number of batches to generate per epoch.
-        batch_size (int): Number of functions per batch.
-        num_datapoints_min (int): Minimum number of datapoints per function.
-        num_datapoints_max (int): Maximum number of datapoints per function.
-        min_features (int): Minimum number of features in x.
-        max_features (int): Maximum number of features in x.
-        max_num_classes (int): Maximum number of classes (for classification tasks).
-        prior_type (str): Type of prior: 'mlp_scm', 'tree_scm', 'mix_scm' (default), or 'dummy'.
-        device (torch.device): Target device for tensors.
-    """
 
     def __init__(
         self,

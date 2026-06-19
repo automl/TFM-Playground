@@ -1,4 +1,3 @@
-"""DataLoader and configuration for TICL-based priors."""
 
 import torch
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
@@ -7,11 +6,6 @@ from torch.utils.data import DataLoader
 
 
 def _get_ticl_prior_config(prior_type: str) -> dict:
-    """Return the default kwargs for MLPPrior, GPPrior, or classification priors.
-
-    Args:
-        prior_type: Type of TICL prior ('mlp', 'gp', 'classification_adapter', etc.)
-    """
 
     if prior_type == "mlp":
         return {
@@ -68,13 +62,6 @@ def _get_ticl_prior_config(prior_type: str) -> dict:
 def build_ticl_prior(
     prior_type: str, base_prior: str = None, max_num_classes: int = None
 ) -> MLPPrior | GPPrior | ClassificationAdapterPrior | BooleanConjunctionPrior | StepFunctionPrior:
-    """Builds a TICL prior based on the prior type string using the defaults in this module.
-
-    Args:
-        prior_type: Type of TICL prior ('mlp', 'gp', 'classification_adapter', etc.)
-        base_prior: Base regression prior for composite priors (e.g., 'mlp' or 'gp' for classification_adapter)
-        max_num_classes: Maximum number of classes for classification priors
-    """
 
     cfg = _get_ticl_prior_config(prior_type)
 
@@ -99,17 +86,6 @@ def build_ticl_prior(
 
 
 class TICLPriorDataLoader(DataLoader):
-    """DataLoader sampling synthetic prior data from TICL's PriorDataLoader.
-
-    Args:
-        prior (Any): A TICL prior object supporting get_batch.
-        num_steps (int): Number of batches per epoch.
-        batch_size (int): Number of functions sampled per batch.
-        num_datapoints_max (int): Number of datapoints sampled per function.
-        num_features (int): Dimensionality of x vectors.
-        device (torch.device): Target device for tensors.
-        min_eval_pos (int, optional): Minimum evaluation position in the sequence.
-    """
 
     def __init__(
         self,

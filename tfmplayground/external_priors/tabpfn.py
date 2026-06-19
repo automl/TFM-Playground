@@ -1,17 +1,9 @@
-"""DataLoader and configuration for TabPFN v1-based priors."""
 
 import torch
 from tabpfn_prior import TabPFNPriorDataLoader  # noqa: F401
 
 
 def _get_tabpfn_prior_config(prior_type: str) -> dict:
-    """Return the default kwargs for TabPFN priors.
-
-    Args:
-        prior_type: Type of TabPFN prior ('mlp', 'gp', 'prior_bag')
-    Note:
-        gp_mix is included in the library wrapper but lacks implementation so its not included here
-    """
 
     if prior_type == "mlp":
         return {
@@ -58,15 +50,6 @@ def _get_tabpfn_prior_config(prior_type: str) -> dict:
 
 
 def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
-    """Builds TabPFN prior configuration with appropriate settings for regression or classification.
-
-    Args:
-        prior_type: Type of TabPFN prior ('mlp', 'gp', 'prior_bag')
-        max_classes: Maximum number of classes
-
-    Returns:
-        dict with 'flexible', 'max_num_classes', and 'prior_config' keys
-    """
     is_regression = max_classes == 0
 
     return {

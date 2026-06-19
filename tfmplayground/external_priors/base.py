@@ -1,4 +1,3 @@
-"""Data loading utilities for tabular priors."""
 
 from collections.abc import Callable, Iterator
 
@@ -10,16 +9,6 @@ from tqdm import tqdm
 
 
 class PriorDataLoader(DataLoader):
-    """Generic DataLoader for synthetic data generation using a get_batch function.
-
-    Args:
-        get_batch_function (Callable): A function returning batches of data.
-        num_steps (int): Number of batches per epoch.
-        batch_size (int): Number of functions per batch.
-        num_datapoints_max (int): Max sequence length per function.
-        num_features (int): Number of input features.
-        device (torch.device): Device to move tensors to.
-    """
 
     def __init__(
         self,
@@ -48,14 +37,6 @@ class PriorDataLoader(DataLoader):
 
 
 class PriorDumpDataLoader(DataLoader):
-    """DataLoader that loads synthetic prior data from an HDF5 dump.
-
-    Args:
-        filename (str): Path to the HDF5 file.
-        num_steps (int): Number of batches per epoch.
-        batch_size (int): Batch size.
-        device (torch.device): Device to load tensors onto.
-    """
 
     def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
         self.filename = filename
@@ -114,7 +95,6 @@ class PriorDumpDataLoader(DataLoader):
 def dump_prior_to_h5(
     prior, max_classes: int, batch_size: int, save_path: str, problem_type: str, max_seq_len: int, max_features: int
 ):
-    """Dumps synthetic prior data into an HDF5 file for later training."""
 
     with h5py.File(save_path, "w") as f:
         dump_X = f.create_dataset(

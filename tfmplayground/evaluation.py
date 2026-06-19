@@ -85,29 +85,6 @@ def get_openml_predictions(
     classification: bool | None = None,
     cache_directory: str | None = None,
 ):
-    """
-    Evaluates a model on a set of OpenML tasks and returns predictions.
-
-    Retrieves datasets from OpenML, applies preprocessing, and evaluates the given model on each task.
-    Returns true targets, predicted labels, and predicted probabilities for each dataset.
-
-    Args:
-        model (NanoTabPFNRegressor | NanoTabPFNClassifier):
-            A scikit-learn compatible model or classifier to be evaluated.
-        tasks (list[int] | str, optional):
-            A list of OpenML task IDs or the name of a benchmark suite.
-        max_n_features (int, optional):
-            Maximum number of features allowed for a task. Tasks exceeding this limit are skipped.
-        max_n_samples (int, optional):
-            Maximum number of instances allowed for a task. Tasks exceeding this limit are skipped.
-        classification (bool | None, optional):
-            Whether the model is a classifier (True) or regressor (False). If None, it is inferred from the model type.
-        cache_directory (str | None, optional):
-            Directory to save OpenML data. If None, default cache path is used.
-    Returns:
-        dict: A dictionary where keys are dataset names and values are tuples of
-            (true targets, predicted labels, predicted probabilities).
-    """
     if classification is None:
         classification = isinstance(model, NanoTabPFNClassifier)
 

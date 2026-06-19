@@ -16,9 +16,6 @@ from tfmplayground.utils import get_default_device
 
 
 def init_model_from_state_dict_file(file_path):
-    """
-    reads model architecture from state dict, instantiates the architecture and loads the weights
-    """
     state_dict = torch.load(file_path, map_location=torch.device("cpu"))
     model = NanoTabPFNModel(
         num_attention_heads=state_dict["architecture"]["num_attention_heads"],
@@ -40,9 +37,6 @@ def to_numeric(x):
 
 
 def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
-    """
-    fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
-    """
     X = pd.DataFrame(X)
     num_mask = []
     cat_mask = []
@@ -86,7 +80,6 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
 
 
 class NanoTabPFNClassifier:
-    """scikit-learn like interface"""
 
     def __init__(
         self,
@@ -113,22 +106,16 @@ class NanoTabPFNClassifier:
         self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
-        """stores X_train and y_train for later use, also computes the highest class number occuring in num_classes"""
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
-        """calls predit_proba and picks the class with the highest probability for each datapoint"""
         predicted_probabilities = self.predict_proba(X_test)
         return predicted_probabilities.argmax(axis=1)
 
     def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
-        """
-        creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
-        and applies softmax to get the probabilities
-        """
         x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train
         with torch.no_grad():
@@ -143,7 +130,6 @@ class NanoTabPFNClassifier:
 
 
 class NanoTabPFNRegressor:
-    """scikit-learn like interface"""
 
     def __init__(
         self,
@@ -185,10 +171,6 @@ class NanoTabPFNRegressor:
         self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
-        """
-        Stores X_train and y_train for later use.
-        Computes target normalization.
-        """
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
@@ -198,11 +180,6 @@ class NanoTabPFNRegressor:
         self.y_train_n = (self.y_train - self.y_train_mean) / self.y_train_std
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
-        """
-        Performs in-context learning using X_train and y_train.
-        Predicts the means of the output distributions for X_test.
-        Renormalizes the predictions back to the original target scale.
-        """
         X = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train_n
 

@@ -1,4 +1,3 @@
-"""Main module for the priors package."""
 
 import argparse
 import random

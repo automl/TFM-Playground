@@ -1,4 +1,3 @@
-"""Entry point for the priors package."""
 
 from .main import main
 
