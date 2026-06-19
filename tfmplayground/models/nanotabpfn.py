@@ -10,7 +10,7 @@ from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
 class NanoTabPFNModel(nn.Module):
     def __init__(
-        self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int
+        self, embedding_size, num_attention_heads, mlp_hidden_size, num_layers, num_outputs
     ):
         super().__init__()
         self.embedding_size = embedding_size
@@ -27,7 +27,7 @@ class NanoTabPFNModel(nn.Module):
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
-    def forward(self, *args, **kwargs) -> torch.Tensor:
+    def forward(self, *args, **kwargs):
         if len(args) == 3:
             x = args[0]
             if args[2] is not None:
@@ -37,8 +37,8 @@ class NanoTabPFNModel(nn.Module):
             return self._forward(*args, **kwargs)
 
     def _forward(
-        self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int, num_mem_chunks: int = 1
-    ) -> torch.Tensor:
+        self, src, train_test_split_index, num_mem_chunks = 1
+    ):
         x_src, y_src = src
         if len(y_src.shape) < len(x_src.shape):
             y_src = y_src.unsqueeze(-1)
@@ -54,11 +54,11 @@ class NanoTabPFNModel(nn.Module):
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, embedding_size: int):
+    def __init__(self, embedding_size):
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
-    def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
+    def forward(self, x, train_test_split_index):
         x = x.unsqueeze(-1)
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
         std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8
@@ -68,11 +68,11 @@ class FeatureEncoder(nn.Module):
 
 
 class TargetEncoder(nn.Module):
-    def __init__(self, embedding_size: int):
+    def __init__(self, embedding_size):
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
 
-    def forward(self, y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
+    def forward(self, y_train, num_rows):
         mean = torch.mean(y_train, axis=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
@@ -84,11 +84,11 @@ class TransformerEncoderLayer(nn.Module):
 
     def __init__(
         self,
-        embedding_size: int,
-        nhead: int,
-        mlp_hidden_size: int,
-        layer_norm_eps: float = 1e-5,
-        batch_first: bool = True,
+        embedding_size,
+        nhead,
+        mlp_hidden_size,
+        layer_norm_eps = 1e-5,
+        batch_first = True,
         device=None,
         dtype=None,
     ):
@@ -107,7 +107,7 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
-    def forward(self, src: torch.Tensor, train_test_split_index: int, num_mem_chunks: int = 1) -> torch.Tensor:
+    def forward(self, src, train_test_split_index, num_mem_chunks = 1):
         batch_size, rows_size, col_size, embedding_size = src.shape
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
@@ -151,10 +151,10 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
-def memory_chunking(num_mem_chunks: int) -> callable:
+def memory_chunking(num_mem_chunks):
 
-    def decorator(func: Callable[[torch.Tensor], torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
-        def wrapper(x: torch.Tensor) -> torch.Tensor:
+    def decorator(func):
+        def wrapper(x):
             if num_mem_chunks <= 1 or x.shape[0] == 0:
                 return func(x)
             elif torch.is_grad_enabled():
@@ -177,10 +177,10 @@ def memory_chunking(num_mem_chunks: int) -> callable:
 
 
 class Decoder(nn.Module):
-    def __init__(self, embedding_size: int, mlp_hidden_size: int, num_outputs: int):
+    def __init__(self, embedding_size, mlp_hidden_size, num_outputs):
         super().__init__()
         self.linear1 = nn.Linear(embedding_size, mlp_hidden_size)
         self.linear2 = nn.Linear(mlp_hidden_size, num_outputs)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return self.linear2(F.gelu(self.linear1(x)))

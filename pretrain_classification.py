@@ -73,7 +73,7 @@ class ToyEvaluationLoggerCallback(ConsoleLoggerCallback):
     def __init__(self, tasks):
         self.tasks = tasks
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         classifier = NanoTabPFNClassifier(model, device)
         predictions = get_openml_predictions(model=classifier, tasks=self.tasks)
         scores = []
@@ -87,10 +87,10 @@ class ToyEvaluationLoggerCallback(ConsoleLoggerCallback):
 
 
 class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
-    def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
+    def __init__(self, project, name = None, config = None, log_dir = None):
         super().__init__(project, name, config, log_dir)
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         classifier = NanoTabPFNClassifier(model, device)
         predictions = get_openml_predictions(model=classifier, classification=True, tasks=TABARENA_TASKS)
         scores = []

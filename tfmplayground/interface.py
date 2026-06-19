@@ -36,7 +36,7 @@ def to_numeric(x):
     return x.apply(pd.to_numeric, errors="coerce").to_numpy()
 
 
-def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
+def get_feature_preprocessor(X):
     X = pd.DataFrame(X)
     num_mask = []
     cat_mask = []
@@ -83,9 +83,9 @@ class NanoTabPFNClassifier:
 
     def __init__(
         self,
-        model: NanoTabPFNModel | str | None = None,
-        device: None | str | torch.device = None,
-        num_mem_chunks: int = 8,
+        model = None,
+        device = None,
+        num_mem_chunks = 8,
     ):
         if device is None:
             device = get_default_device()
@@ -105,17 +105,17 @@ class NanoTabPFNClassifier:
         self.device = device
         self.num_mem_chunks = num_mem_chunks
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train, y_train):
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
-    def predict(self, X_test: np.ndarray) -> np.ndarray:
+    def predict(self, X_test):
         predicted_probabilities = self.predict_proba(X_test)
         return predicted_probabilities.argmax(axis=1)
 
-    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X_test):
         x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train
         with torch.no_grad():
@@ -133,10 +133,10 @@ class NanoTabPFNRegressor:
 
     def __init__(
         self,
-        model: NanoTabPFNModel | str | None = None,
-        dist: FullSupportBarDistribution | str | None = None,
-        device: str | torch.device | None = None,
-        num_mem_chunks: int = 8,
+        model = None,
+        dist = None,
+        device = None,
+        num_mem_chunks = 8,
     ):
         if device is None:
             device = get_default_device()
@@ -170,7 +170,7 @@ class NanoTabPFNRegressor:
         self.dist = dist
         self.num_mem_chunks = num_mem_chunks
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train, y_train):
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
@@ -179,7 +179,7 @@ class NanoTabPFNRegressor:
         self.y_train_std = np.std(self.y_train, ddof=1) + 1e-8
         self.y_train_n = (self.y_train - self.y_train_mean) / self.y_train_std
 
-    def predict(self, X_test: np.ndarray) -> np.ndarray:
+    def predict(self, X_test):
         X = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
         y = self.y_train_n
 

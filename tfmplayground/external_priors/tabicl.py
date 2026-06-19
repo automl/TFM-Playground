@@ -8,15 +8,15 @@ class TabICLPriorDataLoader(DataLoader):
 
     def __init__(
         self,
-        num_steps: int,
-        batch_size: int,
-        num_datapoints_min: int,
-        num_datapoints_max: int,
-        min_features: int,
-        max_features: int,
-        max_num_classes: int,
-        device: torch.device,
-        prior_type: str = "mix_scm",
+        num_steps,
+        batch_size,
+        num_datapoints_min,
+        num_datapoints_max,
+        min_features,
+        max_features,
+        max_num_classes,
+        device,
+        prior_type = "mix_scm",
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size

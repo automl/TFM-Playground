@@ -5,7 +5,7 @@ from ticl.priors import BooleanConjunctionPrior, ClassificationAdapterPrior, GPP
 from torch.utils.data import DataLoader
 
 
-def _get_ticl_prior_config(prior_type: str) -> dict:
+def _get_ticl_prior_config(prior_type):
 
     if prior_type == "mlp":
         return {
@@ -60,8 +60,8 @@ def _get_ticl_prior_config(prior_type: str) -> dict:
 
 
 def build_ticl_prior(
-    prior_type: str, base_prior: str = None, max_num_classes: int = None
-) -> MLPPrior | GPPrior | ClassificationAdapterPrior | BooleanConjunctionPrior | StepFunctionPrior:
+    prior_type, base_prior = None, max_num_classes = None
+):
 
     cfg = _get_ticl_prior_config(prior_type)
 
@@ -90,12 +90,12 @@ class TICLPriorDataLoader(DataLoader):
     def __init__(
         self,
         prior,
-        num_steps: int,
-        batch_size: int,
-        num_datapoints_max: int,
-        num_features: int,
-        min_eval_pos: int,
-        device: torch.device,
+        num_steps,
+        batch_size,
+        num_datapoints_max,
+        num_features,
+        min_eval_pos,
+        device,
     ):
         self.num_steps = num_steps
         self.device = device

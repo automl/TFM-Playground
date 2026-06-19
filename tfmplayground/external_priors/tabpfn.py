@@ -3,7 +3,7 @@ import torch
 from tabpfn_prior import TabPFNPriorDataLoader  # noqa: F401
 
 
-def _get_tabpfn_prior_config(prior_type: str) -> dict:
+def _get_tabpfn_prior_config(prior_type):
 
     if prior_type == "mlp":
         return {
@@ -49,7 +49,7 @@ def _get_tabpfn_prior_config(prior_type: str) -> dict:
         raise ValueError(f"Unsupported TabPFN prior type: {prior_type}")
 
 
-def build_tabpfn_prior(prior_type: str, max_classes: int) -> dict:
+def build_tabpfn_prior(prior_type, max_classes):
     is_regression = max_classes == 0
 
     return {

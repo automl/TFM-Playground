@@ -12,12 +12,12 @@ class PriorDataLoader(DataLoader):
 
     def __init__(
         self,
-        get_batch_function: Callable[..., dict[str, torch.Tensor | int]],
-        num_steps: int,
-        batch_size: int,
-        num_datapoints_max: int,
-        num_features: int,
-        device: torch.device,
+        get_batch_function,
+        num_steps,
+        batch_size,
+        num_datapoints_max,
+        num_features,
+        device,
     ):
         self.get_batch_function = get_batch_function
         self.num_steps = num_steps
@@ -26,13 +26,13 @@ class PriorDataLoader(DataLoader):
         self.num_features = num_features
         self.device = device
 
-    def __iter__(self) -> Iterator[dict[str, torch.Tensor | int]]:
+    def __iter__(self):
         return iter(
             self.get_batch_function(self.batch_size, self.num_datapoints_max, self.num_features)
             for _ in range(self.num_steps)
         )
 
-    def __len__(self) -> int:
+    def __len__(self):
         return self.num_steps
 
 
@@ -93,7 +93,7 @@ class PriorDumpDataLoader(DataLoader):
 
 
 def dump_prior_to_h5(
-    prior, max_classes: int, batch_size: int, save_path: str, problem_type: str, max_seq_len: int, max_features: int
+    prior, max_classes, batch_size, save_path, problem_type, max_seq_len, max_features
 ):
 
     with h5py.File(save_path, "w") as f:

@@ -85,7 +85,7 @@ class EvaluationLoggerCallback(ConsoleLoggerCallback):
     def __init__(self, tasks):
         self.tasks = tasks
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         regressor = NanoTabPFNRegressor(model, dist, device)
         predictions = get_openml_predictions(model=regressor, tasks=self.tasks)
         scores = []

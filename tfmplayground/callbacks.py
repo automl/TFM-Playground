@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class Callback(ABC):
 
     @abstractmethod
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         pass
 
     @abstractmethod
@@ -19,7 +19,7 @@ class BaseLoggerCallback(Callback):
 
 class ConsoleLoggerCallback(BaseLoggerCallback):
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         print(f"Epoch {epoch:5d} | Time {epoch_time:5.2f}s | Mean Loss {loss:5.2f}", flush=True)
 
     def close(self):
@@ -28,12 +28,12 @@ class ConsoleLoggerCallback(BaseLoggerCallback):
 
 class TensorboardLoggerCallback(BaseLoggerCallback):
 
-    def __init__(self, log_dir: str):
+    def __init__(self, log_dir):
         from torch.utils.tensorboard import SummaryWriter
 
         self.writer = SummaryWriter(log_dir=log_dir)
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         self.writer.add_scalar("Loss/train", loss, epoch)
         self.writer.add_scalar("Time/epoch", epoch_time, epoch)
 
@@ -43,7 +43,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 
 class WandbLoggerCallback(BaseLoggerCallback):
 
-    def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
+    def __init__(self, project, name = None, config = None, log_dir = None):
         try:
             import wandb
 
@@ -52,7 +52,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
         except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         log_dict = {"epoch": epoch, "loss": loss, " epoch_time": epoch_time}
         self.wandb.log(log_dict)
 

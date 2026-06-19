@@ -13,17 +13,17 @@ from tfmplayground.utils import get_default_device
 
 
 def train(
-    model: NanoTabPFNModel,
-    prior: DataLoader,
-    criterion: nn.CrossEntropyLoss | FullSupportBarDistribution,
-    epochs: int,
-    accumulate_gradients: int = 1,
-    lr: float = 1e-4,
-    device: torch.device = None,
-    callbacks: list[Callback] = None,
-    ckpt: dict[str, torch.Tensor] = None,
-    multi_gpu: bool = False,
-    run_name: str = "tfmplayground",
+    model,
+    prior,
+    criterion,
+    epochs,
+    accumulate_gradients = 1,
+    lr = 1e-4,
+    device = None,
+    callbacks = None,
+    ckpt = None,
+    multi_gpu = False,
+    run_name = "tfmplayground",
 ):
     work_dir = "workdir/" + run_name
     os.makedirs(work_dir, exist_ok=True)
