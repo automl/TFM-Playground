@@ -1,11 +1,9 @@
-
 import torch
 from tabicl.prior.dataset import PriorDataset as TabICLPriorDataset
 from torch.utils.data import DataLoader
 
 
 class TabICLPriorDataLoader(DataLoader):
-
     def __init__(
         self,
         num_steps,
@@ -16,7 +14,7 @@ class TabICLPriorDataLoader(DataLoader):
         max_features,
         max_num_classes,
         device,
-        prior_type = "mix_scm",
+        prior_type="mix_scm",
     ):
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -41,13 +39,9 @@ class TabICLPriorDataLoader(DataLoader):
 
     def tabicl_to_ours(self, d):
         x, y, active_features, seqlen, train_size = d
-        active_features = active_features[
-            0
-        ].item()
+        active_features = active_features[0].item()
         x = x[:, :, :active_features]
-        train_test_split_index = train_size[
-            0
-        ].item()
+        train_test_split_index = train_size[0].item()
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),

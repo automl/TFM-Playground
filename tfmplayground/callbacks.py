@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 
 
 class Callback(ABC):
-
     @abstractmethod
     def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         pass
@@ -13,12 +12,10 @@ class Callback(ABC):
 
 
 class BaseLoggerCallback(Callback):
-
     pass
 
 
 class ConsoleLoggerCallback(BaseLoggerCallback):
-
     def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):
         print(f"Epoch {epoch:5d} | Time {epoch_time:5.2f}s | Mean Loss {loss:5.2f}", flush=True)
 
@@ -27,7 +24,6 @@ class ConsoleLoggerCallback(BaseLoggerCallback):
 
 
 class TensorboardLoggerCallback(BaseLoggerCallback):
-
     def __init__(self, log_dir):
         from torch.utils.tensorboard import SummaryWriter
 
@@ -42,8 +38,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 
 
 class WandbLoggerCallback(BaseLoggerCallback):
-
-    def __init__(self, project, name = None, config = None, log_dir = None):
+    def __init__(self, project, name=None, config=None, log_dir=None):
         try:
             import wandb
 

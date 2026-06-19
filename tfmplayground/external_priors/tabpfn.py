@@ -1,4 +1,3 @@
-
 import torch
 from tabpfn_prior import TabPFNPriorDataLoader  # noqa: F401
 
@@ -54,9 +53,7 @@ def build_tabpfn_prior(prior_type, max_classes):
 
     return {
         "flexible": not is_regression,
-        "max_num_classes": 2
-        if is_regression
-        else max_classes,
+        "max_num_classes": 2 if is_regression else max_classes,
         "prior_config": {
             **_get_tabpfn_prior_config(prior_type),
         },

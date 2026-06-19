@@ -87,7 +87,7 @@ class ToyEvaluationLoggerCallback(ConsoleLoggerCallback):
 
 
 class ProductionEvaluationLoggerCallback(WandbLoggerCallback):
-    def __init__(self, project, name = None, config = None, log_dir = None):
+    def __init__(self, project, name=None, config=None, log_dir=None):
         super().__init__(project, name, config, log_dir)
 
     def on_epoch_end(self, epoch, epoch_time, loss, model, **kwargs):

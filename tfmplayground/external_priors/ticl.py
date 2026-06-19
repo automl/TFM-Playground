@@ -1,4 +1,3 @@
-
 import torch
 from ticl.dataloader import PriorDataLoader as TICLPriorDataset
 from ticl.priors import BooleanConjunctionPrior, ClassificationAdapterPrior, GPPrior, MLPPrior, StepFunctionPrior
@@ -59,9 +58,7 @@ def _get_ticl_prior_config(prior_type):
         raise ValueError(f"Unsupported TICL prior type: {prior_type}")
 
 
-def build_ticl_prior(
-    prior_type, base_prior = None, max_num_classes = None
-):
+def build_ticl_prior(prior_type, base_prior=None, max_num_classes=None):
 
     cfg = _get_ticl_prior_config(prior_type)
 
@@ -86,7 +83,6 @@ def build_ticl_prior(
 
 
 class TICLPriorDataLoader(DataLoader):
-
     def __init__(
         self,
         prior,

@@ -9,9 +9,7 @@ from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(
-        self, embedding_size, num_attention_heads, mlp_hidden_size, num_layers, num_outputs
-    ):
+    def __init__(self, embedding_size, num_attention_heads, mlp_hidden_size, num_layers, num_outputs):
         super().__init__()
         self.embedding_size = embedding_size
         self.num_attention_heads = num_attention_heads
@@ -36,9 +34,7 @@ class NanoTabPFNModel(nn.Module):
         elif len(args) == 1 and isinstance(args[0], tuple):
             return self._forward(*args, **kwargs)
 
-    def _forward(
-        self, src, train_test_split_index, num_mem_chunks = 1
-    ):
+    def _forward(self, src, train_test_split_index, num_mem_chunks=1):
         x_src, y_src = src
         if len(y_src.shape) < len(x_src.shape):
             y_src = y_src.unsqueeze(-1)
@@ -81,14 +77,13 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-
     def __init__(
         self,
         embedding_size,
         nhead,
         mlp_hidden_size,
-        layer_norm_eps = 1e-5,
-        batch_first = True,
+        layer_norm_eps=1e-5,
+        batch_first=True,
         device=None,
         dtype=None,
     ):
@@ -107,7 +102,7 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
-    def forward(self, src, train_test_split_index, num_mem_chunks = 1):
+    def forward(self, src, train_test_split_index, num_mem_chunks=1):
         batch_size, rows_size, col_size, embedding_size = src.shape
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
@@ -166,9 +161,7 @@ def memory_chunking(num_mem_chunks):
                 return func(x)
             chunk_size = max(1, math.ceil(x.shape[0] / num_mem_chunks))
             for x_split in torch.split(x, split_size_or_sections=chunk_size, dim=0):
-                x_split[:] = func(
-                    x_split
-                )
+                x_split[:] = func(x_split)
             return x
 
         return wrapper

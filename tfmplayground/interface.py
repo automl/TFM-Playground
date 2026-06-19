@@ -47,9 +47,7 @@ def get_feature_preprocessor(X):
             cat_mask.append(False)
             continue
         non_nan_entries = X[col].notna().sum()
-        numeric_entries = (
-            pd.to_numeric(X[col], errors="coerce").notna().sum()
-        )
+        numeric_entries = pd.to_numeric(X[col], errors="coerce").notna().sum()
         num_mask.append(non_nan_entries == numeric_entries)
         cat_mask.append(non_nan_entries != numeric_entries)
 
@@ -80,12 +78,11 @@ def get_feature_preprocessor(X):
 
 
 class NanoTabPFNClassifier:
-
     def __init__(
         self,
-        model = None,
-        device = None,
-        num_mem_chunks = 8,
+        model=None,
+        device=None,
+        num_mem_chunks=8,
     ):
         if device is None:
             device = get_default_device()
@@ -130,13 +127,12 @@ class NanoTabPFNClassifier:
 
 
 class NanoTabPFNRegressor:
-
     def __init__(
         self,
-        model = None,
-        dist = None,
-        device = None,
-        num_mem_chunks = 8,
+        model=None,
+        dist=None,
+        device=None,
+        num_mem_chunks=8,
     ):
         if device is None:
             device = get_default_device()

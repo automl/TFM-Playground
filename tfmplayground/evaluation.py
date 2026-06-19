@@ -79,11 +79,11 @@ TABARENA_TASKS = [
 def get_openml_predictions(
     *,
     model,
-    tasks = "tabarena-v0.1",
-    max_n_features = 500,
-    max_n_samples = 10_000,
-    classification = None,
-    cache_directory = None,
+    tasks="tabarena-v0.1",
+    max_n_features=500,
+    max_n_samples=10_000,
+    classification=None,
+    cache_directory=None,
 ):
     if classification is None:
         classification = isinstance(model, NanoTabPFNClassifier)

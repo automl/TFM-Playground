@@ -1,4 +1,3 @@
-
 from collections.abc import Callable, Iterator
 
 import h5py
@@ -9,7 +8,6 @@ from tqdm import tqdm
 
 
 class PriorDataLoader(DataLoader):
-
     def __init__(
         self,
         get_batch_function,
@@ -37,7 +35,6 @@ class PriorDataLoader(DataLoader):
 
 
 class PriorDumpDataLoader(DataLoader):
-
     def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
         self.filename = filename
         self.num_steps = num_steps
@@ -92,9 +89,7 @@ class PriorDumpDataLoader(DataLoader):
         return self.num_steps
 
 
-def dump_prior_to_h5(
-    prior, max_classes, batch_size, save_path, problem_type, max_seq_len, max_features
-):
+def dump_prior_to_h5(prior, max_classes, batch_size, save_path, problem_type, max_seq_len, max_features):
 
     with h5py.File(save_path, "w") as f:
         dump_X = f.create_dataset(

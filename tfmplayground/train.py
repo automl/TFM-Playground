@@ -17,13 +17,13 @@ def train(
     prior,
     criterion,
     epochs,
-    accumulate_gradients = 1,
-    lr = 1e-4,
-    device = None,
-    callbacks = None,
-    ckpt = None,
-    multi_gpu = False,
-    run_name = "tfmplayground",
+    accumulate_gradients=1,
+    lr=1e-4,
+    device=None,
+    callbacks=None,
+    ckpt=None,
+    multi_gpu=False,
+    run_name="tfmplayground",
 ):
     work_dir = "workdir/" + run_name
     os.makedirs(work_dir, exist_ok=True)
