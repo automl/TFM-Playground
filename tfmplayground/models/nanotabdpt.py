@@ -1,6 +1,5 @@
-from functools import wraps
-from typing import Literal
 import math
+from functools import wraps
 
 import torch
 import torch.nn as nn
@@ -8,13 +7,7 @@ import torch.nn.functional as F
 from torch.nn import LayerNorm, Linear
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-
-def generate_random_permutation(N, seed=None):
-    generator = torch.Generator()
-    if seed is not None:
-        generator.manual_seed(seed)
-
-    return torch.randperm(N, generator=generator)
+from tfmplayground.models.base import TabularFoundationModel
 
 
 def flash_context(func):
@@ -68,7 +61,7 @@ def clip_outliers(data, eval_pos=-1, n_sigma=4, dim=0):
     return torch.clip(data, mean - cutoff, mean + cutoff)
 
 
-class TabDPTModel(nn.Module):
+class TabDPTModel(TabularFoundationModel):
     def __init__(
         self,
         dropout: float,
@@ -87,7 +80,8 @@ class TabDPTModel(nn.Module):
         y_encoder_dim: int,
         num_col_attn_layers: int = 2,
         n_thinking_rows: int = 0,
-        use_flash: bool = True,
+        classification: bool = True,
+        use_flash: bool = False,
         clip_sigma: float = 8.
     ):
         super().__init__()
@@ -134,22 +128,15 @@ class TabDPTModel(nn.Module):
             nn.init.normal_(self.thinking_embed, std=0.02)
         self.use_flash = use_flash
         self.clip_sigma = clip_sigma
+        self.classification = classification
 
     @flash_context
-    def forward(
-        self,
-        x_src: torch.Tensor,
-        y_src: torch.Tensor,
-        num_features: torch.Tensor,
-    ) -> torch.Tensor:
-        """Forward pass of the TabDPTModel.
-        Args:
-            x_src (torch.Tensor): Input features of shape (B, T, F).
-            y_src (torch.Tensor): Target values of shape (B, T).
-            return_log_act_norms (bool): Whether to return activation norms for logging.
-        Returns:
-            torch.Tensor: Predicted values of shape (T, B, n_out + regression_bin_count).
-        """
+    def forward(self, X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor) -> torch.Tensor:
+        x_src = torch.cat([X_train, X_test], dim=1)
+        if x_src.shape[-1] < self.num_features:
+            x_src = F.pad(x_src, (0, self.num_features - x_src.shape[-1]))
+        y_src = y_train
+
         x_src = x_src.transpose(0, 1)
         y_src = y_src.transpose(0, 1)
         eval_pos = y_src.shape[0]
@@ -168,8 +155,8 @@ class TabDPTModel(nn.Module):
             B = src.shape[1]
             src = torch.cat([self.thinking_embed.unsqueeze(1).expand(n_think, B, -1), src], dim=0)
 
-        for l, layer in enumerate(self.transformer_encoder):
-            y_emb = self.y_encoders[l](y_src.unsqueeze(-1))
+        for i, layer in enumerate(self.transformer_encoder):
+            y_emb = self.y_encoders[i](y_src.unsqueeze(-1))
             if n_think > 0:
                 B = y_emb.shape[1]
                 y_emb = torch.cat([y_emb.new_zeros(n_think, B, y_emb.shape[-1]), y_emb], dim=0)
@@ -179,38 +166,10 @@ class TabDPTModel(nn.Module):
 
         # final head
         pred = self.head(src[eval_pos + n_think :].float())
-        return pred
-
-    @classmethod
-    def load(cls, model_state, config, use_flash, clip_sigma: float = 8.):
-        assert config.model.max_num_classes > 2
-        model = TabDPTModel(
-            dropout=config.training.dropout,
-            enc_cell_dim=config.model.enc_cell_dim,
-            n_out=config.model.max_num_classes,
-            regression_bin_count=config.model.regression_bin_count,
-            regression_bin_min=config.model.regression_bin_min,
-            regression_bin_max=config.model.regression_bin_max,
-            nhead=config.model.nhead,
-            nhid=config.model.ff_dim,
-            ninp=config.model.emsize,
-            nlayers=config.model.nlayers,
-            num_features=config.model.max_num_features,
-            base_len=config.model.min_eval_context,
-            max_len=config.model.max_eval_context,
-            y_encoder_dim=config.model.y_encoder_dim,
-            num_col_attn_layers=config.model.num_col_attn_layers,
-            n_thinking_rows=config.model.n_thinking_rows,
-            use_flash=use_flash,
-            clip_sigma=clip_sigma
-        )
-
-        model_state = {k.replace("_orig_mod.", ""): v for k, v in model_state.items()}
-        model_state = {k.replace("model.", ""): v for k, v in model_state.items()}
-        model.load_state_dict(model_state)
-        model.to(config.env.device)
-        model.eval()
-        return model
+        pred = pred.transpose(0, 1)
+        if self.classification:
+            return pred[..., : self.n_out]
+        return pred[..., self.n_out :]
 
 
 class RMSNorm(nn.Module):
