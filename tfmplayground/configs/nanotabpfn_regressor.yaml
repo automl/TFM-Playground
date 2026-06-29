@@ -1,6 +1,4 @@
 priordump: 50x3_1280k_regression.h5
-saveweights: nanotabpfn_weights.pth
-savebuckets: nanotabpfn_buckets.pth
 heads: 6
 embeddingsize: 192
 hiddensize: 768
@@ -10,5 +8,4 @@ accumulate: 1
 lr: 0.0001
 steps: 100
 epochs: 10000
-loadcheckpoint: null
 n_buckets: 100
