@@ -173,8 +173,8 @@ class TabDPTModel(TabularFoundationModel):
             B = src.shape[1]
             src = torch.cat([self.thinking_embed.unsqueeze(1).expand(n_think, B, -1), src], dim=0)
 
-        for i, layer in enumerate(self.transformer_encoder):
-            y_emb = self.y_encoders[i](y_src.unsqueeze(-1))
+        for l, layer in enumerate(self.transformer_encoder):
+            y_emb = self.y_encoders[l](y_src.unsqueeze(-1))
             if n_think > 0:
                 B = y_emb.shape[1]
                 y_emb = torch.cat([y_emb.new_zeros(n_think, B, y_emb.shape[-1]), y_emb], dim=0)
