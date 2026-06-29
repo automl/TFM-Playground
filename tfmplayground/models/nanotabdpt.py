@@ -186,8 +186,8 @@ class TabDPTModel(TabularFoundationModel):
         pred = self.head(src[eval_pos + n_think :].float())
         pred = pred.transpose(0, 1)
         if self.classification:
-            return pred[..., : self.n_out]
-        return pred[..., self.n_out :]
+            return pred[..., : self.n_out].contiguous()
+        return pred[..., self.n_out :].contiguous()
 
 
 class RMSNorm(nn.Module):
