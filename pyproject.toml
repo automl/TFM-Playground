@@ -60,7 +60,9 @@ select = [
     "B",   # flake8-bugbear
     "SIM", # flake8-simplify
 ]
-ignore = []
+ignore = [
+    "E741",  # ambiguous variable name
+]
 
 [tool.ruff.format]
 quote-style = "double"
