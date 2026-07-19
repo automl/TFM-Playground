@@ -64,6 +64,9 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                 if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
                     continue
                 targets = full_data['target_y'].to(device)
+                column_embeddings = full_data.get('column_embeddings')
+                if column_embeddings is not None:
+                    column_embeddings = column_embeddings.to(device)
 
                 if regression_task:
                     y_mean = data[1].mean(dim=1, keepdim=True)
@@ -71,7 +74,7 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     y_norm = (data[1] - y_mean) / y_std
                     data = (data[0], y_norm)
 
-                output = model(data, single_eval_pos=single_eval_pos)
+                output = model(data, single_eval_pos=single_eval_pos, column_embeddings=column_embeddings)
                 targets = targets[:, single_eval_pos:]
                 if regression_task:
                     targets = (targets - y_mean) / y_std
@@ -101,7 +104,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader, criterion: nn.CrossEntropyL
                     'embedding_size': int((model.module if multi_gpu else model).embedding_size),
                     'num_attention_heads': int((model.module if multi_gpu else model).num_attention_heads),
                     'mlp_hidden_size': int((model.module if multi_gpu else model).mlp_hidden_size),
-                    'num_outputs': int((model.module if multi_gpu else model).num_outputs)
+                    'num_outputs': int((model.module if multi_gpu else model).num_outputs),
+                    'text_embedding_dim': getattr((model.module if multi_gpu else model), 'text_embedding_dim', None)
                 },
                 'model': (model.module if multi_gpu else model).state_dict(),
                 'optimizer': optimizer.state_dict()

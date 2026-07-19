@@ -8,8 +8,26 @@ from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 
 
+class ColumnEmbeddingProjector(nn.Module):
+    """Projects pre-computed text embeddings into the model hidden dimension."""
+
+    def __init__(self, text_embedding_dim: int, embedding_size: int):
+        super().__init__()
+        self.projection = nn.Linear(text_embedding_dim, embedding_size)
+
+    def forward(self, text_embeddings: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            text_embeddings: (B, F, D) or (F, D) pre-computed text embeddings
+        Returns:
+            (B, F, E) or (F, E) projected embeddings
+        """
+        return self.projection(text_embeddings)
+
+
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int,
+                 text_embedding_dim: int | None = None):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.embedding_size = embedding_size
@@ -17,10 +35,16 @@ class NanoTabPFNModel(nn.Module):
         self.mlp_hidden_size = mlp_hidden_size
         self.num_layers = num_layers
         self.num_outputs = num_outputs
+        self.text_embedding_dim = text_embedding_dim
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_encoder = TransformerEncoderStack(num_layers, embedding_size, num_attention_heads, mlp_hidden_size)
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
+        # Column text embedding support (ConTextTab-style)
+        if text_embedding_dim is not None:
+            self.column_projector = ColumnEmbeddingProjector(text_embedding_dim, embedding_size)
+        else:
+            self.column_projector = None
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -56,7 +80,8 @@ class NanoTabPFNModel(nn.Module):
             # case model((x,y), single_eval_pos=None)
             return self._forward(*args, **kwargs)
 
-    def _forward(self, src: Tuple[torch.Tensor, torch.Tensor], single_eval_pos: int, num_mem_chunks: int = 1) -> torch.Tensor:
+    def _forward(self, src: Tuple[torch.Tensor, torch.Tensor], single_eval_pos: int, num_mem_chunks: int = 1,
+                 column_embeddings: torch.Tensor | None = None) -> torch.Tensor:
         x_src, y_src = src
         # we expect the labels to look like (batches, num_train_datapoints, 1),
         # so we add the last dimension if it is missing
@@ -65,6 +90,15 @@ class NanoTabPFNModel(nn.Module):
         # from here on B=Batches, R=Rows, C=Columns, E=embedding size
         # converts scalar values to embeddings, so (B,R,C-1) -> (B,R,C-1,E)
         x_src = self.feature_encoder(x_src, single_eval_pos)
+        # add semantic column embeddings to feature cell embeddings (ConTextTab-style)
+        if column_embeddings is not None and self.column_projector is not None:
+            projected = self.column_projector(column_embeddings)
+            if projected.ndim == 2:
+                # (F, E) - single table (inference convenience)
+                x_src = x_src + projected[None, None, :, :]
+            elif projected.ndim == 3:
+                # (B, F, E) - batched tables (pretraining)
+                x_src = x_src + projected[:, None, :, :]
         num_rows = x_src.shape[1]
         # padds the y_train up to y by using the mean,
         # then converts scalar values to embeddings (B,R,1,E)

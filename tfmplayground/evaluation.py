@@ -113,7 +113,8 @@ def get_openml_predictions(
                 y_test = label_encoder.transform(y_test)
             targets.append(y_test)
 
-            model.fit(X_train, y_train)
+            feature_names = [n for n in attribute_names if n != task.target_name]
+            model.fit(X_train, y_train, column_names=feature_names)
             y_pred = model.predict(X_test)
             predictions.append(y_pred)
             if classification:

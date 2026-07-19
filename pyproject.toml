@@ -34,6 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+text = ["sentence-transformers"]
 wandb = ["wandb>=0.20"]
 tensorboard = ["tensorboard>=2.19"]
 [project.urls]

@@ -25,6 +25,7 @@ def init_model_from_state_dict_file(file_path):
         mlp_hidden_size=state_dict['architecture']['mlp_hidden_size'],
         num_layers=state_dict['architecture']['num_layers'],
         num_outputs=state_dict['architecture']['num_outputs'],
+        text_embedding_dim=state_dict['architecture'].get('text_embedding_dim'),
     )
     model.load_state_dict(state_dict['model'])
     return model
@@ -37,7 +38,7 @@ def to_pandas(x):
 def to_numeric(x):
     return x.apply(pd.to_numeric, errors='coerce').to_numpy()
 
-def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
+def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> tuple[ColumnTransformer, np.ndarray, np.ndarray]:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
     """
@@ -75,12 +76,48 @@ def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
             ('cat', cat_transformer, cat_mask)
         ]
     )
-    return preprocessor
+    return preprocessor, num_mask, cat_mask
+
+
+def _build_column_embeddings(text_encoder, column_names: list[str], num_mask: np.ndarray,
+                              cat_mask: np.ndarray, preprocessor: ColumnTransformer) -> torch.Tensor:
+    """
+    Encodes column names and reorders them to match the processed feature order.
+
+    Imputation indicator columns reuse their parent column's embedding.
+
+    Returns:
+        Tensor of shape (num_processed_features, text_embedding_dim).
+    """
+    raw_embeddings = text_encoder.encode(column_names)  # (F_raw, D)
+
+    num_indices = np.flatnonzero(num_mask)
+    cat_indices = np.flatnonzero(cat_mask)
+
+    def indicator_parent_indices(transformer_name: str, raw_indices: np.ndarray) -> np.ndarray:
+        transformer = preprocessor.named_transformers_.get(transformer_name)
+        if transformer is None or len(raw_indices) == 0:
+            return np.empty(0, dtype=int)
+        imputer = transformer.named_steps['imputer']
+        indicator = getattr(imputer, 'indicator_', None)
+        if indicator is None:
+            return np.empty(0, dtype=int)
+        return raw_indices[indicator.features_]
+
+    processed_to_raw = np.concatenate([
+        num_indices,
+        indicator_parent_indices('num', num_indices),
+        cat_indices,
+        indicator_parent_indices('cat', cat_indices),
+    ])
+
+    return raw_embeddings[processed_to_raw]  # (F_processed, D)
 
 
 class NanoTabPFNClassifier():
     """ scikit-learn like interface """
-    def __init__(self, model: NanoTabPFNModel|str|None = None, device: None|str|torch.device = None, num_mem_chunks: int = 8):
+    def __init__(self, model: NanoTabPFNModel|str|None = None, device: None|str|torch.device = None, num_mem_chunks: int = 8,
+                 text_encoder=None):
         if device is None:
             device = get_default_device()
         if model is None:
@@ -96,13 +133,27 @@ class NanoTabPFNClassifier():
         self.model = model.to(device)
         self.device = device
         self.num_mem_chunks = num_mem_chunks
+        self.text_encoder = text_encoder
+        self.column_embeddings = None
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray, column_names: list[str] | None = None):
         """ stores X_train and y_train for later use, also computes the highest class number occuring in num_classes """
-        self.feature_preprocessor = get_feature_preprocessor(X_train)
+        # Auto-detect column names from DataFrame
+        if column_names is None and isinstance(X_train, pd.DataFrame):
+            column_names = list(X_train.columns)
+
+        self.feature_preprocessor, num_mask, cat_mask = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
         self.num_classes = max(set(y_train))+1
+
+        # Encode column names and map to post-processed feature order
+        if self.text_encoder is not None and column_names is not None:
+            self.column_embeddings = _build_column_embeddings(
+                self.text_encoder, column_names, num_mask, cat_mask, self.feature_preprocessor
+            ).to(self.device)
+        else:
+            self.column_embeddings = None
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """ calls predit_proba and picks the class with the highest probability for each datapoint """
@@ -119,7 +170,8 @@ class NanoTabPFNClassifier():
         with torch.no_grad():
             x = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)  # introduce batch size 1
             y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model((x, y), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(0)  # remove batch size 1
+            out = self.model((x, y), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks,
+                             column_embeddings=self.column_embeddings).squeeze(0)  # remove batch size 1
             # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
             out = out[:, :self.num_classes]
             # apply softmax to get a probability distribution
@@ -129,7 +181,8 @@ class NanoTabPFNClassifier():
 
 class NanoTabPFNRegressor():
     """ scikit-learn like interface """
-    def __init__(self, model: NanoTabPFNModel|str|None = None, dist: FullSupportBarDistribution|str|None = None, device: str|torch.device|None = None, num_mem_chunks: int = 8):
+    def __init__(self, model: NanoTabPFNModel|str|None = None, dist: FullSupportBarDistribution|str|None = None, device: str|torch.device|None = None, num_mem_chunks: int = 8,
+                 text_encoder=None):
         if device is None:
             device = get_default_device()
         if model is None:
@@ -157,19 +210,33 @@ class NanoTabPFNRegressor():
         self.device = device
         self.dist = dist
         self.num_mem_chunks = num_mem_chunks
+        self.text_encoder = text_encoder
+        self.column_embeddings = None
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray, column_names: list[str] | None = None):
         """
         Stores X_train and y_train for later use.
         Computes target normalization.
         """
-        self.feature_preprocessor = get_feature_preprocessor(X_train)
+        # Auto-detect column names from DataFrame
+        if column_names is None and isinstance(X_train, pd.DataFrame):
+            column_names = list(X_train.columns)
+
+        self.feature_preprocessor, num_mask, cat_mask = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
 
         self.y_train_mean = np.mean(self.y_train)
         self.y_train_std = np.std(self.y_train, ddof=1) + 1e-8
         self.y_train_n = (self.y_train - self.y_train_mean) / self.y_train_std
+
+        # Encode column names and map to post-processed feature order
+        if self.text_encoder is not None and column_names is not None:
+            self.column_embeddings = _build_column_embeddings(
+                self.text_encoder, column_names, num_mask, cat_mask, self.feature_preprocessor
+            ).to(self.device)
+        else:
+            self.column_embeddings = None
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
@@ -184,7 +251,8 @@ class NanoTabPFNRegressor():
             X_tensor = torch.tensor(X, dtype=torch.float32, device=self.device).unsqueeze(0)
             y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-            logits = self.model((X_tensor, y_tensor), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks).squeeze(0)
+            logits = self.model((X_tensor, y_tensor), single_eval_pos=len(self.X_train), num_mem_chunks=self.num_mem_chunks,
+                                column_embeddings=self.column_embeddings).squeeze(0)
             preds_n = self.dist.mean(logits)
             preds = preds_n * self.y_train_std + self.y_train_mean
 
