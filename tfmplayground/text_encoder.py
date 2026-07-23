@@ -29,7 +29,7 @@ class ColumnTextEncoder:
         self.encoder.eval()
         for p in self.encoder.parameters():
             p.requires_grad = False
-        self.text_embedding_dim = self.encoder.get_embedding_dimension()
+        self.text_embedding_dim = self.encoder.get_sentence_embedding_dimension()
 
     def encode(self, texts: list[str]) -> torch.Tensor:
         """Encode column names into embedding vectors.
