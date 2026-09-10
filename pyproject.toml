@@ -28,8 +28,8 @@ dependencies = [
     "tqdm",
     "tabfm[pytorch]==1.0.1",
     "tabicl[pretrain] @ git+https://github.com/soda-inria/tabicl.git@8f1aa2098c894ab91dba15209cf2002ba4be6c6c",
-    "ticl @ git+https://github.com/microsoft/ticl.git@main",
-    "tabpfn-v1-prior @ git+https://github.com/automl/tabpfn-v1-prior.git",
+    "ticl @ git+https://github.com/microsoft/ticl.git@3c36d9c1785844d5e983b0baf0ef4116670aa809",
+    "tabpfn-v1-prior @ git+https://github.com/automl/tabpfn-v1-prior.git@778f0d0eb10f35ca85964fbc27ecb8baee9146a4",
     "interpret-core",  # ticl
     "mlflow",  # ticl
     "wandb>=0.20",  # ticl
