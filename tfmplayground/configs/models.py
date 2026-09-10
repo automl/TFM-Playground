@@ -11,6 +11,7 @@ class NanoTabPFNModelConfig:
     num_attention_heads: int = 6
     mlp_hidden_size: int = 768
     num_layers: int = 6
+    num_mem_chunks: int = 1
 
 
 @dataclass
