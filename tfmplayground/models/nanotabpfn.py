@@ -171,15 +171,22 @@ class TransformerEncoderLayer(nn.Module):
         Takes the embeddings of the table as input and applies self-attention between features
         and self-attention between datapoints followed by a simple 2 layer MLP.
 
-        Args:
-            src: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
-                                that contains all the embeddings for all the cells in the table
-            train_test_split_index: (int) the length of X_train
-            num_mem_chunks: (int) Number of chunks that memory-intense operations will be split into.
-                                  Higher values use less memory but are slower. Needs to be set to 1
-                                  during training to get correct gradients.
+        Parameters
+        ----------
+        src : torch.Tensor
+            a tensor of shape (batch_size, num_rows, num_features, embedding_size)
+            that contains all the embeddings for all the cells in the table
+        train_test_split_index : int
+            the length of X_train
+        num_mem_chunks : int
+            number of chunks that memory-intense operations will be split into,
+            higher values use less memory but are slower,
+            needs to be set to 1 during training to get correct gradients
+
         Returns
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
+        -------
+        torch.Tensor
+            a tensor of shape (batch_size, num_rows, num_features, embedding_size)
         """
         batch_size, rows_size, col_size, embedding_size = src.shape
         # attention between features
@@ -231,11 +238,20 @@ class TransformerEncoderLayer(nn.Module):
 
 def memory_chunking(num_mem_chunks: int) -> callable:
     """
-    This decorator will split the first dimension of the input into chunks and apply the wrapped function
-    to each chunk separately.
-    Args:
-        num_mem_chunks: (int) Number of chunks to split the input into, higher values use less memory but are slower.
-                          Needs to be set to 1 during training to disable chunking and get correct gradients.
+    This decorator will split the first dimension of the input into chunks
+    and apply the wrapped function to each chunk separately.
+
+    Parameters
+    ----------
+    num_mem_chunks : int
+        number of chunks to split the input into,
+        higher values use less memory but are slower,
+        needs to be set to 1 during training to disable chunking and get correct gradients
+
+    Returns
+    -------
+    callable
+        decorator that applies wrapped function to one chunk at a time
     """
 
     def decorator(func: Callable[[torch.Tensor], torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
