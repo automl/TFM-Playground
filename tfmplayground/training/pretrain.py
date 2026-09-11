@@ -97,10 +97,15 @@ def default_criterion(
         return nn.CrossEntropyLoss()
     if problem == "regression":
         head = training.criterion if training.criterion is not None else model.config.head
+        num_outputs = model.borders.numel() - 1
+        if head == "scalar" and num_outputs != 1:
+            raise ValueError(f"{head!r} head needs 1 output, not {num_outputs}")
+        if head == "buckets" and num_outputs < 2:
+            raise ValueError(f"{head!r} head needs more than 1 output, not {num_outputs}")
         if head == "buckets":
             model.borders = make_bucket_borders(
                 prior=prior,
-                num_buckets=model.borders.numel() - 1,
+                num_buckets=num_outputs,
                 batch_size=training.batch_size,
                 min_targets=training.bucket_borders_min_targets,
             ).to(device)
