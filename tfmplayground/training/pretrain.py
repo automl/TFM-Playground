@@ -100,9 +100,9 @@ def default_criterion(
         num_outputs = model.borders.numel() - 1
         if head == "scalar" and num_outputs != 1:
             raise ValueError(f"{head!r} head needs 1 output, not {num_outputs}")
-        if head == "buckets" and num_outputs < 2:
-            raise ValueError(f"{head!r} head needs more than 1 output, not {num_outputs}")
         if head == "buckets":
+            if num_outputs < 2:
+                raise ValueError(f"{head!r} head needs more than 1 output, not {num_outputs}")
             model.borders = make_bucket_borders(
                 prior=prior,
                 num_buckets=num_outputs,
