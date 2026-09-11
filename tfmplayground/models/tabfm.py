@@ -33,6 +33,9 @@ class TabFMModel(TabFM, TabularFoundationModel):
             decoder_hidden=config.decoder_hidden,
             is_classifier=config.is_classifier,
         )
+        if not config.is_classifier:
+            self.rebuild_decoder(config.decoder_out)
+            self.register_buffer("borders", torch.zeros(config.decoder_out + 1))
         fourier_sigma = config.fourier_sigma
         for name in ("fourier_frequencies", "fourier_frequencies_cat"):
             # no jax checkpoint fills these so we make them random parameters
@@ -40,6 +43,16 @@ class TabFMModel(TabFM, TabularFoundationModel):
             delattr(self.cell_embedder, name)
             frequencies = torch.randn_like(zeros) * fourier_sigma
             self.cell_embedder.register_parameter(name, nn.Parameter(frequencies))
+
+    def rebuild_decoder(self, decoder_out: int) -> None:
+        """
+        rebuilds decoder for specified output size
+        """
+        layers = self.icl_predictor.decoder.layers
+        if decoder_out == layers[-1].out_features:
+            return
+        in_features = layers[-1].in_features
+        layers[-1] = nn.Linear(in_features, decoder_out)
 
     def forward(
         self,
