@@ -1,9 +1,6 @@
-from collections.abc import Iterator
-from contextlib import contextmanager
-
 import torch
+from tabicl._model.inference_config import InferenceConfig
 from tabicl._model.tabicl import TabICL
-from torch import nn
 
 from tfmplayground.configs.models import TabICLClassifierConfig, TabICLRegressorConfig
 from tfmplayground.models.base import TabularFoundationModel
@@ -58,31 +55,16 @@ class TabICLModel(TabICL, TabularFoundationModel):
         """
         takes train rows as context and predicts test rows through tabicl forward
 
-        joins train and test rows, keeps train path in eval mode but without dropout
+        joins train and test rows, uses native inference on the model device in eval
+
+        classification eval returns observed classes and requires matching class counts across tables
         """
         X = torch.cat([X_train, X_test], dim=1)
         if self.training:
             return super().forward(X, y_train)
-        with self.train_path_without_dropout():
-            return super().forward(X, y_train)
-
-    @contextmanager
-    def train_path_without_dropout(self) -> Iterator[None]:
-        """
-        turns dropout off for train path, restores rates after
-        """
-        rates = []
-        self.train()
-        for module in self.modules():
-            if isinstance(module, nn.Dropout):
-                module.train(False)
-            rate = getattr(module, "dropout", None)
-            if isinstance(rate, float | int):
-                rates.append((module, rate))
-                module.dropout = 0.0
-        try:
-            yield
-        finally:
-            for module, rate in rates:
-                module.dropout = rate
-            self.eval()
+        config = InferenceConfig()
+        device = next(self.parameters()).device
+        for stage in (config.COL_CONFIG, config.ROW_CONFIG, config.ICL_CONFIG):
+            stage.device = device
+            stage.use_amp = False  # keep float32 outputs for numpy-based inference wrappers
+        return super().forward(X, y_train, inference_config=config)
