@@ -17,6 +17,7 @@ from tfmplayground.utils import (
 
 
 def train(
+    problem: str,
     model: TabularFoundationModel,
     prior: Prior,
     criterion: nn.CrossEntropyLoss | ScalarMSELoss | FullSupportBarDistribution | QuantileLoss,
@@ -37,12 +38,14 @@ def train(
 
     Parameters
     ----------
+    problem : str
+        classification or regression
     model : TabularFoundationModel
         model to train
     prior : Prior
         prior that gives training tables
     criterion : nn.CrossEntropyLoss or ScalarMSELoss or FullSupportBarDistribution or QuantileLoss
-        loss criterion, and what makes run classification or regression
+        loss criterion
     epochs : int
         number of epochs to train for
     batch_size : int
@@ -72,7 +75,7 @@ def train(
     model.to(device)
     criterion = criterion.to(device)
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
-    classification_task = isinstance(criterion, nn.CrossEntropyLoss)
+    classification_task = problem == "classification"
     regression_task = not classification_task
     batches = iter(PriorDataLoader(prior, batch_size))
 
