@@ -365,7 +365,7 @@ def load_model(path: str | Path) -> TabularFoundationModel:
     """
     rebuilds model from checkpoint on disk
     """
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     model_class = getattr(models, checkpoint["model_class"])
     config_class = getattr(model_configs, checkpoint["config_class"])
     model = model_class(config=config_class(**checkpoint["model_config"]))
