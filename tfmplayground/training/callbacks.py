@@ -121,7 +121,7 @@ class ExperimentCallback(BaseLoggerCallback):
         """
         records progress of one epoch
         """
-        self.experiment.log(f"epoch {epoch} | epoch time {epoch_time:.2f}s | mean loss {loss:.4f}")
+        self.experiment.log(f"epoch {epoch} | epoch time {epoch_time:.2f}s | mean loss {loss:.2f}")
 
     def close(self) -> None:
         """
@@ -185,8 +185,8 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         fields = [
             f"epoch {epoch}",
             f"epoch time {epoch_time:.2f}s",
-            f"mean loss {loss:.4f}",
-            f"{self.metric} {mean:.4f}",
+            f"mean loss {loss:.2f}",
+            f"{self.metric} {mean:.2f}",
             f"tasks {len(scores)}",
         ]
         line = " | ".join(fields)
