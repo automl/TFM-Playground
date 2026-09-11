@@ -222,5 +222,6 @@ class TabFMRegressorConfig(TabFMModelConfig):
     """
 
     problem: str = "regression"
-    head: str = "scalar"
     is_classifier: bool = False
+    head: str = "scalar"
+    decoder_out: int = 1

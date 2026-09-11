@@ -1,5 +1,5 @@
 import torch
-from tabfm.src.pytorch.model import TabFM
+from tabfm.src.pytorch.model import MLP, TabFM
 from torch import nn
 
 from tfmplayground.configs.models import TabFMClassifierConfig, TabFMRegressorConfig
@@ -33,6 +33,9 @@ class TabFMModel(TabFM, TabularFoundationModel):
             decoder_hidden=config.decoder_hidden,
             is_classifier=config.is_classifier,
         )
+        if not config.is_classifier:
+            self.rebuild_decoder(config.decoder_out)
+            self.register_buffer("borders", torch.zeros(config.decoder_out + 1))
         fourier_sigma = config.fourier_sigma
         for name in ("fourier_frequencies", "fourier_frequencies_cat"):
             # no jax checkpoint fills these so we make them random parameters
@@ -40,6 +43,17 @@ class TabFMModel(TabFM, TabularFoundationModel):
             delattr(self.cell_embedder, name)
             frequencies = torch.randn_like(zeros) * fourier_sigma
             self.cell_embedder.register_parameter(name, nn.Parameter(frequencies))
+
+    def rebuild_decoder(self, decoder_out: int) -> None:
+        """
+        rebuilds decoder for specified output size
+        """
+        decoder = self.icl_predictor.decoder
+        if decoder_out == decoder.layers[-1].out_features:
+            return
+        in_dim = decoder.layers[0].in_features
+        hidden_dim = decoder.layers[0].out_features
+        self.icl_predictor.decoder = MLP(in_dim, [hidden_dim], decoder_out)
 
     def forward(
         self,
