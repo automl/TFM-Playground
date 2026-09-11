@@ -199,7 +199,7 @@ class ClassifierExperimentEvaluationCallback(ExperimentEvaluationCallback):
     """
 
     problem = "classification"
-    metric = "roc_auc"
+    metric = "mean roc auc"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
         """
@@ -217,7 +217,7 @@ class RegressorExperimentEvaluationCallback(ExperimentEvaluationCallback):
     """
 
     problem = "regression"
-    metric = "r2"
+    metric = "mean r2"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
         """
