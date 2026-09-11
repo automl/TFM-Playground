@@ -55,9 +55,7 @@ class TabICLModel(TabICL, TabularFoundationModel):
         """
         takes train rows as context and predicts test rows through tabicl forward
 
-        joins train and test rows, uses native inference on the model device in eval
-
-        classification eval returns observed classes and requires matching class counts across tables
+        joins train and test rows and sets the model device for native inference
         """
         X = torch.cat([X_train, X_test], dim=1)
         if self.training:
