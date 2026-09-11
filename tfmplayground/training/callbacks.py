@@ -121,7 +121,7 @@ class ExperimentCallback(BaseLoggerCallback):
         """
         records progress of one epoch
         """
-        self.experiment.log(f"e:{epoch} l:{loss:.4f} e_t:{epoch_time:.2f}s")
+        self.experiment.log(f"epoch {epoch} | epoch time {epoch_time:.2f}s | mean loss {loss:.4f}")
 
     def close(self) -> None:
         """
@@ -182,7 +182,14 @@ class ExperimentEvaluationCallback(ExperimentCallback):
             raise ValueError("scores are empty, nothing to average")
         mean = sum(scores) / len(scores)
         self.experiment.score = mean
-        line = f"e:{epoch} l:{loss:.4f} e_t:{epoch_time:.2f}s {self.metric}:{mean:.4f} t:{len(scores)}"
+        fields = [
+            f"epoch {epoch}",
+            f"epoch time {epoch_time:.2f}s",
+            f"mean loss {loss:.4f}",
+            f"{self.metric} {mean:.4f}",
+            f"tasks {len(scores)}",
+        ]
+        line = " | ".join(fields)
         self.experiment.log(line, console=True)
 
 
