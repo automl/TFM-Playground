@@ -1,5 +1,5 @@
 import torch
-from tabfm.src.pytorch.model import MLP, TabFM
+from tabfm.src.pytorch.model import TabFM
 from torch import nn
 
 from tfmplayground.configs.models import TabFMClassifierConfig, TabFMRegressorConfig
@@ -48,12 +48,11 @@ class TabFMModel(TabFM, TabularFoundationModel):
         """
         rebuilds decoder for specified output size
         """
-        decoder = self.icl_predictor.decoder
-        if decoder_out == decoder.layers[-1].out_features:
+        layers = self.icl_predictor.decoder.layers
+        if decoder_out == layers[-1].out_features:
             return
-        in_dim = decoder.layers[0].in_features
-        hidden_dim = decoder.layers[0].out_features
-        self.icl_predictor.decoder = MLP(in_dim, [hidden_dim], decoder_out)
+        in_features = layers[-1].in_features
+        layers[-1] = nn.Linear(in_features, decoder_out)
 
     def forward(
         self,
