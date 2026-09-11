@@ -108,7 +108,7 @@ class ExperimentCallback(BaseLoggerCallback):
         starts experiment log for this run
         """
         self.experiment = experiment
-        self.experiment.print0(f"experiment: {self.experiment.id}", console=True)
+        self.experiment.log(f"experiment: {self.experiment.id}", console=True)
 
     def on_epoch_end(
         self,
@@ -121,14 +121,14 @@ class ExperimentCallback(BaseLoggerCallback):
         """
         records progress of one epoch
         """
-        self.experiment.print0(f"e:{epoch} l:{loss:.4f} e_t:{epoch_time:.2f}s")
+        self.experiment.log(f"epoch {epoch} | epoch time {epoch_time:.2f}s | mean loss {loss:.2f}")
 
     def close(self) -> None:
         """
         closes run with time it took
         """
         minutes = (datetime.now() - self.experiment.started).total_seconds() / 60
-        self.experiment.print0(f"runtime: {minutes:.2f} mins")
+        self.experiment.log(f"runtime: {minutes:.2f} mins")
 
 
 class ExperimentEvaluationCallback(ExperimentCallback):
@@ -182,8 +182,15 @@ class ExperimentEvaluationCallback(ExperimentCallback):
             raise ValueError("scores are empty, nothing to average")
         mean = sum(scores) / len(scores)
         self.experiment.score = mean
-        line = f"e:{epoch} l:{loss:.4f} e_t:{epoch_time:.2f}s {self.metric}:{mean:.4f} t:{len(scores)}"
-        self.experiment.print0(line, console=True)
+        fields = [
+            f"epoch {epoch}",
+            f"epoch time {epoch_time:.2f}s",
+            f"mean loss {loss:.2f}",
+            f"{self.metric} {mean:.2f}",
+            f"tasks {len(scores)}",
+        ]
+        line = " | ".join(fields)
+        self.experiment.log(line, console=True)
 
 
 class ClassifierExperimentEvaluationCallback(ExperimentEvaluationCallback):
@@ -192,7 +199,7 @@ class ClassifierExperimentEvaluationCallback(ExperimentEvaluationCallback):
     """
 
     problem = "classification"
-    metric = "roc_auc"
+    metric = "mean roc auc"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
         """
@@ -210,7 +217,7 @@ class RegressorExperimentEvaluationCallback(ExperimentEvaluationCallback):
     """
 
     problem = "regression"
-    metric = "r2"
+    metric = "mean r2"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
         """
