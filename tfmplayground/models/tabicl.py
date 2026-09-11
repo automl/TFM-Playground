@@ -66,5 +66,4 @@ class TabICLModel(TabICL, TabularFoundationModel):
         device = next(self.parameters()).device
         for stage in (config.COL_CONFIG, config.ROW_CONFIG, config.ICL_CONFIG):
             stage.device = device
-            stage.use_amp = False  # keep float32 outputs for numpy-based inference wrappers
-        return super().forward(X, y_train, inference_config=config)
+        return super().forward(X, y_train, inference_config=config).float()
