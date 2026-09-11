@@ -198,7 +198,6 @@ class ClassifierExperimentEvaluationCallback(ExperimentEvaluationCallback):
     measures classifier quality with roc auc
     """
 
-    problem = "classification"
     metric = "mean roc auc"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
@@ -216,7 +215,6 @@ class RegressorExperimentEvaluationCallback(ExperimentEvaluationCallback):
     measures regressor quality with r2
     """
 
-    problem = "regression"
     metric = "mean r2"
 
     def evaluate(self, model: TabularFoundationModel, **kwargs) -> list[float]:
