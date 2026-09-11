@@ -402,9 +402,9 @@ class Experiment:
         for label, config in configs.items():
             if config is None:
                 continue
-            self.print0(f"{label}: {type(config).__name__}")
+            self.log(f"{label}: {type(config).__name__}")
             for name, value in asdict(config).items():
-                self.print0(f"  {name}: {value}")
+                self.log(f"  {name}: {value}")
 
     def save_checkpoint(self, path: Path, model: TabularFoundationModel) -> None:
         """
@@ -433,7 +433,7 @@ class Experiment:
                 self.best_score = self.score
                 self.save_checkpoint(self.best_checkpoint_path, model)
 
-    def print0(self, s: str, console: bool = False) -> None:
+    def log(self, s: str, console: bool = False) -> None:
         """
         records one line, and shows it when asked
         """
