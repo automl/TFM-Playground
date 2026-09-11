@@ -384,7 +384,7 @@ class NanoTabICLPrior(Prior):
         if not 0 < self.config.train_fraction_min <= self.config.train_fraction_max < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
 
-    def hyperparameters(self) -> None:
+    def batch_hyperparameters(self) -> None:
         """
         samples hyperparameters for next batch from config limits
         """
@@ -393,6 +393,12 @@ class NanoTabICLPrior(Prior):
         self.num_datapoints_max = c.num_datapoints_max
         fraction = np.random.uniform(c.train_fraction_min, c.train_fraction_max)
         self.sep = int(c.num_datapoints_max * fraction)
+
+    def dataset_hyperparameters(self) -> None:
+        """
+        samples hyperparameters for next table from config limits
+        """
+        c = self.config
         if c.problem == "regression":
             self.num_classes = 0
         else:
@@ -411,6 +417,7 @@ class NanoTabICLPrior(Prior):
         """
         samples one predictable table with random categorical sizes
         """
+        self.dataset_hyperparameters()
         cat_sizes = rand_cat_sizes(self.num_features)
         columns = rand_dataset_filtered(cat_sizes, [self.num_classes], self.num_datapoints_max)
         x, y = self.target(columns)
@@ -420,7 +427,7 @@ class NanoTabICLPrior(Prior):
         """
         stacks sampled tables into one batch, split at train test index
         """
-        self.hyperparameters()
+        self.batch_hyperparameters()
         datasets = [self.dataset() for _ in range(batch_size)]
         x = torch.stack([d[0] for d in datasets]).to(self.device)
         y = torch.stack([d[1] for d in datasets]).to(self.device)
