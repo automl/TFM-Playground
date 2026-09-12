@@ -391,6 +391,8 @@ class NanoTabICLPrior(Prior):
         if self.problem == "classification":
             if self.config.max_num_classes < 2:
                 raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
+            if self.config.max_row_permutations < 1:
+                raise ValueError(f"row permutations must be at least 1, not {self.config.max_row_permutations}")
             min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
             max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
             min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
