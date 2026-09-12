@@ -7,10 +7,13 @@ class NanoTabICLPriorConfig:
     settings nanotabicl priors share
     """
 
-    num_datapoints_max: int = 1000
-    num_features: int = 20
-    train_fraction_min: float = 0.1
-    train_fraction_max: float = 0.9
+    min_num_datapoints: int = 1000
+    max_num_datapoints: int = 1000
+    min_num_features: int = 2
+    max_num_features: int = 20
+    min_train_fraction: float = 0.1
+    max_train_fraction: float = 0.9
+    max_cat_size: int = 100
 
 
 @dataclass
@@ -21,6 +24,8 @@ class NanoTabICLClassificationPriorConfig(NanoTabICLPriorConfig):
 
     problem: str = "classification"
     max_num_classes: int = 10
+    binary_class_probability: float = 0.5
+    max_row_permutations: int = 11
 
 
 @dataclass
