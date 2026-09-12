@@ -377,7 +377,7 @@ class NanoTabICLPrior(Prior):
         device: str | torch.device | None = None,
     ) -> None:
         """
-        keeps config, and checks train fractions and smallest split row count
+        keeps config, and checks config limits
         """
         self.config = config
         self.device = device if device is not None else get_default_device()
