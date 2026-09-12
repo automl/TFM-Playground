@@ -429,7 +429,7 @@ class NanoTabICLPrior(Prior):
         self.dataset_hyperparameters()
         while True:
             columns = rand_dataset_filtered(
-                x_cat_sizes=rand_cat_sizes(self.num_features),
+                x_cat_sizes=rand_cat_sizes(self.num_features, max_cat_size=self.config.max_cat_size),
                 y_cat_sizes=[self.num_classes],
                 n_samples=self.num_datapoints,
             )
