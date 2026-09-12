@@ -404,8 +404,7 @@ class NanoTabICLPrior(Prior):
         c = self.config
         self.num_features = int(np.random.randint(c.min_num_features, c.max_num_features + 1))
         self.num_datapoints = int(np.random.randint(c.min_num_datapoints, c.max_num_datapoints + 1))
-        fraction = np.random.uniform(c.min_train_fraction, c.max_train_fraction)
-        self.sep = int(self.num_datapoints * fraction)
+        self.sep = int(self.num_datapoints * np.random.uniform(c.min_train_fraction, c.max_train_fraction))
 
     def dataset_hyperparameters(self) -> None:
         """
