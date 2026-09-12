@@ -377,12 +377,19 @@ class NanoTabICLPrior(Prior):
         device: str | torch.device | None = None,
     ) -> None:
         """
-        keeps config, and checks train fractions
+        keeps config, and checks train fractions and smallest split row count
         """
         self.config = config
         self.device = device if device is not None else get_default_device()
         if not 0 < self.config.min_train_fraction <= self.config.max_train_fraction < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
+        if self.config.problem == "classification":
+            min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
+            max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
+            min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
+            min_num_split_rows = min(min_num_train_rows, min_num_test_rows)
+            if min_num_split_rows < self.config.max_num_classes:
+                raise ValueError(f"{min_num_split_rows} rows cannot hold {self.config.max_num_classes} classes")
 
     def batch_hyperparameters(self) -> None:
         """
@@ -420,10 +427,20 @@ class NanoTabICLPrior(Prior):
         samples one predictable table with random categorical sizes
         """
         self.dataset_hyperparameters()
-        cat_sizes = rand_cat_sizes(self.num_features)
-        columns = rand_dataset_filtered(cat_sizes, [self.num_classes], self.num_datapoints)
-        x, y = self.target(columns)
-        return x, y
+        while True:
+            columns = rand_dataset_filtered(
+                x_cat_sizes=rand_cat_sizes(self.num_features),
+                y_cat_sizes=[self.num_classes],
+                n_samples=self.num_datapoints,
+            )
+            x, y = self.target(columns)
+            if self.config.problem == "regression":
+                return x, y
+            for _ in range(self.config.max_row_permutations):
+                if len(y.unique()) == len(y[: self.sep].unique()) == len(y[self.sep :].unique()):
+                    return x, y
+                perm = torch.randperm(y.shape[0])
+                x, y = x[perm], y[perm]
 
     def batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """

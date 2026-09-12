@@ -13,6 +13,7 @@ class NanoTabICLPriorConfig:
     max_num_features: int = 20
     min_train_fraction: float = 0.1
     max_train_fraction: float = 0.9
+    max_row_permutations: int = 11
 
 
 @dataclass
