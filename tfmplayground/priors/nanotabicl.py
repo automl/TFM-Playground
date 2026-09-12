@@ -388,14 +388,18 @@ class NanoTabICLPrior(Prior):
             raise ValueError("feature counts must be 1 <= min <= max")
         if not 1 < self.config.min_num_datapoints <= self.config.max_num_datapoints:
             raise ValueError("datapoint counts must be 1 < min <= max")
+        min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
+        max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
+        min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
+        if min_num_train_rows < 2:
+            raise ValueError(f"train part needs at least 2 rows, holds {min_num_train_rows} rows")
+        if min_num_test_rows < 1:
+            raise ValueError(f"test part needs at least 1 row, holds {min_num_test_rows} rows")
         if self.problem == "classification":
             if self.config.max_num_classes < 2:
                 raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
             if self.config.max_row_permutations < 1:
                 raise ValueError(f"row permutations must be at least 1, not {self.config.max_row_permutations}")
-            min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
-            max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
-            min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
             min_num_split_rows = min(min_num_train_rows, min_num_test_rows)
             if min_num_split_rows < self.config.max_num_classes:
                 raise ValueError(f"{min_num_split_rows} train or test rows cannot hold {self.config.max_num_classes} classes")
