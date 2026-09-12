@@ -389,7 +389,7 @@ class NanoTabICLPrior(Prior):
         samples hyperparameters for next batch from config limits
         """
         c = self.config
-        self.num_features = c.num_features
+        self.num_features = int(np.random.randint(c.num_features_min, c.num_features_max + 1))
         self.num_datapoints_max = c.num_datapoints_max
         fraction = np.random.uniform(c.train_fraction_min, c.train_fraction_max)
         self.sep = int(c.num_datapoints_max * fraction)

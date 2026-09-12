@@ -8,7 +8,8 @@ class NanoTabICLPriorConfig:
     """
 
     num_datapoints_max: int = 1000
-    num_features: int = 20
+    num_features_min: int = 2
+    num_features_max: int = 20
     train_fraction_min: float = 0.1
     train_fraction_max: float = 0.9
 
