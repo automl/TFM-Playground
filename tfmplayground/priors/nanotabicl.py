@@ -381,7 +381,7 @@ class NanoTabICLPrior(Prior):
         """
         self.config = config
         self.device = device if device is not None else get_default_device()
-        if not 0 < self.config.train_fraction_min <= self.config.train_fraction_max < 1:
+        if not 0 < self.config.min_train_fraction <= self.config.max_train_fraction < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
 
     def batch_hyperparameters(self) -> None:
@@ -389,10 +389,10 @@ class NanoTabICLPrior(Prior):
         samples hyperparameters for next batch from config limits
         """
         c = self.config
-        self.num_features = int(np.random.randint(c.num_features_min, c.num_features_max + 1))
-        self.num_datapoints_max = c.num_datapoints_max
-        fraction = np.random.uniform(c.train_fraction_min, c.train_fraction_max)
-        self.sep = int(c.num_datapoints_max * fraction)
+        self.num_features = int(np.random.randint(c.min_num_features, c.max_num_features + 1))
+        self.num_datapoints_max = c.max_num_datapoints
+        fraction = np.random.uniform(c.min_train_fraction, c.max_train_fraction)
+        self.sep = int(c.max_num_datapoints * fraction)
 
     def dataset_hyperparameters(self) -> None:
         """

@@ -7,11 +7,11 @@ class NanoTabICLPriorConfig:
     settings nanotabicl priors share
     """
 
-    num_datapoints_max: int = 1000
-    num_features_min: int = 2
-    num_features_max: int = 20
-    train_fraction_min: float = 0.1
-    train_fraction_max: float = 0.9
+    max_num_datapoints: int = 1000
+    min_num_features: int = 2
+    max_num_features: int = 20
+    min_train_fraction: float = 0.1
+    max_train_fraction: float = 0.9
 
 
 @dataclass
