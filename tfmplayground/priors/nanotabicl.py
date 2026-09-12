@@ -411,6 +411,8 @@ class NanoTabICLPrior(Prior):
         """
         x = torch.cat([columns[f"x_{i}"] for i in range(self.num_features)], dim=-1)
         y = columns["y_0"].squeeze(-1)
+        if self.config.problem == "classification":
+            y = y.long().unique(return_inverse=True)[1]
         return x.float(), y.float()
 
     def dataset(self) -> tuple[torch.Tensor, torch.Tensor]:
