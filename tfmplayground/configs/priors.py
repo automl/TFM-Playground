@@ -14,7 +14,6 @@ class NanoTabICLPriorConfig:
     min_train_fraction: float = 0.1
     max_train_fraction: float = 0.9
     max_cat_size: int = 100
-    max_row_permutations: int = 11
 
 
 @dataclass
@@ -26,6 +25,7 @@ class NanoTabICLClassificationPriorConfig(NanoTabICLPriorConfig):
     problem: str = "classification"
     max_num_classes: int = 10
     binary_class_probability: float = 0.5
+    max_row_permutations: int = 11
 
 
 @dataclass
