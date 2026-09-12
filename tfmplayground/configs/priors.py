@@ -7,6 +7,7 @@ class NanoTabICLPriorConfig:
     settings nanotabicl priors share
     """
 
+    min_num_datapoints: int = 1000
     max_num_datapoints: int = 1000
     min_num_features: int = 2
     max_num_features: int = 20

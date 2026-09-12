@@ -390,9 +390,9 @@ class NanoTabICLPrior(Prior):
         """
         c = self.config
         self.num_features = int(np.random.randint(c.min_num_features, c.max_num_features + 1))
-        self.num_datapoints_max = c.max_num_datapoints
+        self.num_datapoints = int(np.random.randint(c.min_num_datapoints, c.max_num_datapoints + 1))
         fraction = np.random.uniform(c.min_train_fraction, c.max_train_fraction)
-        self.sep = int(c.max_num_datapoints * fraction)
+        self.sep = int(self.num_datapoints * fraction)
 
     def dataset_hyperparameters(self) -> None:
         """
@@ -419,7 +419,7 @@ class NanoTabICLPrior(Prior):
         """
         self.dataset_hyperparameters()
         cat_sizes = rand_cat_sizes(self.num_features)
-        columns = rand_dataset_filtered(cat_sizes, [self.num_classes], self.num_datapoints_max)
+        columns = rand_dataset_filtered(cat_sizes, [self.num_classes], self.num_datapoints)
         x, y = self.target(columns)
         return x, y
 
