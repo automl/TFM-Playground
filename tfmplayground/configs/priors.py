@@ -25,6 +25,7 @@ class NanoTabICLClassificationPriorConfig(NanoTabICLPriorConfig):
 
     problem: str = "classification"
     max_num_classes: int = 10
+    binary_class_probability: float = 0.5
 
 
 @dataclass

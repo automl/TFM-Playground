@@ -409,7 +409,7 @@ class NanoTabICLPrior(Prior):
         if c.problem == "regression":
             self.num_classes = 0
         else:
-            binary = c.max_num_classes == 2 or np.random.rand() < 0.5
+            binary = c.max_num_classes == 2 or np.random.rand() < c.binary_class_probability
             self.num_classes = 2 if binary else int(np.random.randint(3, c.max_num_classes + 1))
 
     def target(self, columns: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
