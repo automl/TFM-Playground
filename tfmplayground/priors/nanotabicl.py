@@ -389,7 +389,7 @@ class NanoTabICLPrior(Prior):
             min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
             min_num_split_rows = min(min_num_train_rows, min_num_test_rows)
             if min_num_split_rows < self.config.max_num_classes:
-                raise ValueError(f"{min_num_split_rows} rows cannot hold {self.config.max_num_classes} classes")
+                raise ValueError(f"{min_num_split_rows} train or test rows cannot hold {self.config.max_num_classes} classes")
 
     def batch_hyperparameters(self) -> None:
         """
