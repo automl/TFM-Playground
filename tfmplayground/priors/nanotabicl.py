@@ -380,6 +380,7 @@ class NanoTabICLPrior(Prior):
         keeps config, and checks config limits
         """
         self.config = config
+        self.problem = config.problem
         self.device = device if device is not None else get_default_device()
         if not 0 < self.config.min_train_fraction <= self.config.max_train_fraction < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
@@ -387,7 +388,7 @@ class NanoTabICLPrior(Prior):
             raise ValueError("feature counts must be 1 <= min <= max")
         if not 1 < self.config.min_num_datapoints <= self.config.max_num_datapoints:
             raise ValueError("datapoint counts must be 1 < min <= max")
-        if self.config.problem == "classification":
+        if self.problem == "classification":
             if self.config.max_num_classes < 2:
                 raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
             min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
@@ -411,11 +412,13 @@ class NanoTabICLPrior(Prior):
         samples hyperparameters for next table from config limits
         """
         c = self.config
-        if c.problem == "regression":
+        self.max_cat_size = c.max_cat_size
+        if self.problem == "regression":
             self.num_classes = 0
         else:
             binary = c.max_num_classes == 2 or np.random.rand() < c.binary_class_probability
             self.num_classes = 2 if binary else int(np.random.randint(3, c.max_num_classes + 1))
+            self.max_row_permutations = c.max_row_permutations
 
     def target(self, columns: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -423,7 +426,7 @@ class NanoTabICLPrior(Prior):
         """
         x = torch.cat([columns[f"x_{i}"] for i in range(self.num_features)], dim=-1)
         y = columns["y_0"].squeeze(-1)
-        if self.config.problem == "classification":
+        if self.problem == "classification":
             y = y.long().unique(return_inverse=True)[1]
         return x.float(), y.float()
 
@@ -434,14 +437,14 @@ class NanoTabICLPrior(Prior):
         self.dataset_hyperparameters()
         while True:
             columns = rand_dataset_filtered(
-                x_cat_sizes=rand_cat_sizes(self.num_features, max_cat_size=self.config.max_cat_size),
+                x_cat_sizes=rand_cat_sizes(self.num_features, max_cat_size=self.max_cat_size),
                 y_cat_sizes=[self.num_classes],
                 n_samples=self.num_datapoints,
             )
             x, y = self.target(columns)
-            if self.config.problem == "regression":
+            if self.problem == "regression":
                 return x, y
-            for _ in range(self.config.max_row_permutations):
+            for _ in range(self.max_row_permutations):
                 if len(y.unique()) == len(y[: self.sep].unique()) == len(y[self.sep :].unique()):
                     return x, y
                 perm = torch.randperm(y.shape[0])
