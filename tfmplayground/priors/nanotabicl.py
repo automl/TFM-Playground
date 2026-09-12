@@ -383,7 +383,13 @@ class NanoTabICLPrior(Prior):
         self.device = device if device is not None else get_default_device()
         if not 0 < self.config.min_train_fraction <= self.config.max_train_fraction < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
+        if not 1 <= self.config.min_num_features <= self.config.max_num_features:
+            raise ValueError("feature counts must be 1 <= min <= max")
+        if not 1 < self.config.min_num_datapoints <= self.config.max_num_datapoints:
+            raise ValueError("datapoint counts must be 1 < min <= max")
         if self.config.problem == "classification":
+            if self.config.max_num_classes < 2:
+                raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
             min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
             max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
             min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
