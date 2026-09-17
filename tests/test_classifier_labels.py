@@ -7,6 +7,7 @@ to the originals in predict.
 """
 
 import numpy as np
+import pytest
 import torch
 
 from tfmplayground.interface import NanoTabPFNClassifier
@@ -15,10 +16,13 @@ from tfmplayground.interface import NanoTabPFNClassifier
 X = np.array([[1.0, 5.0], [2.0, 6.0], [3.0, 7.0], [4.0, 8.0]])
 
 
-def _make_classifier():
+def _make_classifier(num_outputs=10):
     # Identity model + explicit cpu so __init__ neither downloads a checkpoint
     # nor needs a GPU. The model is never called: predict_proba is patched.
-    return NanoTabPFNClassifier(model=torch.nn.Identity(), device="cpu")
+    # Real models expose num_outputs, which fit() checks against the class count.
+    model = torch.nn.Identity()
+    model.num_outputs = num_outputs
+    return NanoTabPFNClassifier(model=model, device="cpu")
 
 
 def test_fit_encodes_noncontiguous_integer_labels():
@@ -70,3 +74,18 @@ def test_contiguous_zero_based_labels_are_unchanged(monkeypatch):
     preds = clf.predict(np.array([[9.0, 9.0], [9.0, 9.0]]))
 
     assert list(preds) == [1, 0]
+
+
+def test_fit_returns_self():
+    """scikit-learn convention: fit returns the estimator, so calls can chain."""
+    clf = _make_classifier()
+    assert clf.fit(X[:3], np.array([0, 1, 2])) is clf
+
+
+def test_fit_raises_when_more_classes_than_model_outputs():
+    """The model can represent at most num_outputs classes; more must error
+    loudly instead of silently predicting only the first num_outputs.
+    """
+    clf = _make_classifier(num_outputs=2)
+    with pytest.raises(ValueError):
+        clf.fit(X[:3], np.array([0, 1, 2]))  # 3 classes, model supports 2

@@ -130,6 +130,12 @@ class NanoTabPFNClassifier:
         self.y_train = self.label_encoder.fit_transform(y_train)
         self.classes_ = self.label_encoder.classes_
         self.num_classes = len(self.classes_)
+        if self.num_classes > self.model.num_outputs:
+            raise ValueError(
+                f"This model supports at most {self.model.num_outputs} classes, "
+                f"but the training data has {self.num_classes}."
+            )
+        return self
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """calls predict_proba, picks the highest-probability class for each datapoint,
@@ -211,7 +217,8 @@ class NanoTabPFNRegressor:
 
         self.y_train_mean, self.y_train_std = compute_target_stats_numpy(self.y_train)
         self.y_train_n = normalize_targets(self.y_train, self.y_train_mean, self.y_train_std)
-
+        return self
+    
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
         Performs in-context learning using X_train and y_train.
