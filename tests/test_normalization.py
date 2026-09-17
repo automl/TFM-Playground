@@ -106,3 +106,36 @@ def test_target_encoder_pads_test_positions_with_train_mean():
     assert torch.allclose(values[:n_train], torch.tensor([2.0, 4.0, 6.0]), atol=1e-6)
     # Test positions are filled with the train mean, exactly.
     assert torch.allclose(values[n_train:], torch.full((num_rows - n_train,), train_mean.item()), atol=1e-6)
+
+
+def test_feature_encoder_single_train_row_produces_finite_output():
+    """A single training row makes the unbiased std NaN, and clip() does not
+    rescue it (clamp of NaN is NaN), so the whole feature map used to come out
+    NaN. The std must fall back so the output stays finite.
+    """
+    encoder = FeatureEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    # 1 train row, 2 test rows, 2 features.
+    x = torch.tensor([[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]])  # (1, 3, 2)
+
+    normalized = encoder(x, train_test_split_index=1)
+
+    assert torch.isfinite(normalized).all()
+
+
+def test_feature_encoder_single_train_row_falls_back_to_unit_std():
+    """With a single training row the std falls back to 1.0, so normalization
+    reduces to mean-centering: the train row maps to 0 and each test row to its
+    raw deviation from the train row (within the clip range here).
+    """
+    encoder = FeatureEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    x = torch.tensor([[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]])  # (1, 3, 2)
+
+    normalized = encoder(x, train_test_split_index=1).squeeze(-1)  # (1, 3, 2)
+
+    assert torch.allclose(normalized[0, 0], torch.tensor([0.0, 0.0]), atol=1e-6)  # train centers to 0
+    assert torch.allclose(normalized[0, 1], torch.tensor([2.0, 2.0]), atol=1e-6)  # (3-1, 4-2)
+    assert torch.allclose(normalized[0, 2], torch.tensor([4.0, 4.0]), atol=1e-6)  # (5-1, 6-2)
