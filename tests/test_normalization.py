@@ -1,0 +1,108 @@
+import torch
+from tfmplayground.models.nanotabpfn import FeatureEncoder
+from tfmplayground.models.nanotabpfn import FeatureEncoder, TargetEncoder
+
+
+def test_feature_encoder_normalizes_train_features_to_zero_mean_unit_std():
+    """Train rows of each feature should end up with mean ~0 and std ~1.
+
+    FeatureEncoder normalizes and embeds in a single step, so we swap the
+    embedding layer for an identity to read the normalized values directly.
+    """
+    torch.manual_seed(0)
+    encoder = FeatureEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    # batch=1, 10 train rows, 3 features with deliberately different scales/offsets.
+    scales = torch.tensor([1.0, 5.0, 20.0])
+    offsets = torch.tensor([0.0, 3.0, -7.0])
+    x = torch.randn(1, 10, 3) * scales + offsets
+
+    normalized = encoder(x, train_test_split_index=10).squeeze(-1)  # (1, 10, 3)
+
+    per_feature_mean = normalized.mean(dim=1)
+    per_feature_std = normalized.std(dim=1)  # unbiased (ddof=1), matches the encoder
+
+    assert torch.allclose(per_feature_mean, torch.zeros_like(per_feature_mean), atol=1e-5)
+    assert torch.allclose(per_feature_std, torch.ones_like(per_feature_std), atol=1e-4)
+
+
+def test_test_rows_are_normalized_with_train_statistics_not_their_own():
+    """Test rows must be normalized using the TRAIN mean/std, not their own.
+
+    This is the in-context-learning contract: predictions on test points may
+    only depend on the training context. We build train and test with very
+    different distributions and check the test output equals the train-stat
+    normalization exactly (and is therefore NOT self-normalized to N(0,1)).
+    """
+    encoder = FeatureEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    # 1 feature, deterministic. Train and test live on very different scales.
+    train = torch.tensor([[1.0], [2.0], [3.0], [4.0], [5.0]])  # (5, 1)
+    test = torch.tensor([[10.0], [20.0]])                       # (2, 1)
+    x = torch.cat([train, test], dim=0).unsqueeze(0)            # (1, 7, 1)
+    n_train = train.shape[0]
+
+    normalized = encoder(x, train_test_split_index=n_train).squeeze(-1)  # (1, 7)
+    normalized_test = normalized[:, n_train:].flatten()  # just the test values
+
+    # Expected: reuse the encoder's own rule but with train stats only.
+    train_mean = train.mean(dim=0)
+    train_std = train.std(dim=0) + 1e-8  # unbiased (ddof=1), matches encoder today
+    expected_test = ((test - train_mean) / train_std).flatten()
+
+    assert torch.allclose(normalized_test, expected_test, atol=1e-5)
+
+    # And the point of it all: test rows are NOT self-normalized to mean 0.
+    # If the encoder wrongly used test's own stats, this mean would be ~0.
+    assert normalized_test.mean().abs() > 1.0
+
+
+def test_feature_encoder_clips_extreme_values_to_plus_minus_100():
+    """After normalization, values are clipped to the [-100, 100] range.
+
+    A test point far outside the train distribution normalizes to a huge
+    z-score (the train stats don't include it, so there's no self-limiting).
+    The encoder must cap it at 100.
+    """
+    encoder = FeatureEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    # Train: tight cluster around 0 (mean~0, std~1). Test: one absurd value.
+    train = torch.tensor([[-1.0], [0.0], [1.0], [0.0]])  # (4, 1)
+    test = torch.tensor([[1e6]])                          # (1, 1)
+    x = torch.cat([train, test], dim=0).unsqueeze(0)      # (1, 5, 1)
+
+    normalized = encoder(x, train_test_split_index=train.shape[0]).flatten()
+
+    # Nothing may exceed the clip bounds.
+    assert normalized.max() <= 100.0
+    assert normalized.min() >= -100.0
+
+    # The out-of-distribution test point must have been clipped to the ceiling.
+    assert torch.isclose(normalized.max(), torch.tensor(100.0), atol=1e-4)
+
+
+def test_target_encoder_pads_test_positions_with_train_mean():
+    """TargetEncoder keeps train labels intact and pads test positions with
+    the train-label mean. It does NOT normalize (no division by std) — that
+    happens outside the model. This test pins that current behavior.
+    """
+    encoder = TargetEncoder(embedding_size=8)
+    encoder.linear_layer = torch.nn.Identity()
+
+    # 3 train labels; the full sequence (train + test) has length 5.
+    y_train = torch.tensor([[2.0], [4.0], [6.0]]).unsqueeze(0)  # (1, 3, 1)
+    num_rows = 5
+    n_train = y_train.shape[1]
+
+    out = encoder(y_train, num_rows).squeeze(-1).squeeze(-1)  # -> (1, 5)
+    values = out.flatten()
+
+    train_mean = y_train.mean()  # (2 + 4 + 6) / 3 = 4.0
+
+    # Train positions are untouched.
+    assert torch.allclose(values[:n_train], torch.tensor([2.0, 4.0, 6.0]), atol=1e-6)
+    # Test positions are filled with the train mean, exactly.
+    assert torch.allclose(values[n_train:], torch.full((num_rows - n_train,), train_mean.item()), atol=1e-6)
