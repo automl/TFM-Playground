@@ -12,6 +12,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
+from tfmplayground.normalization import (
+    compute_target_stats_numpy,
+    denormalize_predictions,
+    normalize_targets,
+)
 from tfmplayground.utils import get_default_device
 
 
@@ -198,9 +203,8 @@ class NanoTabPFNRegressor:
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
 
-        self.y_train_mean = np.mean(self.y_train)
-        self.y_train_std = np.std(self.y_train, ddof=1) + 1e-8
-        self.y_train_n = (self.y_train - self.y_train_mean) / self.y_train_std
+        self.y_train_mean, self.y_train_std = compute_target_stats_numpy(self.y_train)
+        self.y_train_n = normalize_targets(self.y_train, self.y_train_mean, self.y_train_std)
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
@@ -219,6 +223,6 @@ class NanoTabPFNRegressor:
                 (X_tensor, y_tensor), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks
             ).squeeze(0)
             preds_n = self.dist.mean(logits)
-            preds = preds_n * self.y_train_std + self.y_train_mean
+            preds = denormalize_predictions(preds_n, self.y_train_mean, self.y_train_std)
 
         return preds.cpu().numpy()

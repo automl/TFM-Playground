@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from tfmplayground.callbacks import Callback
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
+from tfmplayground.normalization import compute_target_stats_torch, normalize_targets
 from tfmplayground.utils import get_default_device
 
 
@@ -75,15 +76,14 @@ def train(
                 targets = full_data["target_y"].to(device)
 
                 if regression_task:
-                    y_mean = data[1].mean(dim=1, keepdim=True)
-                    y_std = data[1].std(dim=1, keepdim=True) + 1e-8
-                    y_norm = (data[1] - y_mean) / y_std
+                    y_mean, y_std = compute_target_stats_torch(data[1])
+                    y_norm = normalize_targets(data[1], y_mean, y_std)
                     data = (data[0], y_norm)
 
                 output = model(data, train_test_split_index=train_test_split_index)
                 targets = targets[:, train_test_split_index:]
                 if regression_task:
-                    targets = (targets - y_mean) / y_std
+                    targets = normalize_targets(targets, y_mean, y_std)
                 if classification_task:
                     targets = targets.reshape((-1,)).to(torch.long)
                     output = output.view(-1, output.shape[-1])
