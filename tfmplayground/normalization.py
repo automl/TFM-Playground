@@ -5,11 +5,12 @@ dataset) must standardize targets identically, otherwise the model would be
 trained and queried on different target scales. Keeping the spec here means
 the two paths cannot silently drift apart.
 
-Spec: standardize by mean and unbiased standard deviation (ddof=1), with a
-small epsilon added to the std for numerical stability. Degenerate inputs
-whose std is undefined or zero -- a single training sample (ddof=1 std is
-NaN) or constant targets (std is 0) -- use a std of 1.0 so the
-standardization stays finite instead of producing NaNs or exploding.
+Spec: standardize by mean and unbiased standard deviation (ddof=1), with the
+machine epsilon of the model's compute dtype (float32) added to the std for
+numerical stability. Degenerate inputs whose std is undefined or zero 
+-- a single training sample (ddof=1 std is NaN) or constant targets (std is 0) 
+-- use a std of 1.0 so the standardization stays finite instead of producing NaNs 
+or exploding.
 """
 
 import warnings
@@ -17,8 +18,11 @@ import warnings
 import numpy as np
 import torch
 
-# Added to the standard deviation to avoid division by (near-)zero.
-TARGET_NORM_EPS = 1e-8
+
+# Machine epsilon of the model's compute dtype (float32), added to the std to
+# avoid division by (near-)zero. The previous fixed 1e-8 was below float32
+# resolution (1.0 + 1e-8 == 1.0 in float32), so it silently did nothing.
+TARGET_NORM_EPS = float(np.finfo(np.float32).eps)
 
 
 def compute_target_stats_torch(y_train: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

@@ -96,3 +96,17 @@ def test_torch_normal_case_is_unchanged():
     expected_std = y.std(dim=1, keepdim=True) + TARGET_NORM_EPS
     assert torch.allclose(std, expected_std)
     assert torch.allclose(mean, y.mean(dim=1, keepdim=True))
+
+
+# --- epsilon spec (shared by both paths) ------------------------------------
+
+
+def test_target_norm_eps_registers_in_float32():
+    """The epsilon must survive the model's compute dtype (float32). The old
+    fixed 1e-8 was below float32 resolution and silently vanished
+    (1.0f + 1e-8 == 1.0f); float32's machine epsilon does register.
+    """
+    one = np.float32(1.0)
+    assert one + np.float32(TARGET_NORM_EPS) > one  # new eps registers in float32
+    assert one + np.float32(1e-8) == one  # the old value did not
+    assert TARGET_NORM_EPS == float(np.finfo(np.float32).eps)
