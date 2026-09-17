@@ -9,7 +9,7 @@ from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
+from sklearn.preprocessing import FunctionTransformer, LabelEncoder, OrdinalEncoder
 
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
 from tfmplayground.normalization import (
@@ -121,16 +121,22 @@ class NanoTabPFNClassifier:
         self.num_mem_chunks = num_mem_chunks
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
-        """stores X_train and y_train for later use, also computes the highest class number occuring in num_classes"""
+        """stores X_train, label-encodes the targets to contiguous indices 0..num_classes-1
+        (so arbitrary labels, e.g. non-contiguous integers or strings, are supported), and
+        keeps the original labels in classes_ for decoding predictions"""
         self.feature_preprocessor = get_feature_preprocessor(X_train)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
-        self.y_train = y_train
-        self.num_classes = max(set(y_train)) + 1
+        self.label_encoder = LabelEncoder()
+        self.y_train = self.label_encoder.fit_transform(y_train)
+        self.classes_ = self.label_encoder.classes_
+        self.num_classes = len(self.classes_)
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
-        """calls predit_proba and picks the class with the highest probability for each datapoint"""
+        """calls predict_proba, picks the highest-probability class for each datapoint,
+        and maps it back to the original label"""
         predicted_probabilities = self.predict_proba(X_test)
-        return predicted_probabilities.argmax(axis=1)
+        encoded_predictions = predicted_probabilities.argmax(axis=1)
+        return self.label_encoder.inverse_transform(encoded_predictions)
 
     def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
         """
