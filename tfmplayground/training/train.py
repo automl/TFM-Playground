@@ -33,8 +33,7 @@ def train(
     """
     trains model on prior batches for given epochs
 
-    steps with non-finite values are skipped, and an epoch where every step is
-    skipped raises
+    batches with non-finite values are retried
 
     Parameters
     ----------
@@ -51,7 +50,7 @@ def train(
     batch_size : int
         number of tables per batch
     steps_per_epoch : int
-        number of batches that make up one epoch
+        number of optimizer updates per epoch
     lr : float
         learning rate for optimizer
     grad_clip : float
@@ -68,6 +67,8 @@ def train(
     TabularFoundationModel
         model after last epoch
     """
+    if steps_per_epoch < 1:
+        raise ValueError("steps_per_epoch must be at least 1")
     if callbacks is None:
         callbacks = []
     if not device:
@@ -86,7 +87,7 @@ def train(
             optimizer.train()
             total_loss = 0.0
             num_valid = 0
-            for _ in range(steps_per_epoch):
+            while num_valid < steps_per_epoch:
                 x_train, y_train, x_test, y_test = next(batches)
                 x_train = x_train.to(device)
                 y_train = y_train.to(device)
@@ -120,15 +121,11 @@ def train(
 
                 loss = losses.mean()
                 loss.backward()
-                total_loss += loss.cpu().detach().item()
-                num_valid += 1
-
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 optimizer.step()
                 optimizer.zero_grad()
-
-            if num_valid == 0:
-                raise RuntimeError(f"all {steps_per_epoch} steps in epoch {epoch} had non-finite values")
+                total_loss += loss.cpu().detach().item()
+                num_valid += 1
 
             end_time = time.time()
             mean_loss = total_loss / num_valid
