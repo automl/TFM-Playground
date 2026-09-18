@@ -109,7 +109,7 @@ def normalize_features(x: torch.Tensor, train_test_split_index: int) -> torch.Te
     """
     x = x.unsqueeze(-1)
     mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-    std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
+    std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + torch.finfo(torch.float32).eps
     # clip() cannot rescue a non-finite std (clamp of NaN is NaN), so a single
     # training row (unbiased std is NaN) falls back to a std of 1.0.
     std = torch.where(torch.isfinite(std), std, torch.ones_like(std))
