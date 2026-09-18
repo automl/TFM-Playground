@@ -93,6 +93,30 @@ class NanoTabPFNModel(nn.Module):
         return output
 
 
+def normalize_features(x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
+    """
+    Normalizes each feature based on the mean and std of the training rows, then clips
+    outliers to [-100, 100]. This is the feature preprocessing, kept separate from the
+    embedding so it can be reused and tested on its own.
+
+    Args:
+        x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
+        train_test_split_index: (int) the number of datapoints in X_train; the stats
+                                use only x[:, :train_test_split_index]
+    Returns:
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, 1),
+                       normalized and clipped
+    """
+    x = x.unsqueeze(-1)
+    mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
+    std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
+    # clip() cannot rescue a non-finite std (clamp of NaN is NaN), so a single
+    # training row (unbiased std is NaN) falls back to a std of 1.0.
+    std = torch.where(torch.isfinite(std), std, torch.ones_like(std))
+    x = (x - mean) / std
+    return torch.clip(x, min=-100, max=100)
+
+
 class FeatureEncoder(nn.Module):
     def __init__(self, embedding_size: int):
         """Creates the linear layer that we will use to embed our features."""
@@ -101,8 +125,8 @@ class FeatureEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
         """
-        Normalizes all the features based on the mean and std of the features of the training data,
-        clips them between -100 and 100, then applies a linear layer to embed the features.
+        Normalizes the features (see normalize_features) and applies a linear layer to
+        embed them.
 
         Args:
             x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
@@ -111,15 +135,7 @@ class FeatureEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size), representing
                            the embeddings of the features
         """
-        x = x.unsqueeze(-1)
-        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
-        # clip() cannot rescue a non-finite std (clamp of NaN is NaN), so a single
-        # training row (unbiased std is NaN) falls back to a std of 1.0.
-        std = torch.where(torch.isfinite(std), std, torch.ones_like(std))
-        x = (x - mean) / std
-        x = torch.clip(x, min=-100, max=100)
-        return self.linear_layer(x)
+        return self.linear_layer(normalize_features(x, train_test_split_index))
 
 
 class TargetEncoder(nn.Module):
