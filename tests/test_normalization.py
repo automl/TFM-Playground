@@ -40,7 +40,7 @@ def test_normalize_features_uses_train_statistics_for_test_rows():
 
     # Expected: reuse the same rule but with train stats only.
     train_mean = train.mean(dim=0)
-    train_std = train.std(dim=0) + 1e-8  # unbiased (ddof=1), matches normalize_features today
+    train_std = train.std(dim=0) + torch.finfo(torch.float32).eps  # unbiased (ddof=1), matches normalize_features
     expected_test = ((test - train_mean) / train_std).flatten()
 
     assert torch.allclose(normalized_test, expected_test, atol=1e-5)
