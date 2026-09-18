@@ -138,6 +138,25 @@ class FeatureEncoder(nn.Module):
         return self.linear_layer(normalize_features(x, train_test_split_index))
 
 
+def pad_targets(y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
+    """
+    Pads y_train up to the full row count by filling the (unknown) test positions with
+    the per-dataset train-label mean. This is the target preprocessing, kept separate
+    from the embedding so it can be reused and tested on its own.
+
+    Args:
+        y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
+        num_rows: (int) the full length of y (train + test)
+    Returns:
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, 1), padded
+    """
+    # nan padding & nan handler instead?
+    mean = torch.mean(y_train, axis=1, keepdim=True)
+    padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
+    y = torch.cat([y_train, padding], dim=1)
+    return y.unsqueeze(-1)
+
+
 class TargetEncoder(nn.Module):
     def __init__(self, embedding_size: int):
         """Creates the linear layer that we will use to embed our targets."""
@@ -146,7 +165,7 @@ class TargetEncoder(nn.Module):
 
     def forward(self, y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
         """
-        Pads up y_train to the full length of y using the mean per dataset and then embeds it using a linear layer
+        Pads y_train up to the full length (see pad_targets) and embeds it with a linear layer.
 
         Args:
             y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
@@ -155,12 +174,7 @@ class TargetEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, embedding_size), representing
                            the embeddings of the targets
         """
-        # nan padding & nan handler instead?
-        mean = torch.mean(y_train, axis=1, keepdim=True)
-        padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
-        y = torch.cat([y_train, padding], dim=1)
-        y = y.unsqueeze(-1)
-        return self.linear_layer(y)
+        return self.linear_layer(pad_targets(y_train, num_rows))
 
 
 class TransformerEncoderLayer(nn.Module):
