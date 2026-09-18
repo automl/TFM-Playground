@@ -1,9 +1,9 @@
 """Characterization tests for get_feature_preprocessor.
 
-These pin the CURRENT behavior of the feature preprocessor before we change it
-(injectable categoricals + better detection). They document its quirks — most
-importantly that integer-coded categoricals are treated as numeric — so any
-behavior change becomes a conscious, visible test update.
+These pin the behavior of the feature preprocessor. Most tests characterize
+existing behavior; the cardinality-detection block pins the new rule that
+low-cardinality integer-coded columns are treated as categorical (with a
+sample-count floor so tiny datasets are unaffected).
 """
 
 import numpy as np
@@ -17,6 +17,16 @@ from tfmplayground.interface import NanoTabPFNClassifier, get_feature_preprocess
 def _fit_transform(X):
     pre = get_feature_preprocessor(X)
     return np.asarray(pre.fit_transform(X), dtype=float)
+
+
+def _column(values, repeats):
+    """Build a single-column 2D array by tiling `values` `repeats` times.
+
+    The resulting column has len(set(values)) distinct values and
+    len(values) * repeats rows, which lets each test state cardinality and
+    row count independently and read at a glance.
+    """
+    return np.array([[v] for v in list(values) * repeats])
 
 
 def test_mixed_input_current_output():
@@ -70,20 +80,59 @@ def test_numeric_stored_as_string_is_treated_as_numeric():
     assert np.allclose(out, np.array([[1.0], [2.0], [3.0]]))
 
 
-def test_integer_coded_categorical_is_currently_treated_as_numeric():
-    """QUIRK we intend to change: a categorical encoded as integers (all parse as
-    numbers) is detected as numeric — there is no cardinality check — so the codes
-    pass through unchanged instead of being re-encoded. Pinned so the upcoming
-    detection change is a conscious update.
+def test_integer_coded_low_cardinality_is_detected_categorical():
+    """Integer-coded column with few distinct values and enough rows is detected
+    as categorical and re-encoded to 0..k-1, instead of passing its magnitudes
+    through as numeric. n=30 clears the sample floor; 3 distinct values are under
+    the cardinality threshold. (This inverts the previously-pinned quirk.)
     """
-    X = np.array([[10], [20], [30], [10], [20], [30], [10]])
+    X = _column([10, 20, 30], repeats=10)  # 3 distinct values, 30 rows
 
     out = _fit_transform(X)
 
-    # Numeric path: values pass through unchanged (not re-encoded to 0..k-1).
-    assert np.allclose(out, np.array([[10.0], [20.0], [30.0], [10.0], [20.0], [30.0], [10.0]]))
+    # Categorical path: 10->0, 20->1, 30->2 (magnitudes gone).
+    assert out.shape == (30, 1)
+    assert np.allclose(out[:6].ravel(), [0, 1, 2, 0, 1, 2])
 
 
+def test_low_cardinality_below_sample_floor_stays_numeric():
+    """The sample floor protects tiny datasets: with too few rows, low cardinality
+    is not evidence enough to call a numeric column categorical, so it stays numeric
+    and its magnitudes pass through. Same values as the test above, far fewer rows.
+    """
+    X = _column([10, 20, 30], repeats=3)  # 3 distinct values, only 9 rows (< floor)
+
+    out = _fit_transform(X)
+
+    assert np.allclose(out.ravel(), [10, 20, 30] * 3)
+
+
+def test_high_cardinality_numeric_stays_numeric():
+    """Above the cardinality threshold a numeric column keeps its magnitudes even
+    with plenty of rows: genuine numeric variety must not be turned categorical.
+    """
+    X = _column(range(10, 160, 10), repeats=3)  # 15 distinct values, 45 rows
+
+    out = _fit_transform(X)
+
+    assert np.allclose(out[:15].ravel(), list(range(10, 160, 10)))
+
+
+def test_cardinality_threshold_boundary():
+    """Pins the exact <=10 boundary and guards against an off-by-one (< vs <=):
+    exactly 10 distinct values -> categorical; exactly 11 -> numeric. Both clear
+    the sample floor, so cardinality alone decides.
+    """
+    ten = _column(range(10, 101, 10), repeats=3)     # 10 distinct values, 30 rows
+    eleven = _column(range(10, 111, 10), repeats=3)  # 11 distinct values, 33 rows
+
+    out_ten = _fit_transform(ten)
+    out_eleven = _fit_transform(eleven)
+
+    # 10 distinct -> categorical (re-encoded 0..9).
+    assert np.allclose(out_ten[:10].ravel(), list(range(10)))
+    # 11 distinct -> numeric (magnitudes pass through).
+    assert np.allclose(out_eleven[:11].ravel(), list(range(10, 111, 10)))
 
 
 def test_declared_categorical_overrides_numeric_detection():
@@ -123,7 +172,7 @@ def test_out_of_range_categorical_index_raises():
 
 
 def test_categorical_features_none_matches_default():
-    """categorical_features=None preserves the current behavior exactly."""
+    """categorical_features=None preserves the default behavior exactly."""
     X = np.array([[10], [20], [30], [10], [20], [30], [10]])
 
     with_none = np.asarray(

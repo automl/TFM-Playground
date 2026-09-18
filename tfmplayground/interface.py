@@ -50,6 +50,8 @@ def get_feature_preprocessor(
     X: np.ndarray | pd.DataFrame,
     categorical_features: list[int] | None = None,
     infer_categorical: bool = True,
+    max_unique_for_categorical: int = 10,
+    min_samples_for_categorical_inference: int = 30,
 ) -> ColumnTransformer:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features.
@@ -58,6 +60,11 @@ def get_feature_preprocessor(
     dropped. categorical_features=None keeps the automatic detection only.
     With infer_categorical=False, undeclared columns are treated as numeric and an undeclared
     non-numeric column raises ValueError (every categorical must be declared explicitly).
+    When infer_categorical=True, an undeclared numeric column with at most
+    max_unique_for_categorical distinct values is treated as categorical (e.g. integer-coded
+    categories), provided it has at least min_samples_for_categorical_inference non-NaN rows;
+    the sample floor keeps small datasets — where low cardinality is trivial — numeric. These
+    thresholds are tuned for nanoTabPFN's small-data regime rather than copied from TabPFN.
     """
     X = pd.DataFrame(X)
     num_features = X.shape[1]
@@ -90,8 +97,18 @@ def get_feature_preprocessor(
                 f"with infer_categorical=False every categorical column must be listed in "
                 f"categorical_features."
             )
-        num_mask.append(is_numeric)
-        cat_mask.append(not is_numeric)
+        # A low-cardinality numeric column (e.g. integer-coded categories) is treated as
+        # categorical, but only with inference on and enough rows to trust the signal; the
+        # sample floor keeps tiny datasets, where low cardinality is trivial, numeric.
+        is_low_cardinality_numeric = (
+            infer_categorical
+            and is_numeric
+            and non_nan_entries >= min_samples_for_categorical_inference
+            and len(unique_non_nan_entries) <= max_unique_for_categorical
+        )
+        treat_as_numeric = is_numeric and not is_low_cardinality_numeric
+        num_mask.append(treat_as_numeric)
+        cat_mask.append(not treat_as_numeric)
         # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
 
     num_mask = np.array(num_mask)
