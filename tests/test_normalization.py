@@ -1,6 +1,5 @@
 import torch
-
-from tfmplayground.models.nanotabpfn import FeatureEncoder, TargetEncoder, normalize_features
+from tfmplayground.models.nanotabpfn import FeatureEncoder, TargetEncoder, normalize_features, pad_targets
 
 
 def test_normalize_features_train_rows_to_zero_mean_unit_std():
@@ -72,21 +71,18 @@ def test_normalize_features_clips_extreme_values_to_plus_minus_100():
     assert torch.isclose(normalized.max(), torch.tensor(100.0), atol=1e-4)
 
 
-def test_target_encoder_pads_test_positions_with_train_mean():
-    """TargetEncoder keeps train labels intact and pads test positions with
-    the train-label mean. It does NOT normalize (no division by std) — that
-    happens outside the model. This test pins that current behavior.
+def test_pad_targets_fills_test_positions_with_train_mean():
+    """pad_targets keeps train labels intact and fills test positions with the
+    train-label mean. It does NOT normalize (no division by std) — that happens
+    outside the model. This pins that behavior.
     """
-    encoder = TargetEncoder(embedding_size=8)
-    encoder.linear_layer = torch.nn.Identity()
-
     # 3 train labels; the full sequence (train + test) has length 5.
     y_train = torch.tensor([[2.0], [4.0], [6.0]]).unsqueeze(0)  # (1, 3, 1)
     num_rows = 5
     n_train = y_train.shape[1]
 
-    out = encoder(y_train, num_rows).squeeze(-1).squeeze(-1)  # -> (1, 5)
-    values = out.flatten()
+    padded = pad_targets(y_train, num_rows).squeeze(-1).squeeze(-1)  # -> (1, 5)
+    values = padded.flatten()
 
     train_mean = y_train.mean()  # (2 + 4 + 6) / 3 = 4.0
 
@@ -94,6 +90,21 @@ def test_target_encoder_pads_test_positions_with_train_mean():
     assert torch.allclose(values[:n_train], torch.tensor([2.0, 4.0, 6.0]), atol=1e-6)
     # Test positions are filled with the train mean, exactly.
     assert torch.allclose(values[n_train:], torch.full((num_rows - n_train,), train_mean.item()), atol=1e-6)
+
+
+def test_target_encoder_forward_embeds_padded_targets():
+    """TargetEncoder.forward composes pad_targets with the linear layer: it
+    returns the embedding-shaped tensor and equals embedding the padded targets.
+    """
+    torch.manual_seed(0)
+    encoder = TargetEncoder(embedding_size=8)
+    y_train = torch.tensor([[2.0], [4.0], [6.0]]).unsqueeze(0)  # (1, 3, 1)
+    num_rows = 5
+
+    out = encoder(y_train, num_rows)
+
+    assert out.shape == (1, num_rows, 1, 8)
+    assert torch.allclose(out, encoder.linear_layer(pad_targets(y_train, num_rows)))
 
 
 def test_normalize_features_single_train_row_produces_finite_output():
