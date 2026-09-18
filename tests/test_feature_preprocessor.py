@@ -245,3 +245,36 @@ def test_classifier_threads_infer_categorical_to_preprocessor():
 
     with pytest.raises(ValueError):
         clf.fit(X, y)
+
+
+def test_classifier_threads_max_unique_for_categorical_to_preprocessor():
+    """The constructor's max_unique_for_categorical reaches get_feature_preprocessor via fit:
+    a stricter threshold pushes a 3-value column onto the numeric side.
+    """
+    model = torch.nn.Identity()
+    model.num_outputs = 10
+    # Default (<=10) would detect this as categorical; max_unique=2 keeps it numeric.
+    clf = NanoTabPFNClassifier(model=model, device="cpu", max_unique_for_categorical=2)
+
+    X = _column([10, 20, 30], repeats=10)  # 3 distinct values, 30 rows
+    y = np.tile([0, 1, 2], 10)
+    clf.fit(X, y)
+
+    # Numeric path: magnitudes preserved (not re-encoded to 0, 1, 2).
+    assert np.allclose(np.asarray(clf.X_train, dtype=float)[:3].ravel(), [10, 20, 30])
+
+
+def test_classifier_threads_min_samples_for_categorical_inference_to_preprocessor():
+    """The constructor's min_samples_for_categorical_inference reaches the preprocessor via fit:
+    raising the floor above n keeps a low-cardinality column numeric.
+    """
+    model = torch.nn.Identity()
+    model.num_outputs = 10
+    # Default floor (30) would detect this as categorical at n=30; floor=1000 keeps it numeric.
+    clf = NanoTabPFNClassifier(model=model, device="cpu", min_samples_for_categorical_inference=1000)
+
+    X = _column([10, 20, 30], repeats=10)  # 3 distinct values, 30 rows
+    y = np.tile([0, 1, 2], 10)
+    clf.fit(X, y)
+
+    assert np.allclose(np.asarray(clf.X_train, dtype=float)[:3].ravel(), [10, 20, 30])

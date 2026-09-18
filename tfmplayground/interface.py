@@ -147,6 +147,8 @@ class NanoTabPFNClassifier:
         num_mem_chunks: int = 8,
         categorical_features: list[int] | None = None,
         infer_categorical: bool = True,
+        max_unique_for_categorical: int = 10,
+        min_samples_for_categorical_inference: int = 30,
     ):
         if device is None:
             device = get_default_device()
@@ -167,13 +169,17 @@ class NanoTabPFNClassifier:
         self.num_mem_chunks = num_mem_chunks
         self.categorical_features = categorical_features
         self.infer_categorical = infer_categorical
+        self.max_unique_for_categorical = max_unique_for_categorical
+        self.min_samples_for_categorical_inference = min_samples_for_categorical_inference
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """stores X_train, label-encodes the targets to contiguous indices 0..num_classes-1
         (so arbitrary labels, e.g. non-contiguous integers or strings, are supported), and
         keeps the original labels in classes_ for decoding predictions"""
         self.feature_preprocessor = get_feature_preprocessor(
-            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical
+            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical,
+            max_unique_for_categorical=self.max_unique_for_categorical,
+            min_samples_for_categorical_inference=self.min_samples_for_categorical_inference,
         )
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.label_encoder = LabelEncoder()
@@ -225,6 +231,8 @@ class NanoTabPFNRegressor:
         num_mem_chunks: int = 8,
         categorical_features: list[int] | None = None,
         infer_categorical: bool = True,
+        max_unique_for_categorical: int = 10,
+        min_samples_for_categorical_inference: int = 30,
     ):
         if device is None:
             device = get_default_device()
@@ -259,6 +267,8 @@ class NanoTabPFNRegressor:
         self.num_mem_chunks = num_mem_chunks
         self.categorical_features = categorical_features
         self.infer_categorical = infer_categorical
+        self.max_unique_for_categorical = max_unique_for_categorical
+        self.min_samples_for_categorical_inference = min_samples_for_categorical_inference
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """
@@ -266,7 +276,9 @@ class NanoTabPFNRegressor:
         Computes target normalization.
         """
         self.feature_preprocessor = get_feature_preprocessor(
-            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical
+            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical,
+            max_unique_for_categorical=self.max_unique_for_categorical,
+            min_samples_for_categorical_inference=self.min_samples_for_categorical_inference,
         )
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
