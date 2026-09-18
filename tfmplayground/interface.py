@@ -46,18 +46,34 @@ def to_numeric(x):
     return x.apply(pd.to_numeric, errors="coerce").to_numpy()
 
 
-def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> ColumnTransformer:
+def get_feature_preprocessor(
+    X: np.ndarray | pd.DataFrame, categorical_features: list[int] | None = None
+) -> ColumnTransformer:
     """
-    fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
+    fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features.
+    Columns whose positional index is in categorical_features are forced categorical (at any
+    cardinality), overriding the automatic numeric/categorical detection; constant columns are still
+    dropped. categorical_features=None keeps the automatic detection only.
     """
     X = pd.DataFrame(X)
+    num_features = X.shape[1]
+    declared_categorical = set(categorical_features or [])
+    for index in declared_categorical:
+        if index < 0 or index >= num_features:
+            raise ValueError(
+                f"categorical_features index {index} is out of range for {num_features} features."
+            )
     num_mask = []
     cat_mask = []
-    for col in X:
+    for position, col in enumerate(X):
         unique_non_nan_entries = X[col].dropna().unique()
         if len(unique_non_nan_entries) <= 1:
             num_mask.append(False)
             cat_mask.append(False)
+            continue
+        if position in declared_categorical:
+            num_mask.append(False)
+            cat_mask.append(True)
             continue
         non_nan_entries = X[col].notna().sum()
         numeric_entries = (
@@ -101,6 +117,7 @@ class NanoTabPFNClassifier:
         model: NanoTabPFNModel | str | None = None,
         device: None | str | torch.device = None,
         num_mem_chunks: int = 8,
+        categorical_features: list[int] | None = None,
     ):
         if device is None:
             device = get_default_device()
@@ -119,12 +136,13 @@ class NanoTabPFNClassifier:
         self.model = model.to(device)
         self.device = device
         self.num_mem_chunks = num_mem_chunks
+        self.categorical_features = categorical_features
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """stores X_train, label-encodes the targets to contiguous indices 0..num_classes-1
         (so arbitrary labels, e.g. non-contiguous integers or strings, are supported), and
         keeps the original labels in classes_ for decoding predictions"""
-        self.feature_preprocessor = get_feature_preprocessor(X_train)
+        self.feature_preprocessor = get_feature_preprocessor(X_train, categorical_features=self.categorical_features)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.label_encoder = LabelEncoder()
         self.y_train = self.label_encoder.fit_transform(y_train)
@@ -173,6 +191,7 @@ class NanoTabPFNRegressor:
         dist: FullSupportBarDistribution | str | None = None,
         device: str | torch.device | None = None,
         num_mem_chunks: int = 8,
+        categorical_features: list[int] | None = None,
     ):
         if device is None:
             device = get_default_device()
@@ -205,20 +224,21 @@ class NanoTabPFNRegressor:
         self.device = device
         self.dist = dist
         self.num_mem_chunks = num_mem_chunks
+        self.categorical_features = categorical_features
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """
         Stores X_train and y_train for later use.
         Computes target normalization.
         """
-        self.feature_preprocessor = get_feature_preprocessor(X_train)
+        self.feature_preprocessor = get_feature_preprocessor(X_train, categorical_features=self.categorical_features)
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
 
         self.y_train_mean, self.y_train_std = compute_target_stats_numpy(self.y_train)
         self.y_train_n = normalize_targets(self.y_train, self.y_train_mean, self.y_train_std)
         return self
-    
+
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
         Performs in-context learning using X_train and y_train.
