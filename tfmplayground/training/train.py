@@ -32,7 +32,7 @@ def train(
     """
     trains model on prior batches for given epochs
 
-    batches with non-finite values are retried, and 100 consecutive skips raise
+    batches with non-finite values are retried
 
     Parameters
     ----------
@@ -84,11 +84,7 @@ def train(
             optimizer.train()
             total_loss = 0.0
             num_valid = 0
-            consecutive_skips = 0
             while num_valid < steps_per_epoch:
-                if consecutive_skips >= 100:
-                    raise RuntimeError(f"100 consecutive batches in epoch {epoch} had non-finite values")
-                consecutive_skips += 1
                 x_train, y_train, x_test, y_test = next(batches)
                 x_train = x_train.to(device)
                 y_train = y_train.to(device)
@@ -127,7 +123,6 @@ def train(
                 optimizer.zero_grad()
                 total_loss += loss.cpu().detach().item()
                 num_valid += 1
-                consecutive_skips = 0
 
             end_time = time.time()
             mean_loss = total_loss / num_valid
