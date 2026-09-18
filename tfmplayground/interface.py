@@ -47,13 +47,17 @@ def to_numeric(x):
 
 
 def get_feature_preprocessor(
-    X: np.ndarray | pd.DataFrame, categorical_features: list[int] | None = None
+    X: np.ndarray | pd.DataFrame,
+    categorical_features: list[int] | None = None,
+    infer_categorical: bool = True,
 ) -> ColumnTransformer:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features.
     Columns whose positional index is in categorical_features are forced categorical (at any
     cardinality), overriding the automatic numeric/categorical detection; constant columns are still
     dropped. categorical_features=None keeps the automatic detection only.
+    With infer_categorical=False, undeclared columns are treated as numeric and an undeclared
+    non-numeric column raises ValueError (every categorical must be declared explicitly).
     """
     X = pd.DataFrame(X)
     num_features = X.shape[1]
@@ -79,8 +83,15 @@ def get_feature_preprocessor(
         numeric_entries = (
             pd.to_numeric(X[col], errors="coerce").notna().sum()
         )  # in case numeric columns are stored as strings
-        num_mask.append(non_nan_entries == numeric_entries)
-        cat_mask.append(non_nan_entries != numeric_entries)
+        is_numeric = non_nan_entries == numeric_entries
+        if not infer_categorical and not is_numeric:
+            raise ValueError(
+                f"Column at index {position} is not numeric and was not declared categorical; "
+                f"with infer_categorical=False every categorical column must be listed in "
+                f"categorical_features."
+            )
+        num_mask.append(is_numeric)
+        cat_mask.append(not is_numeric)
         # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
 
     num_mask = np.array(num_mask)
@@ -118,6 +129,7 @@ class NanoTabPFNClassifier:
         device: None | str | torch.device = None,
         num_mem_chunks: int = 8,
         categorical_features: list[int] | None = None,
+        infer_categorical: bool = True,
     ):
         if device is None:
             device = get_default_device()
@@ -137,12 +149,15 @@ class NanoTabPFNClassifier:
         self.device = device
         self.num_mem_chunks = num_mem_chunks
         self.categorical_features = categorical_features
+        self.infer_categorical = infer_categorical
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """stores X_train, label-encodes the targets to contiguous indices 0..num_classes-1
         (so arbitrary labels, e.g. non-contiguous integers or strings, are supported), and
         keeps the original labels in classes_ for decoding predictions"""
-        self.feature_preprocessor = get_feature_preprocessor(X_train, categorical_features=self.categorical_features)
+        self.feature_preprocessor = get_feature_preprocessor(
+            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical
+        )
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.label_encoder = LabelEncoder()
         self.y_train = self.label_encoder.fit_transform(y_train)
@@ -192,6 +207,7 @@ class NanoTabPFNRegressor:
         device: str | torch.device | None = None,
         num_mem_chunks: int = 8,
         categorical_features: list[int] | None = None,
+        infer_categorical: bool = True,
     ):
         if device is None:
             device = get_default_device()
@@ -225,13 +241,16 @@ class NanoTabPFNRegressor:
         self.dist = dist
         self.num_mem_chunks = num_mem_chunks
         self.categorical_features = categorical_features
+        self.infer_categorical = infer_categorical
 
     def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """
         Stores X_train and y_train for later use.
         Computes target normalization.
         """
-        self.feature_preprocessor = get_feature_preprocessor(X_train, categorical_features=self.categorical_features)
+        self.feature_preprocessor = get_feature_preprocessor(
+            X_train, categorical_features=self.categorical_features, infer_categorical=self.infer_categorical
+        )
         self.X_train = self.feature_preprocessor.fit_transform(X_train)
         self.y_train = y_train
 
