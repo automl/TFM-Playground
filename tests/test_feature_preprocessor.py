@@ -8,8 +8,10 @@ behavior change becomes a conscious, visible test update.
 
 import numpy as np
 import pandas as pd
+import pytest
+import torch
 
-from tfmplayground.interface import get_feature_preprocessor
+from tfmplayground.interface import NanoTabPFNClassifier, get_feature_preprocessor
 
 
 def _fit_transform(X):
@@ -80,3 +82,67 @@ def test_integer_coded_categorical_is_currently_treated_as_numeric():
 
     # Numeric path: values pass through unchanged (not re-encoded to 0..k-1).
     assert np.allclose(out, np.array([[10.0], [20.0], [30.0], [10.0], [20.0], [30.0], [10.0]]))
+
+
+
+
+def test_declared_categorical_overrides_numeric_detection():
+    """A column that would be auto-detected as numeric (integer-coded) is forced
+    categorical when declared, so its codes are ordinal-encoded to 0..k-1 instead
+    of passing through as magnitudes.
+    """
+    X = np.array([[10], [20], [30], [10], [20], [30], [10]])
+
+    out = np.asarray(
+        get_feature_preprocessor(X, categorical_features=[0]).fit_transform(X), dtype=float
+    )
+
+    assert np.allclose(out.ravel(), [0, 1, 2, 0, 1, 2, 0])
+
+
+def test_declared_constant_categorical_is_still_dropped():
+    """Declaring a column categorical does not save a constant column: it carries
+    no information and is still dropped.
+    """
+    X = pd.DataFrame({0: [1.0, 2.0, 3.0], 1: [5.0, 5.0, 5.0]})  # col1 constant
+
+    out = np.asarray(
+        get_feature_preprocessor(X, categorical_features=[1]).fit_transform(X), dtype=float
+    )
+
+    assert out.shape == (3, 1)  # only col0 survives
+    assert np.allclose(out, np.array([[1.0], [2.0], [3.0]]))
+
+
+def test_out_of_range_categorical_index_raises():
+    """An index that doesn't correspond to a column is a clear error."""
+    X = pd.DataFrame({0: [1, 2, 3]})
+
+    with pytest.raises(ValueError):
+        get_feature_preprocessor(X, categorical_features=[5])
+
+
+def test_categorical_features_none_matches_default():
+    """categorical_features=None preserves the current behavior exactly."""
+    X = np.array([[10], [20], [30], [10], [20], [30], [10]])
+
+    with_none = np.asarray(
+        get_feature_preprocessor(X, categorical_features=None).fit_transform(X), dtype=float
+    )
+    default = np.asarray(get_feature_preprocessor(X).fit_transform(X), dtype=float)
+
+    assert np.allclose(with_none, default)
+
+
+def test_classifier_threads_categorical_features_to_preprocessor():
+    """The constructor's categorical_features reaches get_feature_preprocessor via fit."""
+    model = torch.nn.Identity()
+    model.num_outputs = 10
+    clf = NanoTabPFNClassifier(model=model, device="cpu", categorical_features=[0])
+
+    X = np.array([[10], [20], [30], [10], [20], [30]])  # integer-coded, declared categorical
+    y = np.array([0, 1, 0, 1, 0, 1])
+    clf.fit(X, y)
+
+    # X_train reflects ordinal encoding (0, 1, 2), not the raw integers.
+    assert np.allclose(np.asarray(clf.X_train, dtype=float).ravel(), [0, 1, 2, 0, 1, 2])
