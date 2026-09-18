@@ -146,3 +146,53 @@ def test_classifier_threads_categorical_features_to_preprocessor():
 
     # X_train reflects ordinal encoding (0, 1, 2), not the raw integers.
     assert np.allclose(np.asarray(clf.X_train, dtype=float).ravel(), [0, 1, 2, 0, 1, 2])
+
+
+def test_strict_mode_undeclared_non_numeric_column_raises():
+    """With infer_categorical=False, a non-numeric column that was not declared
+    categorical is an error, instead of being silently inferred.
+    """
+    X = pd.DataFrame({0: [1.0, 2.0, 3.0, 4.0], 1: ["a", "b", "a", "c"]})  # col1 is text
+
+    with pytest.raises(ValueError):
+        get_feature_preprocessor(X, infer_categorical=False)
+
+
+def test_strict_mode_declared_categorical_is_encoded():
+    """In strict mode a declared categorical still works (no inference needed):
+    it is ordinal-encoded normally.
+    """
+    X = pd.DataFrame({0: [1.0, 2.0, 3.0, 4.0], 1: ["a", "b", "a", "c"]})
+
+    out = np.asarray(
+        get_feature_preprocessor(X, categorical_features=[1], infer_categorical=False).fit_transform(X),
+        dtype=float,
+    )
+
+    assert np.allclose(out, np.array([[1.0, 0.0], [2.0, 1.0], [3.0, 0.0], [4.0, 2.0]]))
+
+
+def test_strict_mode_all_numeric_columns_pass_through():
+    """In strict mode fully-numeric undeclared columns are treated as numeric."""
+    X = pd.DataFrame({0: [1.0, 2.0, 3.0]})
+
+    out = np.asarray(
+        get_feature_preprocessor(X, infer_categorical=False).fit_transform(X), dtype=float
+    )
+
+    assert np.allclose(out.ravel(), [1.0, 2.0, 3.0])
+
+
+def test_classifier_threads_infer_categorical_to_preprocessor():
+    """The constructor's infer_categorical reaches get_feature_preprocessor via fit:
+    strict mode + an undeclared text column raises during fit.
+    """
+    model = torch.nn.Identity()
+    model.num_outputs = 10
+    clf = NanoTabPFNClassifier(model=model, device="cpu", infer_categorical=False)
+
+    X = np.array([["a"], ["b"], ["a"], ["b"]], dtype=object)  # text, undeclared
+    y = np.array([0, 1, 0, 1])
+
+    with pytest.raises(ValueError):
+        clf.fit(X, y)
