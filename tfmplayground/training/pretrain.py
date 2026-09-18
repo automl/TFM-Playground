@@ -159,6 +159,7 @@ def pretrainTFM(
     experiment.log_configs(model=model.config, prior=prior.config, eval=eval, training=training)
 
     trained_model = train(
+        problem=problem,
         model=model,
         prior=prior,
         criterion=criterion,
