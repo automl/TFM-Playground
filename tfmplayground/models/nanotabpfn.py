@@ -205,21 +205,14 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
-            # training data attends to itself
-            x_left = self.self_attention_between_datapoints(
-                x[:, :train_test_split_index],
-                x[:, :train_test_split_index],
-                x[:, :train_test_split_index],
-                need_weights=False,
-            )[0]
-            # test data attends to the training data
-            x_right = self.self_attention_between_datapoints(
-                x[:, train_test_split_index:],
+            # training and test data attend to the training data
+            x_attended = self.self_attention_between_datapoints(
+                x,
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
                 need_weights=False,
             )[0]
-            return torch.cat([x_left, x_right], dim=1) + x
+            return x_attended + x
 
         src = datapoint_attention(src)
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
