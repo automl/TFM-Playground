@@ -377,27 +377,54 @@ class NanoTabICLPrior(Prior):
         device: str | torch.device | None = None,
     ) -> None:
         """
-        keeps config, and checks train fractions
+        keeps config, and checks config limits
         """
         self.config = config
+        self.problem = config.problem
         self.device = device if device is not None else get_default_device()
-        if not 0 < self.config.train_fraction_min <= self.config.train_fraction_max < 1:
+        if not 0 < self.config.min_train_fraction <= self.config.max_train_fraction < 1:
             raise ValueError("train fractions must be 0 < min <= max < 1")
+        if not 1 <= self.config.min_num_features <= self.config.max_num_features:
+            raise ValueError("feature counts must be 1 <= min <= max")
+        if not 1 < self.config.min_num_datapoints <= self.config.max_num_datapoints:
+            raise ValueError("datapoint counts must be 1 < min <= max")
+        min_num_train_rows = int(self.config.min_num_datapoints * self.config.min_train_fraction)
+        max_num_train_rows = int(self.config.min_num_datapoints * self.config.max_train_fraction)
+        min_num_test_rows = self.config.min_num_datapoints - max_num_train_rows
+        if min_num_train_rows < 2:
+            raise ValueError(f"train part needs at least 2 rows, holds {min_num_train_rows} rows")
+        if min_num_test_rows < 1:
+            raise ValueError(f"test part needs at least 1 row, holds {min_num_test_rows} rows")
+        if self.problem == "classification":
+            if self.config.max_num_classes < 2:
+                raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
+            if self.config.max_row_permutations < 1:
+                raise ValueError(f"row permutations must be at least 1, not {self.config.max_row_permutations}")
+            min_num_split_rows = min(min_num_train_rows, min_num_test_rows)
+            if min_num_split_rows < self.config.max_num_classes:
+                raise ValueError(f"{min_num_split_rows} train or test rows cannot hold {self.config.max_num_classes} classes")
 
-    def hyperparameters(self) -> None:
+    def batch_hyperparameters(self) -> None:
         """
         samples hyperparameters for next batch from config limits
         """
         c = self.config
-        self.num_features = c.num_features
-        self.num_datapoints_max = c.num_datapoints_max
-        fraction = np.random.uniform(c.train_fraction_min, c.train_fraction_max)
-        self.sep = int(c.num_datapoints_max * fraction)
-        if c.problem == "regression":
+        self.num_features = int(np.random.randint(c.min_num_features, c.max_num_features + 1))
+        self.num_datapoints = int(np.random.randint(c.min_num_datapoints, c.max_num_datapoints + 1))
+        self.sep = int(self.num_datapoints * np.random.uniform(c.min_train_fraction, c.max_train_fraction))
+
+    def dataset_hyperparameters(self) -> None:
+        """
+        samples hyperparameters for next table from config limits
+        """
+        c = self.config
+        self.max_cat_size = c.max_cat_size
+        if self.problem == "regression":
             self.num_classes = 0
         else:
-            binary = c.max_num_classes == 2 or np.random.rand() < 0.5
+            binary = c.max_num_classes == 2 or np.random.rand() < c.binary_class_probability
             self.num_classes = 2 if binary else int(np.random.randint(3, c.max_num_classes + 1))
+            self.max_row_permutations = c.max_row_permutations
 
     def target(self, columns: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -405,22 +432,35 @@ class NanoTabICLPrior(Prior):
         """
         x = torch.cat([columns[f"x_{i}"] for i in range(self.num_features)], dim=-1)
         y = columns["y_0"].squeeze(-1)
+        if self.problem == "classification":
+            y = y.long().unique(return_inverse=True)[1]
         return x.float(), y.float()
 
     def dataset(self) -> tuple[torch.Tensor, torch.Tensor]:
         """
         samples one predictable table with random categorical sizes
         """
-        cat_sizes = rand_cat_sizes(self.num_features)
-        columns = rand_dataset_filtered(cat_sizes, [self.num_classes], self.num_datapoints_max)
-        x, y = self.target(columns)
-        return x, y
+        self.dataset_hyperparameters()
+        while True:
+            columns = rand_dataset_filtered(
+                x_cat_sizes=rand_cat_sizes(self.num_features, max_cat_size=self.max_cat_size),
+                y_cat_sizes=[self.num_classes],
+                n_samples=self.num_datapoints,
+            )
+            x, y = self.target(columns)
+            if self.problem == "regression":
+                return x, y
+            for _ in range(self.max_row_permutations):
+                if len(y.unique()) == len(y[: self.sep].unique()) == len(y[self.sep :].unique()):
+                    return x, y
+                perm = torch.randperm(y.shape[0])
+                x, y = x[perm], y[perm]
 
     def batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         stacks sampled tables into one batch, split at train test index
         """
-        self.hyperparameters()
+        self.batch_hyperparameters()
         datasets = [self.dataset() for _ in range(batch_size)]
         x = torch.stack([d[0] for d in datasets]).to(self.device)
         y = torch.stack([d[1] for d in datasets]).to(self.device)
