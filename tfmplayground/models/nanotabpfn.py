@@ -95,33 +95,47 @@ class NanoTabPFNModel(nn.Module):
 
 def normalize_features(x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
     """
-    Normalizes each feature based on the mean and std of the training rows, then clips
-    outliers to [-100, 100]. This is the feature preprocessing, kept separate from the
-    embedding so it can be reused and tested on its own.
+    Normalizes each feature based on the mean and std of the training rows (ignoring
+    missing entries), imputes the missing entries and clips outliers to [-100, 100].
+    Emits a per-cell missing indicator alongside the value, so the embedding sees
+    "value + was-missing" as one unit per feature. This is the feature preprocessing,
+    kept separate from the embedding so it can be reused and tested on its own.
 
     Args:
         x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
         train_test_split_index: (int) the number of datapoints in X_train; the stats
                                 use only x[:, :train_test_split_index]
     Returns:
-        (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, 1),
-                       normalized and clipped
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, 2), whose
+                       last axis is [normalized_value, missing_indicator]
     """
     x = x.unsqueeze(-1)
-    mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-    std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + torch.finfo(torch.float32).eps
+    # Indicator is generated BEFORE imputing: 1.0 where the cell was missing, else 0.0.
+    indicator = torch.isnan(x).to(x.dtype)
+    train = x[:, :train_test_split_index]
+    mean = torch.nanmean(train, dim=1, keepdims=True)
+    # Unbiased std that ignores NaNs: sum of squared deviations over (count - 1).
+    count = (~torch.isnan(train)).sum(dim=1, keepdims=True)
+    sum_sq = torch.nansum((train - mean) ** 2, dim=1, keepdims=True)
+    std = torch.sqrt(sum_sq / (count - 1)) + torch.finfo(torch.float32).eps
     # clip() cannot rescue a non-finite std (clamp of NaN is NaN), so a single
-    # training row (unbiased std is NaN) falls back to a std of 1.0.
+    # training row (count - 1 == 0, std is NaN) falls back to a std of 1.0.
     std = torch.where(torch.isfinite(std), std, torch.ones_like(std))
     x = (x - mean) / std
-    return torch.clip(x, min=-100, max=100)
-
+    # Impute the holes to 0, i.e. the train mean after normalization.
+    x = torch.nan_to_num(x, nan=0.0)
+    x = torch.clip(x, min=-100, max=100)
+    return torch.cat([x, indicator], dim=-1)
 
 class FeatureEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """Creates the linear layer that we will use to embed our features."""
+        """Creates the linear layer that we will use to embed our features.
+
+        Input width is 2 because normalize_features emits [value, missing_indicator]
+        per cell, so value and indicator are projected together into one embedding.
+        """
         super().__init__()
-        self.linear_layer = nn.Linear(1, embedding_size)
+        self.linear_layer = nn.Linear(2, embedding_size)
 
     def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
         """
