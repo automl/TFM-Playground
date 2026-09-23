@@ -20,6 +20,23 @@ from tfmplayground.normalization import (
 from tfmplayground.utils import get_default_device
 
 
+def _migrate_feature_encoder_weights(model_state: dict) -> dict:
+    """Expands a pre-indicator feature encoder weight of shape [E, 1] to [E, 2] so a
+    checkpoint trained before the missing-indicator change loads into the current model.
+
+    The value channel keeps the old weight and the new indicator channel starts at zero,
+    which is function-preserving: with no missing entries the indicator is zero, so the
+    embedding is identical to the old model's. The bias is unchanged. A checkpoint that
+    is already [E, 2] is returned untouched.
+    """
+    key = "feature_encoder.linear_layer.weight"
+    weight = model_state.get(key)
+    if weight is not None and weight.shape[1] == 1:
+        zeros = torch.zeros_like(weight)  # [E, 1], the indicator channel
+        model_state = {**model_state, key: torch.cat([weight, zeros], dim=1)}  # -> [E, 2]
+    return model_state
+
+
 def init_model_from_state_dict_file(file_path):
     """
     reads model architecture from state dict, instantiates the architecture and loads the weights
@@ -32,7 +49,7 @@ def init_model_from_state_dict_file(file_path):
         num_layers=state_dict["architecture"]["num_layers"],
         num_outputs=state_dict["architecture"]["num_outputs"],
     )
-    model.load_state_dict(state_dict["model"])
+    model.load_state_dict(_migrate_feature_encoder_weights(state_dict["model"]))
     return model
 
 
