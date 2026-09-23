@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 from pfns.bar_distribution import FullSupportBarDistribution
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, LabelEncoder, OrdinalEncoder
 
@@ -135,19 +134,13 @@ def get_feature_preprocessor(
         [
             ("to_pandas", FunctionTransformer(to_pandas)),  # to apply pd.to_numeric of pandas
             ("to_numeric", FunctionTransformer(to_numeric)),  # in case numeric columns are stored as strings
-            (
-                "imputer",
-                SimpleImputer(strategy="mean", add_indicator=True),
-            ),  # median might be better because of outliers
         ]
-    )
+    )  # no imputation here: NaNs pass through and the model imputes (mean) and flags them
     cat_transformer = Pipeline(
         [
             ("encoder", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=np.nan)),
-            ("imputer", SimpleImputer(strategy="most_frequent", add_indicator=True)),
         ]
-    )
-
+    )  # no imputation here either: a missing category stays NaN for the model to handle
     preprocessor = ColumnTransformer(
         transformers=[("num", num_transformer, num_mask), ("cat", cat_transformer, cat_mask)]
     )
