@@ -146,3 +146,46 @@ def test_feature_encoder_forward_embeds_normalized_features():
 
     assert out.shape == (1, 3, 2, 8)
     assert torch.allclose(out, encoder.linear_layer(normalize_features(x, 2)))
+
+
+def test_normalize_features_output_has_singleton_channel_axis():
+    """CHARACTERIZATION (to be changed): normalize_features adds a trailing axis of
+    size 1, so the value is the only channel. The upcoming missing-value work turns
+    this into size 2 ([value, indicator]); pinned so that change is a conscious update.
+    """
+    x = torch.tensor([[[1.0, 5.0], [2.0, 6.0], [3.0, 7.0]]])  # (1, 3, 2)
+
+    out = normalize_features(x, train_test_split_index=2)
+
+    assert out.shape == (1, 3, 2, 1)
+
+
+def test_normalize_features_nan_in_train_currently_propagates_over_column():
+    """CHARACTERIZATION of a QUIRK we intend to fix: normalize_features has no NaN
+    handling, so a single NaN in a training row makes that feature's mean/std NaN and
+    the whole column comes out NaN, while other columns stay finite. The missing-value
+    work will instead emit an indicator and impute, so this becomes a conscious change.
+    """
+    x = torch.tensor([[[1.0, 10.0],
+                       [2.0, 20.0],
+                       [float("nan"), 30.0],
+                       [4.0, 40.0],
+                       [5.0, 50.0]]])  # (1, 5, 2); NaN in a train row, column 0
+
+    out = normalize_features(x, train_test_split_index=3).squeeze(-1)  # (1, 5, 2)
+
+    assert torch.isnan(out[0, :, 0]).all()     # column 0 comes out fully NaN
+    assert torch.isfinite(out[0, :, 1]).all()  # column 1 is untouched
+
+
+def test_normalize_features_nan_only_in_test_currently_stays_local():
+    """CHARACTERIZATION (to be changed): a NaN that appears only in a TEST row does not
+    corrupt the train stats, so today just that one cell comes out NaN. The upcoming
+    indicator/imputation path will remove even this local NaN.
+    """
+    x = torch.tensor([[[1.0], [2.0], [3.0], [float("nan")]]])  # (1, 4, 1); NaN in test row
+
+    out = normalize_features(x, train_test_split_index=3).squeeze(-1).flatten()  # (4,)
+
+    assert torch.isnan(out[3])            # the test cell is NaN
+    assert torch.isfinite(out[:3]).all()  # train cells are fine
