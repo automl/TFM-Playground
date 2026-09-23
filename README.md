@@ -34,10 +34,48 @@ predictions = clf.predict(X_test)
 print("Accuracy", accuracy_score(y_test, predictions))
 ```
 
+### Working with your data
+
+The classifier and regressor accept plain NumPy arrays or pandas DataFrames and take care of preprocessing for you.
+
+**Missing values.** Missing entries (`NaN`) are handled automatically — you do not need to impute them yourself. Each feature is imputed and flagged with a per-column missing indicator that the model sees alongside the value:
+```python
+import numpy as np
+# NaNs anywhere in X are fine
+X_train = np.array([[1.0, 2.0], [np.nan, 3.0], [5.0, np.nan], [7.0, 8.0]])
+clf = NanoTabPFNClassifier()
+clf.fit(X_train, y_train)
+```
+
+**Categorical features.** Numeric-looking columns with few distinct values are detected as categorical automatically. You can also declare them explicitly, or turn inference off:
+```python
+# Columns 0 and 3 are categorical, regardless of their cardinality
+clf = NanoTabPFNClassifier(categorical_features=[0, 3])
+
+# Only treat explicitly declared columns as categorical (no inference)
+clf = NanoTabPFNClassifier(categorical_features=[0, 3], infer_categorical=False)
+```
+The cardinality-based detection is tuned for the small-data regime via two parameters: `max_unique_for_categorical` (default 10 — a numeric column with at most this many distinct values is treated as categorical) and `min_samples_for_categorical_inference` (default 30 — detection only kicks in above this many rows, so tiny datasets stay numeric).
+
+**Arbitrary labels.** The classifier accepts any label type — non-contiguous integers or strings — and returns predictions in the original label space. The classes seen during fit are available in `clf.classes_`:
+```python
+clf.fit(X_train, np.array(["cat", "dog", "cat", "bird"]))
+clf.predict(X_test)   # -> e.g. array(["dog", "cat", ...])
+clf.classes_          # -> array(["bird", "cat", "dog"])
+```
+
 ### Our Code
 
 `tfmplayground/models/nanotabpfn.py` contains the implementation of the architecture in less than 300 lines of code. `tfmplayground/train.py` implements a simple training loop in under 200 lines and `tfmplayground/external_priors/` provides an interface to publicly available priors form other repositories as well as a dataloader for loading HDF5 dumps.
 We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
+
+### Running the tests
+
+The repository ships with a test suite. Install the test dependency and run it from the repository root:
+```
+pip install pytest
+pytest
+```
 
 ### Pretrain your own small nanoTabPFN
 First we download 100k pre-generated datasets with 50 datapoints, 3 features and up to 3 classes each from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5).
