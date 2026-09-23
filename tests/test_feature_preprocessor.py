@@ -29,17 +29,17 @@ def _column(values, repeats):
     return np.array([[v] for v in list(values) * repeats])
 
 
-def test_mixed_input_current_output():
-    """One representative mixed frame, pinning detection + encoding + mean
-    imputation + missing-indicator + column order + constant-column drop at once.
+def test_mixed_input_no_imputation_and_no_indicator_columns():
+    """One representative mixed frame: detection + encoding + column order +
+    constant-column drop, now WITHOUT imputation and WITHOUT indicator columns.
+    Missing entries pass through as NaN for the model to handle (mean + indicator).
 
-    Output column order is: numeric (imputed), then numeric missing-indicators,
-    then categorical (ordinal-encoded), then categorical missing-indicators.
+    Output column order is: numeric columns, then categorical (ordinal-encoded).
     """
     X = pd.DataFrame(
         {
             0: [1.0, 2.0, 3.0, 4.0],          # clean numeric
-            1: [10.0, np.nan, 30.0, np.nan],  # numeric with missing
+            1: [10.0, np.nan, 30.0, np.nan],  # numeric with missing -> NaN passes through
             2: ["a", "b", "a", "c"],          # string categorical
             3: [7.0, 7.0, 7.0, 7.0],          # constant -> dropped
         }
@@ -47,16 +47,13 @@ def test_mixed_input_current_output():
 
     out = _fit_transform(X)
 
-    expected = np.array(
-        [
-            [1.0, 10.0, 0.0, 0.0],  # col0, col1 (mean-imputed), col1-missing-indicator, col2 (a=0)
-            [2.0, 20.0, 1.0, 1.0],  # col1 imputed to mean 20, indicator=1, col2 (b=1)
-            [3.0, 30.0, 0.0, 0.0],
-            [4.0, 20.0, 1.0, 2.0],  # col2 (c=2)
-        ]
-    )
-    assert out.shape == (4, 4)
-    assert np.allclose(out, expected)
+    assert out.shape == (4, 3)  # col0, col1 (with NaNs), col2; no indicator columns
+    # numeric columns pass through; col1 keeps its holes as NaN
+    assert np.allclose(out[:, 0], [1.0, 2.0, 3.0, 4.0])
+    assert np.isnan(out[[1, 3], 1]).all()
+    assert np.allclose(out[[0, 2], 1], [10.0, 30.0])
+    # categorical ordinal-encoded: a=0, b=1, c=2
+    assert np.allclose(out[:, 2], [0.0, 1.0, 0.0, 2.0])
 
 
 def test_constant_column_is_dropped():
@@ -278,3 +275,29 @@ def test_classifier_threads_min_samples_for_categorical_inference_to_preprocesso
     clf.fit(X, y)
 
     assert np.allclose(np.asarray(clf.X_train, dtype=float)[:3].ravel(), [10, 20, 30])
+
+
+def test_numeric_missing_is_passed_through_as_nan():
+    """The preprocessor no longer imputes numeric holes: the NaN passes through (the
+    model does mean-imputation + indicator) and no extra indicator column is added.
+    """
+    X = pd.DataFrame({0: [10.0, np.nan, 30.0, 40.0]})
+
+    out = _fit_transform(X)
+
+    assert out.shape == (4, 1)                       # no extra indicator column
+    assert np.isnan(out[1, 0])                       # the hole is preserved as NaN
+    assert np.allclose(out[[0, 2, 3], 0], [10.0, 30.0, 40.0])
+
+
+def test_categorical_missing_is_passed_through_as_nan():
+    """A categorical column is ordinal-encoded and a missing category stays NaN
+    (no most-frequent imputation, no extra indicator column).
+    """
+    X = pd.DataFrame({0: ["a", "b", np.nan, "a", "c"]})
+
+    out = _fit_transform(X)
+
+    assert out.shape == (5, 1)
+    assert np.isnan(out[2, 0])                        # hole preserved as NaN
+    assert np.allclose(out[[0, 1, 3, 4], 0], [0.0, 1.0, 0.0, 2.0])  # a=0, b=1, c=2
