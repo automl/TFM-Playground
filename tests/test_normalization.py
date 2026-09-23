@@ -11,7 +11,7 @@ def test_normalize_features_train_rows_to_zero_mean_unit_std():
     offsets = torch.tensor([0.0, 3.0, -7.0])
     x = torch.randn(1, 10, 3) * scales + offsets
 
-    normalized = normalize_features(x, train_test_split_index=10).squeeze(-1)  # (1, 10, 3)
+    normalized = normalize_features(x, train_test_split_index=10)[..., 0]  # value channel, (1, 10, 3)
 
     per_feature_mean = normalized.mean(dim=1)
     per_feature_std = normalized.std(dim=1)  # unbiased (ddof=1), matches normalize_features
@@ -34,7 +34,7 @@ def test_normalize_features_uses_train_statistics_for_test_rows():
     x = torch.cat([train, test], dim=0).unsqueeze(0)            # (1, 7, 1)
     n_train = train.shape[0]
 
-    normalized = normalize_features(x, train_test_split_index=n_train).squeeze(-1)  # (1, 7)
+    normalized = normalize_features(x, train_test_split_index=n_train)[..., 0]  # value channel, (1, 7, 1)
     normalized_test = normalized[:, n_train:].flatten()  # just the test values
 
     # Expected: reuse the same rule but with train stats only.
@@ -61,7 +61,7 @@ def test_normalize_features_clips_extreme_values_to_plus_minus_100():
     test = torch.tensor([[1e6]])                          # (1, 1)
     x = torch.cat([train, test], dim=0).unsqueeze(0)      # (1, 5, 1)
 
-    normalized = normalize_features(x, train_test_split_index=train.shape[0]).flatten()
+    normalized = normalize_features(x, train_test_split_index=train.shape[0])[..., 0].flatten()  # value channel
 
     # Nothing may exceed the clip bounds.
     assert normalized.max() <= 100.0
@@ -127,7 +127,7 @@ def test_normalize_features_single_train_row_falls_back_to_unit_std():
     """
     x = torch.tensor([[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]])  # (1, 3, 2)
 
-    normalized = normalize_features(x, train_test_split_index=1).squeeze(-1)  # (1, 3, 2)
+    normalized = normalize_features(x, train_test_split_index=1)[..., 0]  # value channel, (1, 3, 2)
 
     assert torch.allclose(normalized[0, 0], torch.tensor([0.0, 0.0]), atol=1e-6)  # train centers to 0
     assert torch.allclose(normalized[0, 1], torch.tensor([2.0, 2.0]), atol=1e-6)  # (3-1, 4-2)
@@ -148,23 +148,30 @@ def test_feature_encoder_forward_embeds_normalized_features():
     assert torch.allclose(out, encoder.linear_layer(normalize_features(x, 2)))
 
 
-def test_normalize_features_output_has_singleton_channel_axis():
-    """CHARACTERIZATION (to be changed): normalize_features adds a trailing axis of
-    size 1, so the value is the only channel. The upcoming missing-value work turns
-    this into size 2 ([value, indicator]); pinned so that change is a conscious update.
+def test_normalize_features_emits_value_and_indicator_channels():
+    """normalize_features returns a trailing axis of size 2, [value, indicator].
+    With no missing entries the indicator is all zeros and the value channel equals
+    the plain (mean/std) normalization. (Inverts the earlier singleton-axis pin.)
     """
     x = torch.tensor([[[1.0, 5.0], [2.0, 6.0], [3.0, 7.0]]])  # (1, 3, 2)
 
     out = normalize_features(x, train_test_split_index=2)
 
-    assert out.shape == (1, 3, 2, 1)
+    assert out.shape == (1, 3, 2, 2)          # [value, indicator]
+    assert (out[..., 1] == 0).all()           # nothing missing -> indicator all zero
+
+    # Value channel equals the old normalization rule.
+    train = x[:, :2]
+    mean = train.mean(dim=1, keepdim=True)
+    std = train.std(dim=1, keepdim=True) + torch.finfo(torch.float32).eps
+    expected_value = torch.clip((x - mean) / std, -100, 100)
+    assert torch.allclose(out[..., 0], expected_value, atol=1e-5)
 
 
-def test_normalize_features_nan_in_train_currently_propagates_over_column():
-    """CHARACTERIZATION of a QUIRK we intend to fix: normalize_features has no NaN
-    handling, so a single NaN in a training row makes that feature's mean/std NaN and
-    the whole column comes out NaN, while other columns stay finite. The missing-value
-    work will instead emit an indicator and impute, so this becomes a conscious change.
+def test_normalize_features_nan_in_train_no_longer_propagates():
+    """A NaN in a training row no longer corrupts the column: stats ignore it, the
+    hole is flagged in the indicator and imputed to 0 (the train mean after
+    normalization), and every value stays finite. (Inverts the propagation quirk.)
     """
     x = torch.tensor([[[1.0, 10.0],
                        [2.0, 20.0],
@@ -172,20 +179,44 @@ def test_normalize_features_nan_in_train_currently_propagates_over_column():
                        [4.0, 40.0],
                        [5.0, 50.0]]])  # (1, 5, 2); NaN in a train row, column 0
 
-    out = normalize_features(x, train_test_split_index=3).squeeze(-1)  # (1, 5, 2)
+    out = normalize_features(x, train_test_split_index=3)
+    value, indicator = out[..., 0], out[..., 1]
 
-    assert torch.isnan(out[0, :, 0]).all()     # column 0 comes out fully NaN
-    assert torch.isfinite(out[0, :, 1]).all()  # column 1 is untouched
+    assert torch.isfinite(value).all()        # no propagation over the column
+    assert value[0, 2, 0] == 0.0              # the hole imputed to 0
+
+    expected_indicator = torch.zeros(1, 5, 2)
+    expected_indicator[0, 2, 0] = 1.0
+    assert torch.equal(indicator, expected_indicator)  # flagged exactly at the hole
 
 
-def test_normalize_features_nan_only_in_test_currently_stays_local():
-    """CHARACTERIZATION (to be changed): a NaN that appears only in a TEST row does not
-    corrupt the train stats, so today just that one cell comes out NaN. The upcoming
-    indicator/imputation path will remove even this local NaN.
+def test_normalize_features_nan_in_test_is_imputed_and_flagged():
+    """A NaN in a test row is imputed (finite output) and flagged in the indicator,
+    instead of leaving a NaN cell. (Inverts the test-local-NaN pin.)
     """
     x = torch.tensor([[[1.0], [2.0], [3.0], [float("nan")]]])  # (1, 4, 1); NaN in test row
 
-    out = normalize_features(x, train_test_split_index=3).squeeze(-1).flatten()  # (4,)
+    out = normalize_features(x, train_test_split_index=3)
+    value, indicator = out[..., 0], out[..., 1]
 
-    assert torch.isnan(out[3])            # the test cell is NaN
-    assert torch.isfinite(out[:3]).all()  # train cells are fine
+    assert torch.isfinite(value).all()        # the test cell is imputed, not NaN
+    assert indicator[0, 3, 0] == 1.0          # and flagged
+    assert indicator.sum() == 1.0             # nothing else flagged
+
+
+def test_feature_encoder_embeds_two_channels_and_handles_nan():
+    """FeatureEncoder now embeds [value, indicator]: its linear layer takes 2 inputs,
+    and a NaN in the input produces a finite embedding (value imputed, missingness
+    carried by the indicator channel).
+    """
+    torch.manual_seed(0)
+    encoder = FeatureEncoder(embedding_size=8)
+
+    assert encoder.linear_layer.in_features == 2
+
+    x = torch.tensor([[[1.0, 10.0], [2.0, 20.0], [float("nan"), 30.0]]])  # (1, 3, 2) with a NaN
+
+    out = encoder(x, train_test_split_index=2)
+
+    assert out.shape == (1, 3, 2, 8)
+    assert torch.isfinite(out).all()
