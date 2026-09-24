@@ -71,7 +71,10 @@ def train(
             for i, full_data in enumerate(prior):
                 train_test_split_index = full_data["train_test_split_index"]
                 data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
-                if torch.isnan(data[0]).any() or torch.isnan(data[1]).any():
+                # Only guard the targets: features with NaNs are handled by the model
+                # (normalize_features imputes them and flags them via the indicator channel),
+                # so dropping feature-NaN batches would throw away trainable missing signal.
+                if torch.isnan(data[1]).any():
                     continue
                 targets = full_data["target_y"].to(device)
 
