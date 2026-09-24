@@ -273,6 +273,27 @@ class NanoTabPFNClassifier:
         scores[original_of_output] = attention_to_columns
         return scores
 
+    def get_embeddings(self, X_test: np.ndarray) -> np.ndarray:
+        """Extracts the per-row target-token embedding for X_test, using the fitted training
+        set as in-context support (TabPFN-v2-style feature extraction). Returns an array of
+        shape (n_test, embedding_size). For comparable TRAINING embeddings use the
+        leave-one-fold-out extractor rather than embedding the training rows directly.
+        """
+        x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
+        y = self.y_train
+        self.model.save_embeddings = True
+        self.model.embeddings = None
+        try:
+            with torch.no_grad():
+                xt = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                yt = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                self.model((xt, yt), train_test_split_index=len(self.X_train))
+            embeddings = self.model.embeddings[0, len(self.X_train):, :].to("cpu").numpy()
+        finally:
+            self.model.save_embeddings = False
+            self.model.embeddings = None
+        return embeddings
+
 
 class NanoTabPFNRegressor:
     """scikit-learn like interface"""
@@ -361,3 +382,24 @@ class NanoTabPFNRegressor:
             preds = denormalize_predictions(preds_n, self.y_train_mean, self.y_train_std)
 
         return preds.cpu().numpy()
+
+    def get_embeddings(self, X_test: np.ndarray) -> np.ndarray:
+        """Extracts the per-row target-token embedding for X_test, using the fitted training
+        set as in-context support (TabPFN-v2-style feature extraction). Returns an array of
+        shape (n_test, embedding_size). For comparable TRAINING embeddings use the
+        leave-one-fold-out extractor rather than embedding the training rows directly.
+        """
+        x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
+        y = self.y_train_n
+        self.model.save_embeddings = True
+        self.model.embeddings = None
+        try:
+            with torch.no_grad():
+                xt = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                yt = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                self.model((xt, yt), train_test_split_index=len(self.X_train))
+            embeddings = self.model.embeddings[0, len(self.X_train):, :].to("cpu").numpy()
+        finally:
+            self.model.save_embeddings = False
+            self.model.embeddings = None
+        return embeddings
