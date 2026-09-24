@@ -28,6 +28,12 @@ class NanoTabPFNModel(nn.Module):
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
+        # Opt-in feature extraction: when save_embeddings is True, _forward stores the
+        # per-row target-token embedding (before the decoder) in embeddings. Off by default,
+        # so the normal prediction path is unchanged.
+        self.save_embeddings = False
+        self.embeddings: torch.Tensor | None = None
+
     # TODO: consider getting rid of this and just provide a single interface
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -85,6 +91,10 @@ class NanoTabPFNModel(nn.Module):
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             src = block(src, train_test_split_index=train_test_split_index)
+        if self.save_embeddings:
+            # per-row target-token embedding (B, R, E), before the decoder. Covers both train
+            # and test rows; the caller slices whichever it needs.
+            self.embeddings = src[:, :, -1, :].detach()
         # selects the target embeddings (B,num_targets,1,E)
         output = src[:, train_test_split_index:, -1, :]
         # runs the embeddings through the decoder to get
