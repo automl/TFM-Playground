@@ -229,6 +229,50 @@ class NanoTabPFNClassifier:
             probabilities = F.softmax(out, dim=1)
             return probabilities.to("cpu").numpy()
 
+    def _feature_masks(self):
+        """Recovers the numeric/categorical boolean masks (over original columns) from the
+        fitted ColumnTransformer, so attention columns can be mapped back to original features.
+        """
+        num_mask = cat_mask = None
+        for name, _, cols in self.feature_preprocessor.transformers_:
+            if name == "num":
+                num_mask = np.asarray(cols, dtype=bool)
+            elif name == "cat":
+                cat_mask = np.asarray(cols, dtype=bool)
+        return num_mask, cat_mask
+
+    def feature_attention_scores(self, X_test: np.ndarray) -> np.ndarray:
+        """Feature importance via attention, in the style of TabPFN-Wide. Runs inference with
+        attention capture enabled, averages the target column's attention to each feature over
+        samples, heads and layers, and returns one score per ORIGINAL feature. Columns that were
+        dropped as constant get NaN (the model never saw them). Requires fit() first and a model
+        that exposes transformer_blocks.
+        """
+        x = np.concatenate((self.X_train, self.feature_preprocessor.transform(X_test)))
+        y = self.y_train
+        blocks = self.model.transformer_blocks
+        for block in blocks:
+            block.save_feature_attention = True
+            block.feature_attention = None
+        try:
+            with torch.no_grad():
+                xt = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
+                yt = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
+                self.model((xt, yt), train_test_split_index=len(self.X_train))
+            # average over layers: stack to (num_layers, C) -> (C,); last entry is target->target
+            per_layer = torch.stack([block.feature_attention for block in blocks], dim=0)
+            attention_to_columns = per_layer.mean(dim=0)[:-1].to("cpu").numpy()  # (C-1,) transformed cols
+        finally:
+            for block in blocks:
+                block.save_feature_attention = False
+                block.feature_attention = None
+        # map transformed columns ([num..., cat...]) back to original feature indices
+        num_mask, cat_mask = self._feature_masks()
+        original_of_output = np.where(num_mask)[0].tolist() + np.where(cat_mask)[0].tolist()
+        scores = np.full(num_mask.shape[0], np.nan)
+        scores[original_of_output] = attention_to_columns
+        return scores
+
 
 class NanoTabPFNRegressor:
     """scikit-learn like interface"""
