@@ -221,6 +221,12 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
+        # Opt-in interpretability: when save_feature_attention is True, forward stores the
+        # target column's attention to every feature (averaged over samples and heads) in
+        # feature_attention. Off by default, so the normal forward path is unchanged.
+        self.save_feature_attention = False
+        self.feature_attention: torch.Tensor | None = None
+
     def forward(self, src: torch.Tensor, train_test_split_index: int, num_mem_chunks: int = 1) -> torch.Tensor:
         """
         Takes the embeddings of the table as input and applies self-attention between features
@@ -242,7 +248,13 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
-            return self.self_attention_between_features(x, x, x)[0] + x
+            attn_output, attn_map = self.self_attention_between_features(x, x, x)
+            if self.save_feature_attention:
+                # attn_map is (B*R, C, C), already averaged over heads. Row -1 is the target
+                # column as query attending to every column; average it over samples -> (C,).
+                # Assumes num_mem_chunks == 1 so this single chunk covers all samples.
+                self.feature_attention = attn_map[:, -1, :].mean(dim=0).detach()
+            return attn_output + x
 
         src = feature_attention(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
