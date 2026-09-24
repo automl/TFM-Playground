@@ -28,6 +28,12 @@ class NanoTabPFNModel(nn.Module):
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
+        # Opt-in feature extraction: when save_embeddings is True, _forward stores the
+        # per-row target-token embedding (before the decoder) in embeddings. Off by default,
+        # so the normal prediction path is unchanged.
+        self.save_embeddings = False
+        self.embeddings: torch.Tensor | None = None
+
     # TODO: consider getting rid of this and just provide a single interface
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -85,6 +91,10 @@ class NanoTabPFNModel(nn.Module):
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             src = block(src, train_test_split_index=train_test_split_index)
+        if self.save_embeddings:
+            # per-row target-token embedding (B, R, E), before the decoder. Covers both train
+            # and test rows; the caller slices whichever it needs.
+            self.embeddings = src[:, :, -1, :].detach()
         # selects the target embeddings (B,num_targets,1,E)
         output = src[:, train_test_split_index:, -1, :]
         # runs the embeddings through the decoder to get
@@ -93,16 +103,54 @@ class NanoTabPFNModel(nn.Module):
         return output
 
 
+def normalize_features(x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
+    """
+    Normalizes each feature based on the mean and std of the training rows (ignoring
+    missing entries), imputes the missing entries and clips outliers to [-100, 100].
+    Emits a per-cell missing indicator alongside the value, so the embedding sees
+    "value + was-missing" as one unit per feature. This is the feature preprocessing,
+    kept separate from the embedding so it can be reused and tested on its own.
+
+    Args:
+        x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
+        train_test_split_index: (int) the number of datapoints in X_train; the stats
+                                use only x[:, :train_test_split_index]
+    Returns:
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, 2), whose
+                       last axis is [normalized_value, missing_indicator]
+    """
+    x = x.unsqueeze(-1)
+    # Indicator is generated BEFORE imputing: 1.0 where the cell was missing, else 0.0.
+    indicator = torch.isnan(x).to(x.dtype)
+    train = x[:, :train_test_split_index]
+    mean = torch.nanmean(train, dim=1, keepdims=True)
+    # Unbiased std that ignores NaNs: sum of squared deviations over (count - 1).
+    count = (~torch.isnan(train)).sum(dim=1, keepdims=True)
+    sum_sq = torch.nansum((train - mean) ** 2, dim=1, keepdims=True)
+    std = torch.sqrt(sum_sq / (count - 1)) + torch.finfo(torch.float32).eps
+    # clip() cannot rescue a non-finite std (clamp of NaN is NaN), so a single
+    # training row (count - 1 == 0, std is NaN) falls back to a std of 1.0.
+    std = torch.where(torch.isfinite(std), std, torch.ones_like(std))
+    x = (x - mean) / std
+    # Impute the holes to 0, i.e. the train mean after normalization.
+    x = torch.nan_to_num(x, nan=0.0)
+    x = torch.clip(x, min=-100, max=100)
+    return torch.cat([x, indicator], dim=-1)
+
 class FeatureEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """Creates the linear layer that we will use to embed our features."""
+        """Creates the linear layer that we will use to embed our features.
+
+        Input width is 2 because normalize_features emits [value, missing_indicator]
+        per cell, so value and indicator are projected together into one embedding.
+        """
         super().__init__()
-        self.linear_layer = nn.Linear(1, embedding_size)
+        self.linear_layer = nn.Linear(2, embedding_size)
 
     def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
         """
-        Normalizes all the features based on the mean and std of the features of the training data,
-        clips them between -100 and 100, then applies a linear layer to embed the features.
+        Normalizes the features (see normalize_features) and applies a linear layer to
+        embed them.
 
         Args:
             x: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features)
@@ -111,12 +159,26 @@ class FeatureEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size), representing
                            the embeddings of the features
         """
-        x = x.unsqueeze(-1)
-        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
-        x = (x - mean) / std
-        x = torch.clip(x, min=-100, max=100)
-        return self.linear_layer(x)
+        return self.linear_layer(normalize_features(x, train_test_split_index))
+
+
+def pad_targets(y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
+    """
+    Pads y_train up to the full row count by filling the (unknown) test positions with
+    the per-dataset train-label mean. This is the target preprocessing, kept separate
+    from the embedding so it can be reused and tested on its own.
+
+    Args:
+        y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
+        num_rows: (int) the full length of y (train + test)
+    Returns:
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, 1), padded
+    """
+    # nan padding & nan handler instead?
+    mean = torch.mean(y_train, axis=1, keepdim=True)
+    padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
+    y = torch.cat([y_train, padding], dim=1)
+    return y.unsqueeze(-1)
 
 
 class TargetEncoder(nn.Module):
@@ -127,7 +189,7 @@ class TargetEncoder(nn.Module):
 
     def forward(self, y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
         """
-        Pads up y_train to the full length of y using the mean per dataset and then embeds it using a linear layer
+        Pads y_train up to the full length (see pad_targets) and embeds it with a linear layer.
 
         Args:
             y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
@@ -136,12 +198,7 @@ class TargetEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, embedding_size), representing
                            the embeddings of the targets
         """
-        # nan padding & nan handler instead?
-        mean = torch.mean(y_train, axis=1, keepdim=True)
-        padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
-        y = torch.cat([y_train, padding], dim=1)
-        y = y.unsqueeze(-1)
-        return self.linear_layer(y)
+        return self.linear_layer(pad_targets(y_train, num_rows))
 
 
 class TransformerEncoderLayer(nn.Module):
@@ -174,6 +231,12 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
         self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
 
+        # Opt-in interpretability: when save_feature_attention is True, forward stores the
+        # target column's attention to every feature (averaged over samples and heads) in
+        # feature_attention. Off by default, so the normal forward path is unchanged.
+        self.save_feature_attention = False
+        self.feature_attention: torch.Tensor | None = None
+
     def forward(self, src: torch.Tensor, train_test_split_index: int, num_mem_chunks: int = 1) -> torch.Tensor:
         """
         Takes the embeddings of the table as input and applies self-attention between features
@@ -195,7 +258,13 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
-            return self.self_attention_between_features(x, x, x)[0] + x
+            attn_output, attn_map = self.self_attention_between_features(x, x, x)
+            if self.save_feature_attention:
+                # attn_map is (B*R, C, C), already averaged over heads. Row -1 is the target
+                # column as query attending to every column; average it over samples -> (C,).
+                # Assumes num_mem_chunks == 1 so this single chunk covers all samples.
+                self.feature_attention = attn_map[:, -1, :].mean(dim=0).detach()
+            return attn_output + x
 
         src = feature_attention(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)

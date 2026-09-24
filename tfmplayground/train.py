@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from tfmplayground.callbacks import Callback
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
+from tfmplayground.normalization import compute_target_stats_torch, normalize_targets
 from tfmplayground.utils import get_default_device
 
 
@@ -70,20 +71,22 @@ def train(
             for i, full_data in enumerate(prior):
                 train_test_split_index = full_data["train_test_split_index"]
                 data = (full_data["x"].to(device), full_data["y"][:, :train_test_split_index].to(device))
-                if torch.isnan(data[0]).any() or torch.isnan(data[1]).any():
+                # Only guard the targets: features with NaNs are handled by the model
+                # (normalize_features imputes them and flags them via the indicator channel),
+                # so dropping feature-NaN batches would throw away trainable missing signal.
+                if torch.isnan(data[1]).any():
                     continue
                 targets = full_data["target_y"].to(device)
 
                 if regression_task:
-                    y_mean = data[1].mean(dim=1, keepdim=True)
-                    y_std = data[1].std(dim=1, keepdim=True) + 1e-8
-                    y_norm = (data[1] - y_mean) / y_std
+                    y_mean, y_std = compute_target_stats_torch(data[1])
+                    y_norm = normalize_targets(data[1], y_mean, y_std)
                     data = (data[0], y_norm)
 
                 output = model(data, train_test_split_index=train_test_split_index)
                 targets = targets[:, train_test_split_index:]
                 if regression_task:
-                    targets = (targets - y_mean) / y_std
+                    targets = normalize_targets(targets, y_mean, y_std)
                 if classification_task:
                     targets = targets.reshape((-1,)).to(torch.long)
                     output = output.view(-1, output.shape[-1])
