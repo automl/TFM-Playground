@@ -400,9 +400,8 @@ class NanoTabICLPrior(Prior):
                 raise ValueError(f"classification needs at least 2 classes, not {self.config.max_num_classes}")
             if self.config.max_row_permutations < 1:
                 raise ValueError(f"row permutations must be at least 1, not {self.config.max_row_permutations}")
-            min_num_split_rows = min(min_num_train_rows, min_num_test_rows)
-            if min_num_split_rows < self.config.max_num_classes:
-                raise ValueError(f"{min_num_split_rows} train or test rows cannot hold {self.config.max_num_classes} classes")
+            if min_num_train_rows < self.config.max_num_classes:
+                raise ValueError(f"{min_num_train_rows} train rows cannot hold {self.config.max_num_classes} classes")
 
     def batch_hyperparameters(self) -> None:
         """
@@ -451,7 +450,7 @@ class NanoTabICLPrior(Prior):
             if self.problem == "regression":
                 return x, y
             for _ in range(self.max_row_permutations):
-                if len(y.unique()) == len(y[: self.sep].unique()) == len(y[self.sep :].unique()):
+                if len(y.unique()) == len(y[: self.sep].unique()):
                     return x, y
                 perm = torch.randperm(y.shape[0])
                 x, y = x[perm], y[perm]
