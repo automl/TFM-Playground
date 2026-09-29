@@ -258,7 +258,12 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
-            attn_output, attn_map = self.self_attention_between_features(x, x, x)
+            # Only ask MultiheadAttention for the weights when capturing feature attention
+            # (interpretability). Otherwise need_weights=False lets PyTorch use
+            # scaled_dot_product_attention, which never materializes the (B*R*H, C, C) weights.
+            attn_output, attn_map = self.self_attention_between_features(
+                x, x, x, need_weights=self.save_feature_attention
+            )
             if self.save_feature_attention:
                 # attn_map is (B*R, C, C), already averaged over heads. Row -1 is the target
                 # column as query attending to every column; average it over samples -> (C,).
@@ -275,17 +280,20 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
+            # The weights are never used here, so never materialize them.
             # training data attends to itself
             x_left = self.self_attention_between_datapoints(
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
+                need_weights=False,
             )[0]
             # test data attends to the training data
             x_right = self.self_attention_between_datapoints(
                 x[:, train_test_split_index:],
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
+                need_weights=False,
             )[0]
             return torch.cat([x_left, x_right], dim=1) + x
 
