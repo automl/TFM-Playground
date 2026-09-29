@@ -44,6 +44,7 @@ def train(
     run_name: str = "tfmplayground",
     missing_rate_max: float = 0.0,
     widening: WideningConfig | None = None,
+    amp_dtype: torch.dtype | None = None,
 ):
     """
     Trains our model on the given prior using the given criterion.
@@ -60,6 +61,8 @@ def train(
             logging, validation, or other custom actions.
         ckpt (Dict[str, torch.Tensor], optional): A checkpoint dictionary containing the model and optimizer states,
             as well as the last completed epoch. If provided, training resumes from this checkpoint.
+        amp_dtype: (torch.dtype, optional) if set (e.g. torch.bfloat16), runs the forward pass under
+            torch.autocast with this dtype. Weights and optimizer state stay in fp32. None disables it.
 
     Returns:
         (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
@@ -125,7 +128,13 @@ def train(
                     y_norm = normalize_targets(data[1], y_mean, y_std)
                     data = (data[0], y_norm)
 
-                output = model(data, train_test_split_index=train_test_split_index)
+                # Mixed precision: matmuls/attention in amp_dtype, weights stay fp32. The loss is
+                # computed in fp32. bf16 has fp32's range, so no GradScaler is needed.
+                with torch.autocast(
+                    device_type=torch.device(device).type, dtype=amp_dtype, enabled=amp_dtype is not None
+                ):
+                    output = model(data, train_test_split_index=train_test_split_index)
+                output = output.float()
                 targets = targets[:, train_test_split_index:]
                 if regression_task:
                     targets = normalize_targets(targets, y_mean, y_std)
