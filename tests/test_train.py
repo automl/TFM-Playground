@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 
@@ -102,3 +104,22 @@ def test_train_widens_features_when_configured(tmp_path, monkeypatch):
     )
 
     assert total_loss != 0.0                     # trained on widened features, no crash
+
+
+def test_train_runs_with_bf16_autocast(tmp_path, monkeypatch):
+    """With amp_dtype=torch.bfloat16 the forward runs under autocast, the loss is finite and
+    the weights stay in fp32 (autocast never changes parameter dtypes).
+    """
+    monkeypatch.chdir(tmp_path)
+    model = _tiny_model()
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    prior = _MockPrior([_batch(x, y, y.clone(), tts=5)])
+
+    trained, total_loss = train(
+        model, prior, nn.CrossEntropyLoss(), epochs=1, device=torch.device("cpu"),
+        run_name="run", amp_dtype=torch.bfloat16,
+    )
+
+    assert math.isfinite(total_loss) and total_loss > 0
+    assert all(p.dtype == torch.float32 for p in trained.parameters())
