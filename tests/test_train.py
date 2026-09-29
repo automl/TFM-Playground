@@ -123,3 +123,24 @@ def test_train_runs_with_bf16_autocast(tmp_path, monkeypatch):
 
     assert math.isfinite(total_loss) and total_loss > 0
     assert all(p.dtype == torch.float32 for p in trained.parameters())
+
+
+def test_train_warmup_shrinks_first_update(tmp_path, monkeypatch):
+    """With a long warmup the first optimizer step uses a tiny fraction of lr, so the weights
+    move much less than without warmup, starting from the same initialization.
+    """
+    monkeypatch.chdir(tmp_path)
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+
+    def weight_change(warmup_steps):
+        model = _tiny_model()                          # same seed -> same init every call
+        before = [p.detach().clone() for p in model.parameters()]
+        prior = _MockPrior([_batch(x, y, y.clone(), tts=5)])
+        trained, _ = train(
+            model, prior, nn.CrossEntropyLoss(), epochs=1, device=torch.device("cpu"),
+            run_name="run", warmup_steps=warmup_steps,
+        )
+        return sum((p.detach() - b).abs().sum().item() for p, b in zip(trained.parameters(), before))
+
+    assert weight_change(warmup_steps=1000) < weight_change(warmup_steps=0)

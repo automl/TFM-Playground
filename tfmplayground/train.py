@@ -45,6 +45,7 @@ def train(
     missing_rate_max: float = 0.0,
     widening: WideningConfig | None = None,
     amp_dtype: torch.dtype | None = None,
+    warmup_steps: int = 0,
 ):
     """
     Trains our model on the given prior using the given criterion.
@@ -63,6 +64,8 @@ def train(
             as well as the last completed epoch. If provided, training resumes from this checkpoint.
         amp_dtype: (torch.dtype, optional) if set (e.g. torch.bfloat16), runs the forward pass under
             torch.autocast with this dtype. Weights and optimizer state stay in fp32. None disables it.
+        warmup_steps: (int) number of optimizer steps of linear learning-rate warmup, from ~0 up to lr.
+            Counted in optimizer steps, i.e. batches / accumulate_gradients. 0 disables it.        
 
     Returns:
         (torch.Tensor) a tensor of shape (num_rows, batch_size, num_features, embedding_size)
@@ -76,7 +79,9 @@ def train(
     if not device:
         device = get_default_device()
     model.to(device)
-    optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
+    optimizer = schedulefree.AdamWScheduleFree(
+        model.parameters(), lr=lr, weight_decay=0.0, warmup_steps=warmup_steps
+    )
     if ckpt:
         optimizer.load_state_dict(ckpt["optimizer"])
     classification_task = isinstance(criterion, nn.CrossEntropyLoss)
