@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
+from torch.utils.checkpoint import checkpoint
 
 
 class NanoTabPFNModel(nn.Module):
@@ -33,6 +34,10 @@ class NanoTabPFNModel(nn.Module):
         # so the normal prediction path is unchanged.
         self.save_embeddings = False
         self.embeddings: torch.Tensor | None = None
+        
+        # Opt-in activation checkpointing: during training, store only each block's input
+        # and recompute the block in the backward pass. Trades ~30% compute for memory.
+        self.gradient_checkpointing = False
 
     # TODO: consider getting rid of this and just provide a single interface
     def forward(self, *args, **kwargs) -> torch.Tensor:
@@ -90,7 +95,10 @@ class NanoTabPFNModel(nn.Module):
         src = torch.cat([x_src, y_src], 2)
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
-            src = block(src, train_test_split_index=train_test_split_index)
+            if self.gradient_checkpointing and self.training and torch.is_grad_enabled():
+                src = checkpoint(block, src, train_test_split_index, use_reentrant=False)
+            else:
+                src = block(src, train_test_split_index=train_test_split_index)
         if self.save_embeddings:
             # per-row target-token embedding (B, R, E), before the decoder. Covers both train
             # and test rows; the caller slices whichever it needs.
