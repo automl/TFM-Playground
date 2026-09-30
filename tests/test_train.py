@@ -226,3 +226,38 @@ def test_train_skipped_batch_does_not_shift_accumulation(tmp_path, monkeypatch):
           device=torch.device("cpu"), run_name="run")
 
     assert len(steps) == 1
+
+
+def test_train_keeps_snapshots_every_n_epochs(tmp_path, monkeypatch):
+    """snapshot_every=2 over 4 epochs keeps epoch_2.pth and epoch_4.pth next to the
+    latest checkpoint, and no snapshot for the other epochs."""
+    monkeypatch.chdir(tmp_path)
+    torch.manual_seed(0)
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    prior = _MockPrior([_batch(x, y, y.clone(), tts=5)])
+
+    train(_tiny_model(), prior, nn.CrossEntropyLoss(), epochs=4, device=torch.device("cpu"),
+          run_name="run", snapshot_every=2)
+
+    work_dir = tmp_path / "workdir" / "run"
+    assert (work_dir / "latest_checkpoint.pth").exists()
+    assert (work_dir / "epoch_2.pth").exists() and (work_dir / "epoch_4.pth").exists()
+    assert not (work_dir / "epoch_1.pth").exists() and not (work_dir / "epoch_3.pth").exists()
+    assert torch.load(work_dir / "epoch_2.pth", weights_only=False)["epoch"] == 2
+
+
+def test_train_logs_every_n_batches(tmp_path, monkeypatch, capsys):
+    """log_every=2 over 4 batches prints exactly 2 step logs within the epoch."""
+    monkeypatch.chdir(tmp_path)
+    torch.manual_seed(0)
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    prior = _MockPrior([_batch(x, y, y.clone(), tts=5) for _ in range(4)])
+
+    train(_tiny_model(), prior, nn.CrossEntropyLoss(), epochs=1, device=torch.device("cpu"),
+          run_name="run", log_every=2)
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("epoch 1 | batch")]
+    assert len(lines) == 2
+    assert "batch 2/4" in lines[0] and "batch 4/4" in lines[1]
