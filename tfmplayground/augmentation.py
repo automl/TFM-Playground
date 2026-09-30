@@ -80,6 +80,7 @@ def add_widening_features(
 
     # Feature-dependent noise: std of each new feature over the samples axis.
     stds = x_wide.std(dim=-2, keepdim=True)
+    stds = torch.where(stds == 0, torch.ones_like(stds), stds)  # columnas nulas → ruido puro
     noise = torch.randn(x_wide.shape, generator=generator, device=x.device, dtype=x.dtype) * (noise_std * stds)
     x_wide = x_wide + noise
 
