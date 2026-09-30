@@ -119,6 +119,13 @@ class NanoTabPFNModel(nn.Module):
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             if self.gradient_checkpointing and self.training and torch.is_grad_enabled():
+                # Checkpointing keeps each block's input alive until the backward pass. Under
+                # autocast that input is fp32 (it is a LayerNorm output), so cast it to the
+                # autocast dtype first: half the stored memory. Only affects checkpointed
+                # mixed-precision training; inference and fp32 training are unchanged.
+                device_type = src.device.type
+                if torch.is_autocast_enabled(device_type):
+                    src = src.to(torch.get_autocast_dtype(device_type))
                 src = checkpoint(block, src, train_test_split_index, use_reentrant=False)
             else:
                 src = block(src, train_test_split_index=train_test_split_index)
