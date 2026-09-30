@@ -144,3 +144,35 @@ def test_train_warmup_shrinks_first_update(tmp_path, monkeypatch):
         return sum((p.detach() - b).abs().sum().item() for p, b in zip(trained.parameters(), before))
 
     assert weight_change(warmup_steps=1000) < weight_change(warmup_steps=0)
+
+
+import pytest
+
+
+@pytest.mark.parametrize("prob, expected_calls", [(1.0, 0), (0.0, 4)])
+def test_train_prob_no_widening_controls_widening(tmp_path, monkeypatch, prob, expected_calls):
+    """prob_no_widening=1 never widens (narrow tables); 0 widens every batch as before."""
+    import tfmplayground.train as train_module
+    from tfmplayground.train import WideningConfig
+
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    real = train_module.add_mixed_widening_features
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(train_module, "add_mixed_widening_features", spy)
+
+    model = _tiny_model()
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    prior = _MockPrior([_batch(x, y, y.clone(), tts=5) for _ in range(4)])
+
+    train(
+        model, prior, nn.CrossEntropyLoss(), epochs=1, device=torch.device("cpu"), run_name="run",
+        widening=WideningConfig(add_features_min=10, add_features_max=10, prob_no_widening=prob),
+    )
+
+    assert len(calls) == expected_calls
