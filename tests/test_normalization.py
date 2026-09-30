@@ -81,8 +81,7 @@ def test_pad_targets_fills_test_positions_with_train_mean():
     num_rows = 5
     n_train = y_train.shape[1]
 
-    padded = pad_targets(y_train, num_rows).squeeze(-1).squeeze(-1)  # -> (1, 5)
-    values = padded.flatten()
+    values = pad_targets(y_train, num_rows)[..., 0].flatten()  # value channel -> (5,)
 
     train_mean = y_train.mean()  # (2 + 4 + 6) / 3 = 4.0
 
@@ -90,6 +89,24 @@ def test_pad_targets_fills_test_positions_with_train_mean():
     assert torch.allclose(values[:n_train], torch.tensor([2.0, 4.0, 6.0]), atol=1e-6)
     # Test positions are filled with the train mean, exactly.
     assert torch.allclose(values[n_train:], torch.full((num_rows - n_train,), train_mean.item()), atol=1e-6)
+
+
+def test_pad_targets_marks_test_rows_with_indicator():
+    """pad_targets adds a second channel that is 0 on train rows and 1 on test rows, so a
+    test placeholder equal to a real label (mean 1.0 with classes 0, 1, 2) is still
+    distinguishable from a train row of that class.
+    """
+    y_train = torch.tensor([[0.0], [1.0], [2.0]]).unsqueeze(0)  # (1, 3, 1), mean 1.0
+    num_rows = 5
+
+    padded = pad_targets(y_train, num_rows)
+
+    assert padded.shape == (1, num_rows, 1, 2)
+    indicator = padded[..., 1].flatten()
+    assert torch.equal(indicator, torch.tensor([0.0, 0.0, 0.0, 1.0, 1.0]))
+    # The train row with label 1 and a test row have the same value but differ in the indicator.
+    assert padded[0, 1, 0, 0] == padded[0, 3, 0, 0]
+    assert not torch.equal(padded[0, 1, 0], padded[0, 3, 0])
 
 
 def test_target_encoder_forward_embeds_padded_targets():
