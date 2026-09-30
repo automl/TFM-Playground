@@ -36,6 +36,31 @@ def _migrate_feature_encoder_weights(model_state: dict) -> dict:
     return model_state
 
 
+def _migrate_state_dict(model_state: dict) -> dict:
+    """Makes a checkpoint from an older architecture load into the current model, preserving
+    its function exactly:
+    - feature encoder [E, 1] -> [E, 2], see _migrate_feature_encoder_weights;
+    - target encoder [E, 1] -> [E, 2]: the new test-row indicator channel starts at zero, so
+      the embedding equals the old one;
+    - column embedding: absent in old checkpoints, added with zero weight and bias, so it adds
+      nothing to the feature embeddings.
+    A checkpoint already in the current format is returned unchanged.
+    """
+    model_state = _migrate_feature_encoder_weights(model_state)
+    key = "target_encoder.linear_layer.weight"
+    weight = model_state.get(key)
+    if weight is not None and weight.shape[1] == 1:
+        model_state = {**model_state, key: torch.cat([weight, torch.zeros_like(weight)], dim=1)}
+    if "column_embedding.weight" not in model_state:
+        embedding_size = model_state["feature_encoder.linear_layer.weight"].shape[0]
+        model_state = {
+            **model_state,
+            "column_embedding.weight": torch.zeros(embedding_size, embedding_size // 4),
+            "column_embedding.bias": torch.zeros(embedding_size),
+        }
+    return model_state
+
+
 def init_model_from_state_dict_file(file_path):
     """
     reads model architecture from state dict, instantiates the architecture and loads the weights
@@ -48,7 +73,7 @@ def init_model_from_state_dict_file(file_path):
         num_layers=state_dict["architecture"]["num_layers"],
         num_outputs=state_dict["architecture"]["num_outputs"],
     )
-    model.load_state_dict(_migrate_feature_encoder_weights(state_dict["model"]))
+    model.load_state_dict(_migrate_state_dict(state_dict["model"]))
     return model
 
 

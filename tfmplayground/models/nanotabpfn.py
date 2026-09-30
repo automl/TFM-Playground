@@ -8,6 +8,9 @@ from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 from torch.utils.checkpoint import checkpoint
 
+# Fixed seed of the per-column random vectors (see NanoTabPFNModel.add_column_embeddings).
+COLUMN_EMBEDDING_SEED = 42
+
 
 class NanoTabPFNModel(nn.Module):
     def __init__(
@@ -21,6 +24,9 @@ class NanoTabPFNModel(nn.Module):
         self.num_layers = num_layers
         self.num_outputs = num_outputs
         self.feature_encoder = FeatureEncoder(embedding_size)
+        # Projects a fixed random vector per feature column into the embedding space (TabPFNv2's
+        # "subspace" feature positional embedding), see add_column_embeddings.
+        self.column_embedding = nn.Linear(embedding_size // 4, embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
@@ -75,6 +81,22 @@ class NanoTabPFNModel(nn.Module):
             # case model((x,y), train_test_split_index=None)
             return self._forward(*args, **kwargs)
 
+    def add_column_embeddings(self, x: torch.Tensor) -> torch.Tensor:
+        """Adds a fixed random vector per feature column, projected by a learned linear layer, as
+        TabPFNv2 does, so that columns with similar values stay distinguishable in the attention
+        between features. The vectors come from a fixed seed and are generated on the CPU, so they
+        are identical across calls and devices (a model trained on GPU sees the same vectors on
+        CPU). Training shuffles the column order, so they act as random column identifiers.
+
+        Args:
+            x: (torch.Tensor) feature embeddings of shape (batch_size, num_rows, num_features, embedding_size)
+        Returns:
+            (torch.Tensor) same shape, with each column's vector added to all of its cells
+        """
+        generator = torch.Generator().manual_seed(COLUMN_EMBEDDING_SEED)
+        embs = torch.randn(x.shape[2], self.embedding_size // 4, generator=generator).to(x.device)
+        return x + self.column_embedding(embs).to(x.dtype)[None, None]
+
     def _forward(
         self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int, num_mem_chunks: int = 1
     ) -> torch.Tensor:
@@ -86,6 +108,7 @@ class NanoTabPFNModel(nn.Module):
         # from here on B=Batches, R=Rows, C=Columns, E=embedding size
         # converts scalar values to embeddings, so (B,R,C-1) -> (B,R,C-1,E)
         x_src = self.feature_encoder(x_src, train_test_split_index)
+        x_src = self.add_column_embeddings(x_src)
         num_rows = x_src.shape[1]
         # padds the y_train up to y by using the mean,
         # then converts scalar values to embeddings (B,R,1,E)
@@ -173,27 +196,35 @@ class FeatureEncoder(nn.Module):
 def pad_targets(y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
     """
     Pads y_train up to the full row count by filling the (unknown) test positions with
-    the per-dataset train-label mean. This is the target preprocessing, kept separate
-    from the embedding so it can be reused and tested on its own.
+    the per-dataset train-label mean, and adds a per-row indicator that is 1.0 on the test
+    positions, as TabPFNv2 does. Without it a test row whose placeholder equals a real label
+    (e.g. mean 1.0 with classes 0, 1, 2) would look exactly like a train row of that class.
+    This is the target preprocessing, kept separate from the embedding so it can be reused
+    and tested on its own.
 
     Args:
         y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
         num_rows: (int) the full length of y (train + test)
     Returns:
-        (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, 1), padded
+        (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, 2), whose last axis is
+                       [padded_value, is_test_indicator]
     """
-    # nan padding & nan handler instead?
     mean = torch.mean(y_train, axis=1, keepdim=True)
     padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
-    y = torch.cat([y_train, padding], dim=1)
-    return y.unsqueeze(-1)
+    y = torch.cat([y_train, padding], dim=1)  # (B, R, 1)
+    is_test = torch.zeros_like(y)
+    is_test[:, y_train.shape[1]:] = 1.0
+    return torch.cat([y, is_test], dim=-1).unsqueeze(2)  # (B, R, 1, 2)
 
 
 class TargetEncoder(nn.Module):
     def __init__(self, embedding_size: int):
-        """Creates the linear layer that we will use to embed our targets."""
+        """Creates the linear layer that we will use to embed our targets.
+
+        Input width is 2 because pad_targets emits [value, is_test_indicator] per row.
+        """
         super().__init__()
-        self.linear_layer = nn.Linear(1, embedding_size)
+        self.linear_layer = nn.Linear(2, embedding_size)
 
     def forward(self, y_train: torch.Tensor, num_rows: int) -> torch.Tensor:
         """

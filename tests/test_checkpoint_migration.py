@@ -1,7 +1,11 @@
 import torch
 from torch import nn
 
-from tfmplayground.interface import _migrate_feature_encoder_weights, init_model_from_state_dict_file
+from tfmplayground.interface import (
+    _migrate_feature_encoder_weights,
+    _migrate_state_dict,
+    init_model_from_state_dict_file,
+)
 from tfmplayground.models.nanotabpfn import FeatureEncoder, NanoTabPFNModel, normalize_features
 
 
@@ -96,3 +100,33 @@ def test_init_model_from_state_dict_file_migrates_old_checkpoint(tmp_path):
     model = init_model_from_state_dict_file(str(path))
 
     assert model.feature_encoder.linear_layer.weight.shape[1] == 2
+
+
+def test_migrate_state_dict_is_function_preserving_for_pre_v2_input_checkpoints():
+    """A checkpoint from before the target test-indicator and the column embeddings (target
+    encoder [E, 1], no column_embedding keys) loads after migration and predicts exactly like
+    the current model with those two components switched off (zero weights).
+    """
+    torch.manual_seed(0)
+    kwargs = dict(embedding_size=16, num_attention_heads=2, mlp_hidden_size=32, num_layers=1, num_outputs=3)
+    reference = NanoTabPFNModel(**kwargs).eval()
+    with torch.no_grad():
+        reference.target_encoder.linear_layer.weight[:, 1].zero_()   # indicator channel off
+        reference.column_embedding.weight.zero_()                    # column embeddings off
+        reference.column_embedding.bias.zero_()
+
+    state = reference.state_dict()
+    key = "target_encoder.linear_layer.weight"
+    old_state = {k: v for k, v in state.items() if not k.startswith("column_embedding.")}
+    old_state[key] = state[key][:, :1].clone()                       # old [E, 1] target encoder
+
+    migrated = NanoTabPFNModel(**kwargs).eval()
+    migrated.load_state_dict(_migrate_state_dict(old_state))         # must not raise
+
+    x = torch.randn(1, 6, 4)
+    y = torch.randint(0, 3, (1, 4)).float()
+    with torch.no_grad():
+        out_ref = reference((x, y), train_test_split_index=4)
+        out_mig = migrated((x, y), train_test_split_index=4)
+    assert torch.allclose(out_ref, out_mig, atol=1e-6)
+    assert torch.all(migrated.column_embedding.weight == 0)
