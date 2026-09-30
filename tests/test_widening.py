@@ -52,3 +52,12 @@ def test_widening_rejects_invalid_sparsity():
     x = torch.randn(2, 30, 4)
     with pytest.raises(ValueError):
         add_widening_features(x, 5, sparsity=1.5, noise_std=0.1)
+
+
+def test_widening_all_zero_projection_becomes_pure_noise():
+    """With no kept weights the projection is 0; like the reference implementation, the
+    noise must still be added (std treated as 1), giving pure-noise features, not constants."""
+    torch.manual_seed(0)
+    x = torch.randn(2, 30, 4)
+    out = add_widening_features(x, num_features_to_add=6, sparsity=0.0, noise_std=1.0, include_original_prob=0.0)
+    assert torch.all(out.std(dim=-2) > 0)
