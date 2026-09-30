@@ -176,3 +176,53 @@ def test_train_prob_no_widening_controls_widening(tmp_path, monkeypatch, prob, e
     )
 
     assert len(calls) == expected_calls
+
+
+def test_train_mean_loss_ignores_skipped_batches(tmp_path, monkeypatch):
+    """The returned loss is the mean over batches actually trained on; a skipped
+    (NaN-target) batch must not dilute it."""
+    monkeypatch.chdir(tmp_path)
+    torch.manual_seed(0)
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    y_nan = y.clone()
+    y_nan[0, 0] = float("nan")
+    good = _batch(x, y, y.clone(), tts=5)
+    bad = _batch(x, y_nan, y_nan.clone(), tts=5)
+
+    _, loss_one = train(_tiny_model(), _MockPrior([good]), nn.CrossEntropyLoss(), epochs=1,
+                        device=torch.device("cpu"), run_name="a")
+    _, loss_with_skip = train(_tiny_model(), _MockPrior([good, bad]), nn.CrossEntropyLoss(), epochs=1,
+                              device=torch.device("cpu"), run_name="b")
+
+    assert loss_with_skip == pytest.approx(loss_one)
+
+
+def test_train_skipped_batch_does_not_shift_accumulation(tmp_path, monkeypatch):
+    """With accumulate_gradients=2 and a skipped batch in the middle, the optimizer still steps
+    once per 2 trained batches: [good, bad, good, bad] -> exactly 1 step."""
+    import schedulefree
+
+    monkeypatch.chdir(tmp_path)
+    torch.manual_seed(0)
+    x = torch.randn(1, 8, 3)
+    y = torch.randint(0, 10, (1, 8)).float()
+    y_nan = y.clone()
+    y_nan[0, 0] = float("nan")
+    good = _batch(x, y, y.clone(), tts=5)
+    bad = _batch(x, y_nan, y_nan.clone(), tts=5)
+
+    steps = []
+    real_step = schedulefree.AdamWScheduleFree.step
+
+    def counting_step(self, *args, **kwargs):
+        steps.append(1)
+        return real_step(self, *args, **kwargs)
+
+    monkeypatch.setattr(schedulefree.AdamWScheduleFree, "step", counting_step)
+
+    prior = _MockPrior([good, bad, good, bad])  # num_steps=4, divisible by 2
+    train(_tiny_model(), prior, nn.CrossEntropyLoss(), epochs=1, accumulate_gradients=2,
+          device=torch.device("cpu"), run_name="run")
+
+    assert len(steps) == 1
