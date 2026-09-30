@@ -90,12 +90,15 @@ def train(
 
     assert prior.num_steps % accumulate_gradients == 0, "num_steps must be divisible by accumulate_gradients"
 
+    mean_loss = float("nan")
     try:
         for epoch in range(ckpt["epoch"] + 1 if ckpt else 1, epochs + 1):
             epoch_start_time = time.time()
             model.train()  # Turn on the train mode
             optimizer.train()
             total_loss = 0.0
+            num_batches = 0  # batches actually trained on (batches with NaN targets are skipped)
+            optimizer.zero_grad()  # do not carry a partial accumulation over from the previous epoch
             for i, full_data in enumerate(prior):
                 train_test_split_index = full_data["train_test_split_index"]
                 x = full_data["x"].to(device)
@@ -156,14 +159,17 @@ def train(
                 loss = losses.mean() / accumulate_gradients
                 loss.backward()
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
+                num_batches += 1
 
-                if (i + 1) % accumulate_gradients == 0:
+                # Step on trained batches, not on the loop index: a skipped batch must not shift
+                # the accumulation groups.
+                if num_batches % accumulate_gradients == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     optimizer.step()
                     optimizer.zero_grad()
 
             end_time = time.time()
-            mean_loss = total_loss / len(prior)
+            mean_loss = total_loss / max(num_batches, 1)
             model.eval()
             optimizer.eval()
 
@@ -200,4 +206,4 @@ def train(
         for callback in callbacks:
             callback.close()
 
-    return (model.module if multi_gpu else model), total_loss
+    return (model.module if multi_gpu else model), mean_loss
