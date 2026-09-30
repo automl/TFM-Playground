@@ -1,7 +1,12 @@
 """Preentrenamiento. Cada experimento es un comando; los valores por defecto son la línea base.
 
-Ejemplo, desde la raíz del repo:
+Ejemplos, desde la raíz del repo:
     nohup python -u experiments/pretrain.py --gpu 6 --run-name mix_scm --prior-type mix_scm > workdir/mix_scm.log 2>&1 &
+    # continuar el mismo run si se cortó:
+    nohup python -u experiments/pretrain.py --gpu 6 --run-name mix_scm --prior-type mix_scm --resume >> workdir/mix_scm.log 2>&1 &
+    # run nuevo partiendo de los pesos de otro (continued pretraining):
+    nohup python -u experiments/pretrain.py --gpu 6 --run-name mlp_scm_w8k --add-features-max 8000 \\
+        --init-from workdir/mlp_scm/latest_checkpoint.pth > workdir/mlp_scm_w8k.log 2>&1 &
 """
 
 import os
@@ -17,6 +22,7 @@ from torch import nn
 
 from tfmplayground.callbacks import ConsoleLoggerCallback
 from tfmplayground.external_priors import TabICLPriorDataLoader
+from tfmplayground.interface import _migrate_state_dict
 from tfmplayground.models.nanotabpfn import NanoTabPFNModel
 from tfmplayground.train import WideningConfig, train
 
@@ -31,6 +37,8 @@ parser.add_argument("--lr", type=float, default=1e-4)
 parser.add_argument("--add-features-max", type=int, default=5000)
 parser.add_argument("--prob-no-widening", type=float, default=0.3)
 parser.add_argument("--missing-rate-max", type=float, default=0.1)
+parser.add_argument("--resume", action="store_true")  # continúa este run desde su latest_checkpoint.pth
+parser.add_argument("--init-from", default=None)  # pesos iniciales de otro checkpoint (continued pretraining)
 args = parser.parse_args()
 
 os.chdir(Path(__file__).resolve().parents[1])  # workdir/ siempre en la raíz del repo
@@ -67,6 +75,14 @@ model = NanoTabPFNModel(
 ).to(device)
 model.gradient_checkpointing = True
 
+ckpt = None
+if args.resume:
+    ckpt = torch.load(run_dir / "latest_checkpoint.pth", map_location=device, weights_only=False)
+    model.load_state_dict(ckpt["model"])
+elif args.init_from:
+    state = torch.load(args.init_from, map_location=device, weights_only=False)
+    model.load_state_dict(_migrate_state_dict(state["model"]))
+
 widening = WideningConfig(
     add_features_min=200,
     add_features_max=args.add_features_max,
@@ -86,6 +102,7 @@ trained_model, loss = train(
     lr=args.lr,
     device=device,
     callbacks=[ConsoleLoggerCallback()],
+    ckpt=ckpt,
     run_name=args.run_name,
     missing_rate_max=args.missing_rate_max,
     widening=widening,
