@@ -29,6 +29,7 @@ class WideningConfig:
     noise_max: float = 1.0
     include_original_prob: float = 0.5
     max_cats: int = 20
+    prob_no_widening: float = 0.0  # fracción de batches sin widening (tablas estrechas)
 
 def train(
     model: NanoTabPFNModel,
@@ -101,7 +102,11 @@ def train(
                 # Feature widening (HDLSS prior): per batch, sample how many features to add and
                 # the sparsity/noise, then generate them per dataset (Algorithm 1 for continuous
                 # features, Algorithm 2 for categorical). No-op when disabled.
-                if widening is not None and widening.add_features_max > 0:
+                if (
+                    widening is not None
+                    and widening.add_features_max > 0
+                    and (widening.prob_no_widening == 0 or torch.rand(1).item() >= widening.prob_no_widening)
+                ):
                     num_add = int(
                         torch.randint(widening.add_features_min, widening.add_features_max + 1, (1,)).item()
                     )
