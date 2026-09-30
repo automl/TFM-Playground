@@ -51,6 +51,9 @@ class TabICLPriorDataLoader(DataLoader):
         active_features = active_features[0].item()
         x = x[:, :, :active_features]
         train_test_split_index = train_size[0].item()
+        # graph_scm returns the class labels as int64 (mlp_scm/tree_scm as float); the model averages
+        # the train labels (pad_targets), so hand float targets to train() for every prior type.
+        y = y.float()
         return dict(
             x=x.to(self.device),
             y=y.to(self.device),
