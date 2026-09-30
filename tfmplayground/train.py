@@ -47,6 +47,8 @@ def train(
     widening: WideningConfig | None = None,
     amp_dtype: torch.dtype | None = None,
     warmup_steps: int = 0,
+    snapshot_every: int = 0,
+    log_every: int = 0,
 ):
     """
     Trains our model on the given prior using the given criterion.
@@ -63,6 +65,11 @@ def train(
             logging, validation, or other custom actions.
         ckpt (Dict[str, torch.Tensor], optional): A checkpoint dictionary containing the model and optimizer states,
             as well as the last completed epoch. If provided, training resumes from this checkpoint.
+        snapshot_every: (int) besides latest_checkpoint.pth, which is overwritten every epoch, keep a
+            copy epoch_<n>.pth every snapshot_every epochs, so earlier models can be evaluated later.
+            0 disables it.
+        log_every: (int) print the mean training loss over the last log_every trained batches, so
+            progress is visible within an epoch. 0 disables it.
         amp_dtype: (torch.dtype, optional) if set (e.g. torch.bfloat16), runs the forward pass under
             torch.autocast with this dtype. Weights and optimizer state stay in fp32. None disables it.
         warmup_steps: (int) number of optimizer steps of linear learning-rate warmup, from ~0 up to lr.
@@ -98,6 +105,7 @@ def train(
             optimizer.train()
             total_loss = 0.0
             num_batches = 0  # batches actually trained on (batches with NaN targets are skipped)
+            window_loss = 0.0  # summed loss since the last step log (see log_every)
             optimizer.zero_grad()  # do not carry a partial accumulation over from the previous epoch
             for i, full_data in enumerate(prior):
                 train_test_split_index = full_data["train_test_split_index"]
@@ -160,6 +168,14 @@ def train(
                 loss.backward()
                 total_loss += loss.cpu().detach().item() * accumulate_gradients
                 num_batches += 1
+                window_loss += loss.cpu().detach().item() * accumulate_gradients
+                if log_every and num_batches % log_every == 0:
+                    print(
+                        f"epoch {epoch} | batch {num_batches}/{len(prior)} | "
+                        f"loss {window_loss / log_every:.4f} | {time.time() - epoch_start_time:.0f}s",
+                        flush=True,
+                    )
+                    window_loss = 0.0
 
                 # Step on trained batches, not on the loop index: a skipped batch must not shift
                 # the accumulation groups.
@@ -186,6 +202,8 @@ def train(
                 "optimizer": optimizer.state_dict(),
             }
             torch.save(training_state, work_dir + "/latest_checkpoint.pth")
+            if snapshot_every and epoch % snapshot_every == 0:
+                torch.save(training_state, f"{work_dir}/epoch_{epoch}.pth")
 
             for callback in callbacks:
                 if type(criterion) is FullSupportBarDistribution:
