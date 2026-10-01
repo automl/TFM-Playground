@@ -30,11 +30,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--run-name", required=True)
 parser.add_argument("--gpu", type=int, default=0)
 parser.add_argument("--prior-type", default="mlp_scm")  # mlp_scm, mix_scm, tree_scm, graph_scm
+parser.add_argument("--min-features", type=int, default=50)
+parser.add_argument("--max-features", type=int, default=350)
+parser.add_argument("--min-rows", type=int, default=40)
+parser.add_argument("--max-rows", type=int, default=300)
 parser.add_argument("--epochs", type=int, default=100)
 parser.add_argument("--batch-size", type=int, default=2)
 parser.add_argument("--accumulate", type=int, default=4)
 parser.add_argument("--lr", type=float, default=1e-4)
-parser.add_argument("--add-features-max", type=int, default=5000)
+parser.add_argument("--add-features-max", type=int, default=5000)  # 0 desactiva el widening
 parser.add_argument("--prob-no-widening", type=float, default=0.3)
 parser.add_argument("--missing-rate-max", type=float, default=0.1)
 parser.add_argument("--resume", action="store_true")  # continúa este run desde su latest_checkpoint.pth
@@ -54,10 +58,10 @@ MAX_CLASSES = 10
 prior = TabICLPriorDataLoader(
     num_steps=1000,  # batches por época
     batch_size=args.batch_size,
-    num_datapoints_min=40,
-    num_datapoints_max=300,
-    min_features=50,
-    max_features=350,
+    num_datapoints_min=args.min_rows,
+    num_datapoints_max=args.max_rows,
+    min_features=args.min_features,
+    max_features=args.max_features,
     max_num_classes=MAX_CLASSES,
     device=device,
     prior_type=args.prior_type,
