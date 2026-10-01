@@ -48,7 +48,9 @@ class TabICLPriorDataLoader(DataLoader):
 
     def tabicl_to_ours(self, d):
         x, y, active_features, seqlen, train_size = d
-        active_features = active_features[0].item()
+        # Datasets in a batch can keep different numbers of features after TabICL drops the constant
+        # ones (the rest is zero padding). Keep up to the widest, so no dataset loses real features.
+        active_features = int(active_features.max().item())
         x = x[:, :, :active_features]
         train_test_split_index = train_size[0].item()
         # graph_scm returns the class labels as int64 (mlp_scm/tree_scm as float); the model averages
@@ -61,8 +63,18 @@ class TabICLPriorDataLoader(DataLoader):
             train_test_split_index=train_test_split_index,
         )
 
+    def _next_valid_batch(self):
+        """Draws TabICL batches until one has at least one usable dataset, and drops the unusable
+        ones: datasets left without features (TabICL removed them all as constant) or marked as
+        failed (labels -100). Either would crash or corrupt training."""
+        while True:
+            x, y, active_features, seqlen, train_size = next(self.pd)
+            keep = (active_features > 0) & (y.reshape(y.shape[0], -1).min(dim=1).values >= 0)
+            if keep.any():
+                return self.tabicl_to_ours((x[keep], y[keep], active_features[keep], seqlen[keep], train_size[keep]))
+
     def __iter__(self):
-        return iter(self.tabicl_to_ours(next(self.pd)) for _ in range(self.num_steps))
+        return iter(self._next_valid_batch() for _ in range(self.num_steps))
 
     def __len__(self):
         return self.num_steps
