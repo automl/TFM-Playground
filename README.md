@@ -23,7 +23,7 @@ uv sync
 uv run python examples/pretraining_quickstart.py
 ```
 
-That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a CPU, from swappable configurations like these:
+That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
 
 ```python
 modelconfig = ...
