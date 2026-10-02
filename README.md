@@ -21,7 +21,7 @@ uv sync
 
 ### Quickstart
 
-This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
+This repository has no checkpoints yet.
 
 ```python
 model = pretrainTFM(
