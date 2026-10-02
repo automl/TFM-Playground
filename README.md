@@ -4,7 +4,7 @@
 
 # TFM-Playground
 
-## Many tabular foundation models. One interface. Training and inference.
+**Many tabular foundation models. One interface. Training and inference.**
 
 [![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
