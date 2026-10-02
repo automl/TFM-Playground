@@ -86,7 +86,7 @@ uv run python -m tfmplayground.priors --lib tabicl \
 ```bibtex
 @misc{tfmplayground2026,
   title        = {TFM-Playground},
-  author       = {The TFM-Playground Authors},
+  author       = {TFM-Playground Authors},
   year         = {2026},
   howpublished = {\url{https://github.com/automl/TFM-Playground}}
 }
