@@ -24,8 +24,6 @@ uv sync
 
 ### Quickstart
 
-This repository has no checkpoints yet.
-
 ```python
 model = pretrainTFM(
     problem="classification",
