@@ -84,7 +84,3 @@ uv run python -m tfmplayground.priors --lib tabicl \
   howpublished = {\url{https://github.com/automl/TFM-Playground}}
 }
 ```
-
-### License
-
-Apache 2.0, see [LICENSE](LICENSE). The vendored files name their own source and license at the top.
