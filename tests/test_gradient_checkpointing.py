@@ -78,3 +78,28 @@ def test_checkpointing_without_autocast_keeps_fp32_block_inputs():
     model((x, y), train_test_split_index=20)
 
     assert len(dtypes) == 3 and all(d == torch.float32 for d in dtypes)
+
+
+def test_inference_passes_num_mem_chunks_to_the_blocks_and_gives_the_same_output():
+    """num_mem_chunks given to the model reaches every transformer block (memory chunking in
+    inference), and chunking does not change the predictions."""
+    model = _small_model().eval()
+    seen = []
+    for block in model.transformer_blocks:
+        original = block.forward
+
+        def recording(src, *args, _original=original, **kwargs):
+            seen.append(kwargs.get("num_mem_chunks", 1))
+            return _original(src, *args, **kwargs)
+
+        block.forward = recording
+    x = torch.randn(1, 30, 5)
+    y = torch.randint(0, 3, (1, 20)).float()
+
+    with torch.no_grad():
+        out_plain = model((x, y), train_test_split_index=20, num_mem_chunks=1)
+        seen.clear()
+        out_chunked = model((x, y), train_test_split_index=20, num_mem_chunks=4)
+
+    assert seen == [4, 4, 4]
+    assert torch.allclose(out_plain, out_chunked, atol=1e-5)

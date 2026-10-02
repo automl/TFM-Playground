@@ -128,7 +128,7 @@ class NanoTabPFNModel(nn.Module):
                     src = src.to(torch.get_autocast_dtype(device_type))
                 src = checkpoint(block, src, train_test_split_index, use_reentrant=False)
             else:
-                src = block(src, train_test_split_index=train_test_split_index)
+                src = block(src, train_test_split_index=train_test_split_index, num_mem_chunks=num_mem_chunks)
         if self.save_embeddings:
             # per-row target-token embedding (B, R, E), before the decoder. Covers both train
             # and test rows; the caller slices whichever it needs.
