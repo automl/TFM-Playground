@@ -42,12 +42,10 @@ model = pretrainTFM(
 )
 ```
 
-Fully configurable examples are in [examples](examples):
+Find fully configurable examples in:
+- [examples/pretraining_classification.py](examples/pretraining_classification.py) 
+- [examples/pretraining_regression.py](examples/pretraining_regression.py)
 
-```
-uv run python examples/pretraining_classification.py
-uv run python examples/pretraining_regression.py
-```
 
 ### Models
 
