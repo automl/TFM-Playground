@@ -4,12 +4,14 @@
 
 # TFM-Playground
 
+## Many tabular foundation models. One interface. Training and inference.
+
 [![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 </div>
 
-A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for anyone who wants to see how these models work.
+A fully open source playground: five architectures, three priors, a training loop and an evaluation pipeline. It is a starting point for anyone who wants to see how these models work.
 
 ### Install
 
