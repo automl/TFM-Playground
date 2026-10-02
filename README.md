@@ -17,18 +17,6 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
-For the linter and the tests, add the dev group:
-
-```
-uv pip install -e . --group dev
-```
-
-pip works too, inside a python 3.12 environment:
-
-```
-pip install -e .
-```
-
 ### quickstart
 
 This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
