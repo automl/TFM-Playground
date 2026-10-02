@@ -1,7 +1,13 @@
+<div align="center">
+
+<img src="https://salihboraozturk.com/other/images/tfmp.png" width="120" alt="TFM-Playground">
+
 # TFM-Playground
 
 [![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+</div>
 
 The purpose of this repository is to provide a fully open source playground for tabular foundation models. It holds five model architectures behind one interface, together with live and dumped priors, a training loop, an evaluation pipeline and experiment tracking. You pretrain every model with the same function, on any prior, for classification or regression, and you predict with every model through the same two estimator classes. It is supposed to be a good starting point for students and researchers that are interested in learning about how tabular foundation models work under the hood.
 
