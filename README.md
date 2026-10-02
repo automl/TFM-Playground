@@ -64,7 +64,7 @@ uv run python examples/pretraining_regression.py
 - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) - nanotabicl - [repo](https://github.com/soda-inria/nanotabicl)
 - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 
-#### Dump
+#### Dumping
 
 - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py) - dump
 
