@@ -51,6 +51,8 @@ uv run python examples/pretraining_regression.py
 
 ### Models
 
+Each one is a thin adapter over upstream code, with a classifier and a regressor config.
+
 - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) - nanotabpfn - [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
 - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) - moddednanotabpfn - [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
 - [adapter](tfmplayground/models/nanotabicl.py) · [config](tfmplayground/configs/models.py) - nanotabicl - [repo](https://github.com/soda-inria/nanotabicl)
@@ -59,7 +61,11 @@ uv run python examples/pretraining_regression.py
 
 ### Priors
 
+Priors make the synthetic tables that pretraining learns from.
+
 #### On the fly
+
+Each batch is sampled when the training loop asks for it.
 
 - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) - nanotabicl - [repo](https://github.com/soda-inria/nanotabicl)
 - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
