@@ -9,7 +9,7 @@
 
 </div>
 
-The purpose of this repository is to provide a fully open source playground for tabular foundation models. It holds five model architectures behind one interface, together with live and dumped priors, a training loop, an evaluation pipeline and experiment tracking. It is supposed to be a good starting point for students and researchers that are interested in learning about how tabular foundation models work under the hood.
+A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for anyone who wants to see how these models work.
 
 ### Install
 
