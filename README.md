@@ -71,11 +71,15 @@ uv run python examples/pretraining_regression.py
 Priors can also be written to a dataset dump that you can use later:
 
 ```
-uv run python -m tfmplayground.priors --lib tabicl \
+uv run python -m tfmplayground.priors \
+       --lib tabicl \
        --prior_type mix_scm \
-       --num_batches 1000 --batch_size 4 \
-       --min_features 3 --max_features 3 \
-       --max_seq_len 50 --max_classes 3 \
+       --num_batches 1000 \
+       --batch_size 4 \
+       --min_features 3 \
+       --max_features 3 \
+       --max_seq_len 50 \
+       --max_classes 3 \
        --save_path tabicl_4k_50x3.h5
 ```
 
