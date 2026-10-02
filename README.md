@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://salihboraozturk.com/other/images/tfmp.png" width="120" alt="TFM-Playground">
+<img src="https://salihboraozturk.com/other/images/tfmp.png" width="200" alt="TFM-Playground">
 
 # TFM-Playground
 
