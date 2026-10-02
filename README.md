@@ -75,15 +75,10 @@ Each batch is sampled when the training loop asks for it.
 Priors can also be written to a dump that you can use later:
 
 ```
-uv run python -m tfmplayground.priors \
-       --lib tabicl \
-       --prior_type mix_scm \
-       --num_batches 1000 \
-       --batch_size 4 \
-       --min_features 3 \
-       --max_features 3 \
-       --max_seq_len 50 \
-       --max_classes 3 \
+uv run python -m tfmplayground.priors --lib tabicl --prior_type mix_scm \
+       --num_batches 1000 --batch_size 4 \
+       --min_features 3 --max_features 3 \
+       --max_seq_len 50 --max_classes 3 \
        --save_path dump-d1000b4r50c3-3-tabicl.h5
 ```
 
