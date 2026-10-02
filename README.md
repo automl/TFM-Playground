@@ -12,10 +12,11 @@ The project needs python 3.12, and it gets three of its dependencies from git.
 ```
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
-uv venv --python 3.12
+uv sync
 source .venv/bin/activate
-uv pip install -e .
 ```
+
+`uv sync` makes the environment, takes a python 3.12, and installs the project in editable mode.
 
 ### quickstart
 
