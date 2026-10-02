@@ -28,7 +28,6 @@ model = pretrainTFM(
     problem="classification",
     model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
     prior=NanoTabICLPrior(config=NanoTabICLClassificationPriorConfig(max_num_features=5)),
-    training=ClassificationTrainingConfig(batch_size=1, steps=2, epochs=2),
 )
 
 X, y = load_breast_cancer(return_X_y=True)
@@ -37,7 +36,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_
 predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
 
-Two epochs take about 10 seconds on a cpu, and the model that they give is still near random. The two files in [examples](examples) show settings that make sense:
+The defaults run 10000 epochs of 100 steps, and ctrl-c stops the loop and keeps the model. The two files in [examples](examples) show settings that make sense:
 
 ```
 uv run python examples/pretraining_classification.py
