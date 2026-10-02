@@ -115,7 +115,7 @@ Two dumps are available for download. The [classification dump](https://ml.infor
 The priors package also writes dumps of its own, from the ticl, tabicl and tabpfn libraries:
 
 ```
-python -m tfmplayground.priors --lib tabicl \
+uv run python -m tfmplayground.priors --lib tabicl \
        --prior_type mix_scm \
        --num_batches 1000 --batch_size 4 \
        --min_features 3 --max_features 3 \
