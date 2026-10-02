@@ -81,7 +81,7 @@ uv run python -m tfmplayground.priors --lib tabicl --prior_type mix_scm --num_ba
 These priors can be dumped:
 
 - ticl - [adapter](tfmplayground/priors/ticl.py) · [repo](https://github.com/microsoft/ticl)
-- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2502.05564)
 - tabpfn - [adapter](tfmplayground/priors/tabpfn.py) · [repo](https://github.com/automl/tabpfn-v1-prior)
 
 Load a dump with:
