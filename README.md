@@ -44,9 +44,7 @@ model = pretrainTFM(
 X, y = load_breast_cancer(return_X_y=True)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
 
-classifier = TabularClassifier(model)
-classifier.fit(X_train, y_train)
-probabilities = classifier.predict_proba(X_test)
+predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
 
 Two epochs take about 10 seconds on a cpu, and the model that they give is still near random. The two files in [examples](examples) show settings that make sense:
