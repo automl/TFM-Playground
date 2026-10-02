@@ -51,7 +51,7 @@ uv run python examples/pretraining_regression.py
 
 ### Models
 
-Each one is a thin adapter over upstream code, with a classifier and a regressor config.
+Each one is an adapter over upstream code, with a classifier and a regressor config.
 
 - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) - nanotabpfn - [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
 - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) - moddednanotabpfn - [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
@@ -61,7 +61,7 @@ Each one is a thin adapter over upstream code, with a classifier and a regressor
 
 ### Priors
 
-Priors make the synthetic tables that pretraining learns from.
+Priors generate the synthetic tables.
 
 #### On the fly
 
@@ -78,13 +78,13 @@ Priors can also be written to a dump that you can use later:
 uv run python -m tfmplayground.priors --lib tabicl --prior_type mix_scm --num_batches 1000 --batch_size 4 --max_classes 3 --max_seq_len 50 --min_features 3 --max_features 3 --save_path dump-d1000b4r50c3-3-tabicl.h5
 ```
 
-For now these priors can be dumped:
+These priors can be dumped:
 
 - [adapter](tfmplayground/priors/ticl.py) - ticl - [repo](https://github.com/microsoft/ticl)
 - [adapter](tfmplayground/priors/tabicl.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - [adapter](tfmplayground/priors/tabpfn.py) - tabpfn - [repo](https://github.com/automl/tabpfn-v1-prior)
 
-To use a dump later:
+And used later with:
 
 - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py) - dump
 
