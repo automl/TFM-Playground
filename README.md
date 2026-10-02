@@ -36,7 +36,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_
 predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
 
-One [example](examples) per problem, with more configs:
+One [example](examples) per problem with more configurations:
 
 ```
 uv run python examples/pretraining_classification.py
