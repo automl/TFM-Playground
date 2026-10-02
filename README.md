@@ -11,7 +11,9 @@
 
 </div>
 
-A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for students who want to see how these models work, and a base for research on top of them.
+A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline.
+
+It is a starting point for anyone who wants to see how these models work, and a base for research on top of them.
 
 ### Quickstart
 
