@@ -13,15 +13,13 @@ The purpose of this repository is to provide a fully open source playground for 
 
 ### Install
 
-The project needs python 3.12, and it gets three of its dependencies from git.
-
 ```
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
 uv sync
 ```
 
-`uv sync` makes the environment, takes a python 3.12, and installs the project in editable mode. `uv run` then runs a command inside it, with no activation.
+`uv run` then runs a command inside the environment, with no activation.
 
 ### Quickstart
 
