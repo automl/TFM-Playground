@@ -61,7 +61,7 @@ Each one is an adapter over upstream code, with a classifier and a regressor con
 
 ### Priors
 
-Priors generate the synthetic tables.
+Priors generate the synthetic tables for pretraining.
 
 #### On the fly
 
@@ -84,7 +84,7 @@ These priors can be dumped:
 - [adapter](tfmplayground/priors/tabicl.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - [adapter](tfmplayground/priors/tabpfn.py) - tabpfn - [repo](https://github.com/automl/tabpfn-v1-prior)
 
-And used later with:
+And read back with:
 
 - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py) - dump
 
