@@ -74,6 +74,10 @@ uv run python -m tfmplayground.priors --lib tabicl \
        --save_path tabicl_4k_50x3.h5
 ```
 
+- [adapter](tfmplayground/priors/ticl.py) - ticl - [repo](https://github.com/microsoft/ticl)
+- [adapter](tfmplayground/priors/tabicl.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- [adapter](tfmplayground/priors/tabpfn.py) - tabpfn - [repo](https://github.com/automl/tabpfn-v1-prior)
+
 ### Citation
 
 ```bibtex
