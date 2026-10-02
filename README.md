@@ -29,9 +29,10 @@ model = pretrainTFM(
     model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
     prior=NanoTabICLPrior(
         config=NanoTabICLClassificationPriorConfig(
-            max_num_features=10,
-            min_num_datapoints=100,
-            max_num_datapoints=100,
+            min_num_features=30,
+            max_num_features=30,
+            min_num_datapoints=569,
+            max_num_datapoints=569,
         )
     ),
 )
