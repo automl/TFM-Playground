@@ -11,11 +11,12 @@
 
 </div>
 
-A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for anyone who wants to see how these models work.
+A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for students who want to see how these models work, and a base for research on top of them.
 
 ### Install
 
 ```
+pip install uv
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
 uv sync
@@ -29,7 +30,15 @@ This repository has no checkpoints yet.
 model = pretrainTFM(
     problem="classification",
     model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
-    prior=NanoTabICLPrior(config=NanoTabICLClassificationPriorConfig()),
+    prior=NanoTabICLPrior(
+        config=NanoTabICLClassificationPriorConfig(
+            min_num_datapoints=50,
+            max_num_datapoints=50,
+            max_num_features=3,
+            max_num_classes=3,
+        )
+    ),
+    training=ClassificationTrainingConfig(batch_size=8, steps=25, epochs=12),
 )
 
 X, y = load_breast_cancer(return_X_y=True)
@@ -37,6 +46,8 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_
 
 predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
+
+That run takes about 5 minutes on a laptop cpu, on tables of 50 rows, 3 features and up to 3 classes. The mean roc auc over the toy tasks goes from 0.67 after the first epoch to 0.98 after the twelfth.
 
 One [example](examples) per problem with more configurations:
 
@@ -59,7 +70,7 @@ uv run python examples/pretraining_regression.py
 - tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
 
-Also for dumping:
+A prior also writes to a dataset dump that you can train from later:
 
 ```
 uv run python -m tfmplayground.priors --lib tabicl \
@@ -68,6 +79,21 @@ uv run python -m tfmplayground.priors --lib tabicl \
        --min_features 3 --max_features 3 \
        --max_seq_len 50 --max_classes 3 \
        --save_path tabicl_4k_50x3.h5
+```
+
+### Citation
+
+The smallest architecture in here comes from nanoTabPFN:
+
+```bibtex
+@misc{pfefferle2025nanotabpfn,
+  title  = {nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
+  author = {Alexander Pfefferle and Johannes Hog and Lennart Purucker and Frank Hutter},
+  year   = {2025},
+  eprint = {2511.03634},
+  archivePrefix = {arXiv},
+  url    = {https://arxiv.org/abs/2511.03634}
+}
 ```
 
 ### License
