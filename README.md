@@ -59,9 +59,9 @@ uv run python examples/pretraining_regression.py
 
 ### Priors
 
-- nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
-- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
-- dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
+- `nanotabicl` - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- `tabicl    ` - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- `dump      ` - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
 
 A prior also writes to a dataset dump that you can train from later:
 
