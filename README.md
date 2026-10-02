@@ -19,8 +19,6 @@ cd TFM-Playground
 uv sync
 ```
 
-`uv run` then runs a command inside the environment, with no activation.
-
 ### Quickstart
 
 This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
