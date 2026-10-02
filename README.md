@@ -53,8 +53,6 @@ uv run python examples/pretraining_regression.py
 
 ### Priors
 
-A prior gives one batch of tables, already split into a train part and a test part. The nanotabicl and the tabicl priors sample live tables, and the dump prior reads an h5 file and starts again at its end.
-
 - nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
 - tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
