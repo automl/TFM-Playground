@@ -63,7 +63,7 @@ uv run python examples/pretraining_regression.py
 - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py) - dump
 
-Priors can also be written to a dataset dump that you can use later like this:
+Priors can also be written to a dataset dump that you can use later:
 
 ```
 uv run python -m tfmplayground.priors --lib tabicl \
