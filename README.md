@@ -24,16 +24,6 @@ uv sync
 This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
 
 ```python
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-
-from tfmplayground import TabularClassifier, pretrainTFM
-from tfmplayground.configs.models import NanoTabPFNClassifierConfig
-from tfmplayground.configs.priors import NanoTabICLClassificationPriorConfig
-from tfmplayground.configs.training import ClassificationTrainingConfig
-from tfmplayground.models.nanotabpfn import NanoTabPFNModel
-from tfmplayground.priors import NanoTabICLPrior
-
 model = pretrainTFM(
     problem="classification",
     model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
