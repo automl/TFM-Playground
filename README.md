@@ -13,47 +13,36 @@
 
 A fully open source playground for tabular foundation models: five architectures behind one interface, with priors, a training loop and an evaluation pipeline. It is a starting point for students who want to see how these models work, and a base for research on top of them.
 
-### Install
+### Quickstart
 
 ```
 pip install uv
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
 uv sync
+uv run python examples/pretraining_quickstart.py
 ```
 
-### Quickstart
+That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a classifier on toy tables in about 5 minutes on a cpu, and every part of it is a config you can swap:
 
 ```python
+modelconfig = ...
+priorconfig = ...
+evalconfig = ...
+trainconfig = ...
+experimentconfig=...
+
 model = pretrainTFM(
     problem="classification",
-    model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
-    prior=NanoTabICLPrior(
-        config=NanoTabICLClassificationPriorConfig(
-            min_num_datapoints=50,
-            max_num_datapoints=50,
-            max_num_features=3,
-            max_num_classes=3,
-        )
-    ),
-    training=ClassificationTrainingConfig(batch_size=8, steps=25, epochs=12),
+    model=...Model(config=modelconfig),
+    prior=...Prior(config=priorconfig),
+    eval=evalconfig,
+    training=trainconfig,
+    experiment=experimentconfig,
 )
-
-X, y = load_breast_cancer(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
-
-predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
 
-That is [examples/quickstart.py](examples/quickstart.py):
-
-```
-uv run python examples/quickstart.py
-```
-
-It takes about 5 minutes on a laptop cpu, on tables of 50 rows, 3 features and up to 3 classes. The mean roc auc over the toy tasks goes from 0.67 after the first epoch to 0.98 after the twelfth.
-
-One [example](examples) per problem with more configurations:
+Fully configurable examples are in [examples](examples):
 
 ```
 uv run python examples/pretraining_classification.py
