@@ -13,10 +13,9 @@ The project needs python 3.12, and it gets three of its dependencies from git.
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
 uv sync
-source .venv/bin/activate
 ```
 
-`uv sync` makes the environment, takes a python 3.12, and installs the project in editable mode.
+`uv sync` makes the environment, takes a python 3.12, and installs the project in editable mode. `uv run` then runs a command inside it, with no activation.
 
 ### quickstart
 
@@ -56,7 +55,12 @@ epoch 1 | epoch time 0.86s | mean loss 2.11 | mean roc auc 0.63 | tasks 3
 epoch 2 | epoch time 0.73s | mean loss 1.97 | mean roc auc 0.67 | tasks 3
 ```
 
-Two epochs take about 10 seconds on a cpu, and the model that they give is still near random. The two files in [examples](examples) show settings that make sense: [examples/pretraining_classification.py](examples/pretraining_classification.py) and [examples/pretraining_regression.py](examples/pretraining_regression.py).
+Two epochs take about 10 seconds on a cpu, and the model that they give is still near random. The two files in [examples](examples) show settings that make sense:
+
+```
+uv run python examples/pretraining_classification.py
+uv run python examples/pretraining_regression.py
+```
 
 ### pretraining
 
