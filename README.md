@@ -51,8 +51,7 @@ uv run python examples/pretraining_regression.py
 
 ### Models
 
-<details>
-<summary>Each one is an adapter over upstream code, with a classifier and a regressor config.</summary>
+Each one is an adapter over upstream code, with a classifier and a regressor config.
 
 - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) - nanotabpfn - [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
 - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) - moddednanotabpfn - [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
@@ -60,22 +59,18 @@ uv run python examples/pretraining_regression.py
 - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) - tabfm - [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
 
-</details>
-
 ### Priors
 
 Priors generate the synthetic tables for pretraining.
 
-<details>
-<summary>On the fly, where each batch is sampled when the training loop asks for it</summary>
+#### On the fly
+
+Each batch is sampled when the training loop asks for it.
 
 - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) - nanotabicl - [repo](https://github.com/soda-inria/nanotabicl)
 - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 
-</details>
-
-<details>
-<summary>Dumping, where the tables are written once and read back later</summary>
+#### Dumping
 
 Priors can also be written to a dump that you can use later:
 
@@ -92,8 +87,6 @@ These priors can be dumped:
 And use later with:
 
 - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py) - dump
-
-</details>
 
 ### Citation
 
