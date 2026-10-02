@@ -5,7 +5,7 @@
 
 The purpose of this repository is to provide a fully open source playground for tabular foundation models. It holds five model architectures behind one interface, together with live and dumped priors, a training loop, an evaluation pipeline and experiment tracking. You pretrain every model with the same function, on any prior, for classification or regression, and you predict with every model through the same two estimator classes. It is supposed to be a good starting point for students and researchers that are interested in learning about how tabular foundation models work under the hood.
 
-### install
+### Install
 
 The project needs python 3.12, and it gets three of its dependencies from git.
 
@@ -17,7 +17,7 @@ uv sync
 
 `uv sync` makes the environment, takes a python 3.12, and installs the project in editable mode. `uv run` then runs a command inside it, with no activation.
 
-### quickstart
+### Quickstart
 
 This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
 
@@ -62,7 +62,7 @@ uv run python examples/pretraining_classification.py
 uv run python examples/pretraining_regression.py
 ```
 
-### pretraining
+### Pretraining
 
 `pretrainTFM` takes one model, one prior and four configs. Every config is a dataclass, and every argument but the first two has a default.
 
@@ -78,7 +78,7 @@ uv run python examples/pretraining_regression.py
 
 The function picks the loss from the problem: cross entropy for classification, and for regression the head that the model config names. A `buckets` head fits its bucket borders from the prior before the run starts.
 
-### models
+### Models
 
 Every model takes `X_train`, `y_train` and `X_test`, and predicts the test rows with the train rows as context.
 
@@ -88,7 +88,7 @@ Every model takes `X_train`, `y_train` and `X_test`, and predicts the test rows 
 - tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
 
-### priors
+### Priors
 
 A prior gives one batch of tables, already split into a train part and a test part. The nanotabicl and the tabicl priors sample live tables, and the dump prior reads an h5 file and starts again at its end.
 
@@ -119,6 +119,6 @@ uv run python -m tfmplayground.priors --lib tabicl \
        --save_path tabicl_4k_50x3.h5
 ```
 
-### license
+### License
 
 Apache 2.0, see [LICENSE](LICENSE). The vendored files name their own source and license at the top.
