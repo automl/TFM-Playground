@@ -4,7 +4,7 @@
 
 # TFM-Playground
 
-**Tabular Foundation Models and Priors. One interface. Training and Inference.**
+**Tabular Foundation Models and Priors. One Interface. Training and Inference.**
 
 [![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
