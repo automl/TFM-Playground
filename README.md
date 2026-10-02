@@ -82,23 +82,19 @@ The function picks the loss from the problem: cross entropy for classification, 
 
 Every model takes `X_train`, `y_train` and `X_test`, and predicts the test rows with the train rows as context.
 
-| model | class | configs | regression head | source |
-| --- | --- | --- | --- | --- |
-| nanotabpfn | `NanoTabPFNModel` | `NanoTabPFNClassifierConfig`, `NanoTabPFNRegressorConfig` | buckets | [adapter](tfmplayground/models/nanotabpfn.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634) |
-| moddednanotabpfn | `ModdedNanoTabPFNModel` | `ModdedNanoTabPFNClassifierConfig`, `ModdedNanoTabPFNRegressorConfig` | buckets | [adapter](tfmplayground/models/moddednanotabpfn.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681) |
-| nanotabicl | `NanoTabICLModel` | `NanoTabICLClassifierConfig`, `NanoTabICLRegressorConfig` | quantiles | [adapter](tfmplayground/models/nanotabicl.py) · [repo](https://github.com/soda-inria/nanotabicl) |
-| tabicl | `TabICLModel` | `TabICLClassifierConfig`, `TabICLRegressorConfig` | quantiles | [adapter](tfmplayground/models/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139) |
-| tabfm | `TabFMModel` | `TabFMClassifierConfig`, `TabFMRegressorConfig` | scalar | [adapter](tfmplayground/models/tabfm.py) · [repo](https://github.com/google-research/tabfm) · [blog](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data/) |
+- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
+- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
+- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [blog](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data/)
 
 ### priors
 
-A prior gives one batch of tables, already split into a train part and a test part. Three priors implement that interface.
+A prior gives one batch of tables, already split into a train part and a test part. The nanotabicl and the tabicl priors sample live tables, and the dump prior reads an h5 file and starts again at its end.
 
-| prior | class | configs | gives |
-| --- | --- | --- | --- |
-| nanotabicl | `NanoTabICLPrior` | `NanoTabICLClassificationPriorConfig`, `NanoTabICLRegressionPriorConfig` | live tables, one sampled graph each |
-| tabicl | `TabICLPrior` | `TabICLClassificationPriorConfig`, `TabICLRegressionPriorConfig` | live tables from the tabicl library |
-| dump | `DumpPrior` | `ClassificationPriorDumpConfig`, `RegressionPriorDumpConfig` | tables from an h5 file, and it starts again at the end |
+- nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
 
 You can look at one batch:
 
