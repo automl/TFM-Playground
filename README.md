@@ -47,7 +47,7 @@ Find fully configurable examples in:
 - [examples/pretraining_regression.py](examples/pretraining_regression.py)
 
 
-### model list
+### Models
 
 Each one is an adapter over upstream code, with a classifier and a regressor config.
 
@@ -57,7 +57,7 @@ Each one is an adapter over upstream code, with a classifier and a regressor con
 - tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
 
-### prior list
+### Priors
 
 Priors generate the synthetic tables for pretraining.
 
