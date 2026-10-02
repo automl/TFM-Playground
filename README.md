@@ -57,9 +57,7 @@ uv run python examples/pretraining_regression.py
 - tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 - dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
 
-Two dumps are available for download. The [classification dump](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5) holds 100k tables of 50 rows, 3 features and up to 3 classes each, at 0.1 GB. The [regression dump](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5) holds 1.28M tables of 50 rows and 3 features each, at 1.0 GB.
-
-The priors package also writes dumps of its own, from the ticl, tabicl and tabpfn libraries:
+Also for dumping:
 
 ```
 uv run python -m tfmplayground.priors --lib tabicl \
