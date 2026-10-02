@@ -80,7 +80,7 @@ uv run python -m tfmplayground.priors \
        --max_features 3 \
        --max_seq_len 50 \
        --max_classes 3 \
-       --save_path tabicl_4k_50x3.h5
+       --save_path dump-d1000b4r50c3-3-tabicl.h5
 ```
 
 - [adapter](tfmplayground/priors/ticl.py) - ticl - [repo](https://github.com/microsoft/ticl)
