@@ -20,7 +20,7 @@ model = pretrainTFM(
         )
     ),
     training=ClassificationTrainingConfig(batch_size=2, steps=100, epochs=10),
-    device="cpu"
+    device="cpu",
 )
 
 X, y = load_breast_cancer(return_X_y=True)
