@@ -49,10 +49,10 @@ uv run python examples/pretraining_classification.py
 uv run python examples/pretraining_regression.py
 ```
 
-<details>
-<summary><b>Models</b></summary>
+### Models
 
-Each one is an adapter over upstream code, with a classifier and a regressor config.
+<details>
+<summary>Each one is an adapter over upstream code, with a classifier and a regressor config.</summary>
 
 - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) - nanotabpfn - [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
 - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) - moddednanotabpfn - [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
@@ -62,19 +62,20 @@ Each one is an adapter over upstream code, with a classifier and a regressor con
 
 </details>
 
-<details>
-<summary><b>Priors</b></summary>
+### Priors
 
 Priors generate the synthetic tables for pretraining.
 
-#### On the fly
-
-Each batch is sampled when the training loop asks for it.
+<details>
+<summary>On the fly, where each batch is sampled when the training loop asks for it</summary>
 
 - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) - nanotabicl - [repo](https://github.com/soda-inria/nanotabicl)
 - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) - tabicl - [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
 
-#### Dumping
+</details>
+
+<details>
+<summary>Dumping, where the tables are written once and read back later</summary>
 
 Priors can also be written to a dump that you can use later:
 
