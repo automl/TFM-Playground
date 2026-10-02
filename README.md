@@ -3,14 +3,11 @@
 [![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-The purpose of this repository is to provide a fully open source playground for tabular foundation models.
-It holds five model architectures behind one interface, together with live and dumped priors, a training loop, an evaluation pipeline and experiment tracking.
-You pretrain every model with the same function, on any prior, for classification or regression, and you predict with every model through the same two estimator classes.
-It is supposed to be a good starting point for students and researchers that are interested in learning about how tabular foundation models work under the hood.
+The purpose of this repository is to provide a fully open source playground for tabular foundation models. It holds five model architectures behind one interface, together with live and dumped priors, a training loop, an evaluation pipeline and experiment tracking. You pretrain every model with the same function, on any prior, for classification or regression, and you predict with every model through the same two estimator classes. It is supposed to be a good starting point for students and researchers that are interested in learning about how tabular foundation models work under the hood.
 
 ### install
 
-The project needs python 3.12, and it pulls three of its dependencies from git.
+The project needs python 3.12, and it gets three of its dependencies from git.
 
 ```
 git clone https://github.com/automl/TFM-Playground.git
@@ -34,7 +31,7 @@ pip install -e .
 
 ### quickstart
 
-No checkpoint ships with this repository, so you pretrain a small model first, and then predict with it.
+This repository has no checkpoint, so you pretrain a small model first, and then predict with it.
 
 ```python
 from sklearn.datasets import load_breast_cancer
@@ -70,7 +67,7 @@ epoch 1 | epoch time 0.86s | mean loss 2.11 | mean roc auc 0.63 | tasks 3
 epoch 2 | epoch time 0.73s | mean loss 1.97 | mean roc auc 0.67 | tasks 3
 ```
 
-Two epochs take about 10 seconds on a cpu, and they give a model with no skill. The two files in [examples](examples) show settings that make sense: [examples/pretraining_classification.py](examples/pretraining_classification.py) and [examples/pretraining_regression.py](examples/pretraining_regression.py).
+Two epochs take about 10 seconds on a cpu, and the model that they give is still near random. The two files in [examples](examples) show settings that make sense: [examples/pretraining_classification.py](examples/pretraining_classification.py) and [examples/pretraining_regression.py](examples/pretraining_regression.py).
 
 ### pretraining
 
@@ -120,7 +117,7 @@ prior = NanoTabICLPrior(config=NanoTabICLClassificationPriorConfig())
 x_train, y_train, x_test, y_test = prior.batch(batch_size=2)
 ```
 
-Two dumps are ready to download: [100k classification tables](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5) of 50 rows, 3 features and up to 3 classes each (0.1 GB), and [1.28M regression tables](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5) of 50 rows and 3 features each (1.0 GB).
+Two dumps are available for download. The [classification dump](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5) holds 100k tables of 50 rows, 3 features and up to 3 classes each, at 0.1 GB. The [regression dump](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5) holds 1.28M tables of 50 rows and 3 features each, at 1.0 GB.
 
 The priors package also writes dumps of its own, from the ticl, tabicl and tabpfn libraries:
 
@@ -135,7 +132,7 @@ python -m tfmplayground.priors --lib tabicl \
 
 ### training
 
-`train` runs the loop, and `pretrainTFM` calls it for you. One epoch does `steps` optimizer updates with a schedule free AdamW. A batch that holds a non-finite value is skipped, and the loop draws another one, so every epoch completes its updates. Callbacks run at the end of each epoch: the console logger, the tensorboard logger, the wandb logger, and the experiment logger that also evaluates.
+`train` runs the loop, and `pretrainTFM` calls it. One epoch does `steps` optimizer updates with a schedule free AdamW. A batch that holds a non-finite value is skipped, and the loop takes another one, so every epoch completes its updates. Callbacks run at the end of each epoch: the console logger, the tensorboard logger, the wandb logger, and the experiment logger that also evaluates.
 
 ### evaluation
 
