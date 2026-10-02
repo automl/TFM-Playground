@@ -27,7 +27,13 @@ This repository has no checkpoint, so you pretrain a small model first, and then
 model = pretrainTFM(
     problem="classification",
     model=NanoTabPFNModel(config=NanoTabPFNClassifierConfig()),
-    prior=NanoTabICLPrior(config=NanoTabICLClassificationPriorConfig()),
+    prior=NanoTabICLPrior(
+        config=NanoTabICLClassificationPriorConfig(
+            max_num_features=10,
+            min_num_datapoints=100,
+            max_num_datapoints=100,
+        )
+    ),
 )
 
 X, y = load_breast_cancer(return_X_y=True)
