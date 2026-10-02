@@ -83,16 +83,12 @@ uv run python -m tfmplayground.priors --lib tabicl \
 
 ### Citation
 
-The smallest architecture in here comes from nanoTabPFN:
-
 ```bibtex
-@misc{pfefferle2025nanotabpfn,
-  title  = {nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
-  author = {Alexander Pfefferle and Johannes Hog and Lennart Purucker and Frank Hutter},
-  year   = {2025},
-  eprint = {2511.03634},
-  archivePrefix = {arXiv},
-  url    = {https://arxiv.org/abs/2511.03634}
+@misc{tfmplayground2026,
+  title        = {TFM-Playground},
+  author       = {The TFM-Playground Authors},
+  year         = {2026},
+  howpublished = {\url{https://github.com/automl/TFM-Playground}}
 }
 ```
 
