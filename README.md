@@ -51,11 +51,11 @@ uv run python examples/pretraining_regression.py
 
 ### Models
 
-- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
-- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
-- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/nanotabicl)
-- tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
-- tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
+- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [paper](https://arxiv.org/abs/2511.03634)
+- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [paper](https://arxiv.org/abs/2606.03681)
+- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/models/tabicl.py) · [paper](https://arxiv.org/abs/2602.11139)
+- tabfm - [adapter](tfmplayground/models/tabfm.py) · [paper](https://arxiv.org/abs/2609.37959)
 
 ### Priors
 
