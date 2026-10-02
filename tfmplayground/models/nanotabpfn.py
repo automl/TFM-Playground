@@ -283,6 +283,22 @@ class TransformerEncoderLayer(nn.Module):
         self.save_feature_attention = False
         self.feature_attention: torch.Tensor | None = None
 
+    @staticmethod
+    def target_attention(attention: MultiheadAttention, x: torch.Tensor) -> torch.Tensor:
+        """Attention weights of the last token (the target column) over all tokens, averaged over
+        heads, for every row: (N, C) for x of shape (N, C, E). Only that row of the attention matrix
+        is computed, so memory grows with C instead of C^2 (TabPFN-Wide computes the full matrix one
+        sample at a time). Equals need_weights=True (head-averaged) sliced at [:, -1]."""
+        n, c, e = x.shape
+        h = attention.num_heads
+        d = e // h
+        w_q, w_k, _ = attention.in_proj_weight.chunk(3)
+        b_q, b_k, _ = attention.in_proj_bias.chunk(3)
+        q = F.linear(x[:, -1:, :], w_q, b_q).view(n, 1, h, d).transpose(1, 2)  # (N, H, 1, d)
+        k = F.linear(x, w_k, b_k).view(n, c, h, d).transpose(1, 2)  # (N, H, C, d)
+        weights = torch.softmax(q @ k.transpose(-1, -2) / math.sqrt(d), dim=-1)  # (N, H, 1, C)
+        return weights.mean(dim=1)[:, 0, :]
+
     def forward(self, src: torch.Tensor, train_test_split_index: int, num_mem_chunks: int = 1) -> torch.Tensor:
         """
         Takes the embeddings of the table as input and applies self-attention between features
@@ -302,22 +318,25 @@ class TransformerEncoderLayer(nn.Module):
         # attention between features
         src = src.reshape(batch_size * rows_size, col_size, embedding_size)
 
+        # Running sum (over rows) of the target column's attention, and number of rows, so that the
+        # average is exact whatever the number of memory chunks.
+        captured = [torch.zeros(col_size, device=src.device), 0]
+
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
-            # Only ask MultiheadAttention for the weights when capturing feature attention
-            # (interpretability). Otherwise need_weights=False lets PyTorch use
-            # scaled_dot_product_attention, which never materializes the (B*R*H, C, C) weights.
-            attn_output, attn_map = self.self_attention_between_features(
-                x, x, x, need_weights=self.save_feature_attention
-            )
+            # need_weights=False lets PyTorch use scaled_dot_product_attention, which never
+            # materializes the (B*R*H, C, C) weights. When capturing (interpretability), only the
+            # target column's row of the attention is computed, separately (target_attention).
+            attn_output = self.self_attention_between_features(x, x, x, need_weights=False)[0]
             if self.save_feature_attention:
-                # attn_map is (B*R, C, C), already averaged over heads. Row -1 is the target
-                # column as query attending to every column; average it over samples -> (C,).
-                # Assumes num_mem_chunks == 1 so this single chunk covers all samples.
-                self.feature_attention = attn_map[:, -1, :].mean(dim=0).detach()
+                captured[0] += self.target_attention(self.self_attention_between_features, x).float().sum(dim=0)
+                captured[1] += x.shape[0]
             return attn_output + x
 
         src = feature_attention(src)
+        if self.save_feature_attention:
+            # target column as query attending to every column, averaged over rows and heads -> (C,)
+            self.feature_attention = (captured[0] / captured[1]).detach()
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
         src = self.norm1(src)
         # attention between datapoints

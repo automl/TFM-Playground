@@ -107,3 +107,33 @@ def test_feature_attention_scores_in_unit_range():
     valid = scores[~np.isnan(scores)]
 
     assert (valid >= 0).all() and (valid <= 1).all()
+
+
+def test_target_attention_equals_the_last_row_of_the_full_attention_matrix():
+    """target_attention computes only the target column's row, and gives exactly what the full
+    head-averaged attention matrix (need_weights=True) gives at row -1."""
+    from tfmplayground.models.nanotabpfn import TransformerEncoderLayer
+
+    torch.manual_seed(0)
+    block = TransformerEncoderLayer(embedding_size=16, nhead=4, mlp_hidden_size=32).eval()
+    attention = block.self_attention_between_features
+    x = torch.randn(7, 9, 16)  # 7 rows, 9 columns (last = target)
+    with torch.no_grad():
+        full = attention(x, x, x, need_weights=True)[1]  # (7, 9, 9), averaged over heads
+        row = block.target_attention(attention, x)
+    assert row.shape == (7, 9)
+    assert torch.allclose(row, full[:, -1, :], atol=1e-6)
+
+
+def test_captured_attention_is_the_same_with_memory_chunks():
+    """The captured attention is an exact average over all rows, whatever the number of chunks."""
+    model, x, y, tts = _tiny_model_and_batch()
+    for block in model.transformer_blocks:
+        block.save_feature_attention = True
+    with torch.no_grad():
+        model((x, y), train_test_split_index=tts, num_mem_chunks=1)
+        plain = [block.feature_attention.clone() for block in model.transformer_blocks]
+        model((x, y), train_test_split_index=tts, num_mem_chunks=4)
+        chunked = [block.feature_attention for block in model.transformer_blocks]
+    for a, b in zip(plain, chunked):
+        assert torch.allclose(a, b, atol=1e-6)

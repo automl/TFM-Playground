@@ -285,7 +285,7 @@ class NanoTabPFNClassifier:
             with torch.no_grad():
                 xt = torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
                 yt = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-                self.model((xt, yt), train_test_split_index=len(self.X_train))
+                self.model((xt, yt), train_test_split_index=len(self.X_train), num_mem_chunks=self.num_mem_chunks)
             # average over layers: stack to (num_layers, C) -> (C,); last entry is target->target
             per_layer = torch.stack([block.feature_attention for block in blocks], dim=0)
             attention_to_columns = per_layer.mean(dim=0)[:-1].to("cpu").numpy()  # (C-1,) transformed cols
