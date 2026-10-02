@@ -43,20 +43,6 @@ uv run python examples/pretraining_classification.py
 uv run python examples/pretraining_regression.py
 ```
 
-### Pretraining
-
-`pretrainTFM` takes one model, one prior and four configs.
-
-| argument | config | holds |
-| --- | --- | --- |
-| `model` | `configs/models.py` | architecture sizes and the number of outputs |
-| `prior` | `configs/priors.py` | table sizes, feature counts and class counts |
-| `training` | `configs/training.py` | seed, learning rate, batch size, steps, epochs, gradient clip |
-| `eval` | `configs/evaluation.py` | tasks and their size limits |
-| `experiment` | `configs/training.py` | run name and the directory for the artifacts |
-
-The function picks the loss from the problem: cross entropy for classification, and for regression the head that the model config names. A `buckets` head fits its bucket borders from the prior before the run starts.
-
 ### Models
 
 Every model takes `X_train`, `y_train` and `X_test`, and predicts the test rows with the train rows as context.
