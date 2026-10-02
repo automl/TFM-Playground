@@ -36,7 +36,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_
 predictions = TabularClassifier(model).fit(X_train, y_train).predict(X_test)
 ```
 
-The defaults run 10000 epochs of 100 steps, and ctrl-c stops the loop and keeps the model. The two files in [examples](examples) show settings that make sense:
+The two files in [examples](examples) show settings that make sense:
 
 ```
 uv run python examples/pretraining_classification.py
