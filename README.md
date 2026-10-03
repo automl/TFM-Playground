@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://salihboraozturk.com/other/images/tfmp.png" width="200" alt="TFM-Playground">
+<img src="https://ml.informatik.uni-freiburg.de/research-artifacts/TFM-Playground/tfmplayground-logo.png" width="200" alt="TFM-Playground">
 
 # TFM-Playground
 
