@@ -1,133 +1,113 @@
+<div align="center">
+
+<img src="https://ml.informatik.uni-freiburg.de/research-artifacts/TFM-Playground/tfmplayground-logo.png" width="200" alt="TFM-Playground">
+
 # TFM-Playground
 
-The purpose of this repository is to provide a fully open source playground for tabular foundation models.
-It contains a much smaller and simpler implementation of the TabPFNv2 architecture (nanoTabPFN) as well as a training loop, multiple interfaces to load prior data and an evaluation pipeline. We are planning to rapidly extend the repository with more features, prior interfaces and architectures.
-It is supposed to be a good starting point for students and researchers that are interested in learning about how Tabular foundation models work under the hood.
+**Tabular Foundation Models and Priors. One Interface. Training and Inference.**
 
-Clone the repository, afterwards install dependencies via:
+[![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+</div>
+
+A fully open source playground for tabular foundation models: many architectures behind one interface, with many priors, a pretraining loop and an evaluation pipeline. It is a starting point for anyone who wants to develop or research tabular foundation models. If you are a new to tabular foundation models we recommend checking out [nanoTabPFN](https://github.com/automl/nanoTabPFN) first as an introduction.
+
+### Quickstart
+
 ```
-pip install -e .
+pip install uv
+git clone https://github.com/automl/TFM-Playground.git
+cd TFM-Playground
+uv sync
+uv run python examples/pretraining_quickstart.py
 ```
 
-We offer the same interface as TabPFN:
+That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
+
 ```python
-from sklearn.datasets import load_breast_cancer
-from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import train_test_split
+model_config = ...
+prior_config = ...
+eval_config = ...
+train_config = ...
+experiment_config = ...
 
-from tfmplayground import NanoTabPFNClassifier
-
-# Load data
-X, y = load_breast_cancer(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=42)
-
-# Initialize a classifier
-clf = NanoTabPFNClassifier()
-clf.fit(X_train, y_train)
-
-# Predict probabilities
-prediction_probabilities = clf.predict_proba(X_test)
-print("ROC AUC:", roc_auc_score(y_test, prediction_probabilities[:, 1]))
-
-# Predict labels
-predictions = clf.predict(X_test)
-print("Accuracy", accuracy_score(y_test, predictions))
-```
-
-### Our Code
-
-`tfmplayground/models/nanotabpfn.py` contains the implementation of the architecture in less than 300 lines of code. `tfmplayground/train.py` implements a simple training loop in under 200 lines and `tfmplayground/external_priors/` provides an interface to publicly available priors form other repositories as well as a dataloader for loading HDF5 dumps.
-We will release multiple dumps of different scales soon. We also offer an interface where you can provide your own get\_batch function.
-
-### Pretrain your own small nanoTabPFN
-First we download 100k pre-generated datasets with 50 datapoints, 3 features and up to 3 classes each from [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_3_100k_classification.h5).
-
-Then you can run:
-```
-python pretrain_classification.py --epochs 80 --steps 25 --batchsize 50 --priordump 50x3_3_100k_classification.h5
-```
-This should take less than 5 min on a modern NVIDIA GPU (around 10 minutes on Macbook M4 Pro GPU and around 40 min on M4 Pro CPU).
-
-We also offer a pre-generated dataset containing 1.28M tables with 50 datapoints and 3 features each for regression [here](https://ml.informatik.uni-freiburg.de/research-artifacts/pfefferle/TFM-Playground/50x3_1280k_regression.h5).
-
-You can pretrain on it using `python pretrain_regressor.py`.
-
-#### Step by Step Explanation (Classifier)
-
-First we import our Architecture, Prior interface and training loop, etc.
-```python
-from tfmplayground.models.nanotabpfn import NanoTabPFNModel
-from tfmplayground.external_priors import PriorDumpDataLoader
-from tfmplayground.train import train
-from tfmplayground.utils import get_default_device
-from tfmplayground.interface import NanoTabPFNClassifier
-from tfmplayground.callbacks import ConsoleLoggerCallback
-
-from torch.nn import CrossEntropyLoss
-```
-then we instantiate our model and loss criterion:
-```python
-model = NanoTabPFNModel(
-    num_attention_heads=6,
-    embedding_size=192,
-    mlp_hidden_size=768,
-    num_layers=6,
-    num_outputs=10,
-)
-criterion = CrossEntropyLoss()
-```
-then we instantiate our prior:
-```python
-device = get_default_device()
-prior = PriorDumpDataLoader(filename='50x3_3_100k_classification.h5', num_steps=25, batch_size=50, device=device)
-```
-and finally train our model:
-```python
-trained_model, loss = train(
-    model=model,
-    prior=prior,
-    criterion=criterion,
-    epochs=80,
-    device=device,
-    callbacks=[ConsoleLoggerCallback()]
+model = pretrainTFM(
+    problem="classification",
+    model=...Model(config=model_config),
+    prior=...Prior(config=prior_config),
+    eval=eval_config,
+    training=train_config,
+    experiment=experiment_config,
 )
 ```
 
-### Creating your own datasets
-Check out [tfmplayground.external_priors](https://github.com/automl/TFM-Playground/tree/main/tfmplayground/external_priors) to create your own data using publicly available priors.
+Fully configurable examples are in [examples](examples):
 
-You can use `tfmplayground.external_priors` as a command-line-tool to pre-generate data from a prior, e.g. via
 ```
-python -m tfmplayground.external_priors --lib tabicl \
-       --prior_type mix_scm \
-       --num_batches 1000 --batch_size 4 \
-       --min_features 3 --max_features 3 \
-       --max_seq_len 50 --max_classes 3 \
-       --save_path tabicl_4k_50x3.h5
+uv run python examples/pretraining_classification.py
+uv run python examples/pretraining_regression.py
 ```
-which can afterwards be loaded via
-```python
-from tfmplayground.external_priors import PriorDumpDataLoader
-prior = PriorDumpDataLoader('tabicl_4k_50x3.h5', num_steps=20, batch_size=4, device='cpu')
-```
-You can also just let it create the data on-the-fly via:
-```python
-from tfmplayground.external_priors import TabICLPriorDataLoader
-prior = TabICLPriorDataLoader(
-    num_steps=20,
-    batch_size=4,
-    num_datapoints_max=50,
-    min_features=3,
-    max_features=3,
-    max_num_classes=3,
-    device='cpu'
-)
-```
-You can check out `next(iter(prior))` if you want to see an example batch.
 
-Check out `prior_visualization.ipynb` for some more examples.
+### Models
 
-### Supported Priors
+Each one is an adapter over upstream code, with a classifier and a regressor config.
 
-- [TabICL](https://github.com/soda-inria/tabicl) (Classification)
-- [TICL](https://github.com/microsoft/ticl) (Regression, Classification)
+- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
+- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
+- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
+
+### Priors
+
+Priors generate the synthetic tables for pretraining.
+
+#### On the fly
+
+Each batch is sampled when the training loop asks for it.
+
+- nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+
+#### Dumping
+
+Priors can also be written to a dump that you can use later:
+
+```
+uv run python -m tfmplayground.priors --lib tabicl --prior_type mix_scm --num_batches 1000 --batch_size 4 --max_classes 3 --max_seq_len 50 --min_features 3 --max_features 3 --save_path dump-d1000b4r50c3-3-tabicl.h5
+```
+
+These priors can be dumped:
+
+- ticl - [adapter](tfmplayground/priors/ticl.py) · [repo](https://github.com/microsoft/ticl)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2502.05564)
+- tabpfn - [adapter](tfmplayground/priors/tabpfn.py) · [repo](https://github.com/automl/tabpfn-v1-prior)
+
+Load a dump with:
+
+- dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
+
+### Citation
+
+If you use the TFM-Playground please cite:
+
+```bibtex
+@misc{pfefferle2026tfmplayground,
+  title={TFM-Playground: A Playground for Tabular Foundation Models},
+  author={Pfefferle, Alexander and Hog, Johannes and Öztürk, Salih Bora and Kaya, Kürşat and Türkmen, Zeynep and Hutter, Frank},
+  year={2026},
+  url={https://github.com/automl/TFM-Playground/}
+}
+```
+
+and if you are using the nanoTabPFN-Model specifically please also cite:
+
+```bibtex
+@article{pfefferle2025nanotabpfn,
+  title={nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
+  author={Pfefferle, Alexander and Hog, Johannes and Purucker, Lennart and Hutter, Frank},
+  journal={arXiv preprint arXiv:2511.03634},
+  year={2025}
+}
+```

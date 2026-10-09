@@ -1,50 +1,81 @@
-"""Data loading utilities for tabular priors."""
-
-from collections.abc import Callable, Iterator
-
 import h5py
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from tfmplayground.configs.priors import PriorDumpConfig
+from tfmplayground.priors.base import Prior
+from tfmplayground.utils import get_default_device
 
-class PriorDataLoader(DataLoader):
-    """Generic DataLoader for synthetic data generation using a get_batch function.
 
-    Args:
-        get_batch_function (Callable): A function returning batches of data.
-        num_steps (int): Number of batches per epoch.
-        batch_size (int): Number of functions per batch.
-        num_datapoints_max (int): Max sequence length per function.
-        num_features (int): Number of input features.
-        device (torch.device): Device to move tensors to.
+class DumpPrior(Prior):
+    """
+    adapts h5 dumps of prior batches to prior interface
     """
 
     def __init__(
         self,
-        get_batch_function: Callable[..., dict[str, torch.Tensor | int]],
-        num_steps: int,
-        batch_size: int,
-        num_datapoints_max: int,
-        num_features: int,
-        device: torch.device,
-    ):
-        self.get_batch_function = get_batch_function
-        self.num_steps = num_steps
-        self.batch_size = batch_size
-        self.num_datapoints_max = num_datapoints_max
-        self.num_features = num_features
-        self.device = device
+        config: PriorDumpConfig,
+        device: str | torch.device | None = None,
+    ) -> None:
+        """
+        reads sizes and keys from dump and checks its problem against config
+        """
+        self.config = config
+        with h5py.File(config.filename, "r") as f:
+            self.num_tables = f["X"].shape[0]
+            self.num_datapoints_max = f["X"].shape[1]
+            self.has_num_datapoints = "num_datapoints" in f
+            self.sep_key = "train_test_split_index" if "train_test_split_index" in f else "single_eval_pos"
+            self.block_size = int(f["original_batch_size"][0]) if "original_batch_size" in f else None
+            self.problem = f["problem_type"][()].decode("utf-8") if "problem_type" in f else None
+        config_problem = getattr(config, "problem", None)
+        if self.problem is not None and config_problem is not None and self.problem != config_problem:
+            raise ValueError(f"dump holds {self.problem!r} but config says {config_problem!r}")
+        self.device = device if device is not None else get_default_device()
+        self.pointer = config.starting_index
 
-    def __iter__(self) -> Iterator[dict[str, torch.Tensor | int]]:
-        return iter(
-            self.get_batch_function(self.batch_size, self.num_datapoints_max, self.num_features)
-            for _ in range(self.num_steps)
-        )
+    def check_batch_size(self, batch_size: int) -> None:
+        """
+        checks that every batch stays inside one dump block
+        """
+        if batch_size > self.num_tables:
+            raise ValueError(f"batch size {batch_size} is larger than {self.num_tables} tables in dump")
+        if self.block_size is not None and self.block_size % batch_size:
+            raise ValueError(f"batch size {batch_size} does not divide dump block size {self.block_size}")
+        if self.block_size is not None and self.pointer % batch_size:
+            raise ValueError(f"starting index {self.pointer} does not fit batch size {batch_size}")
 
-    def __len__(self) -> int:
-        return self.num_steps
+    def batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        gives next batch of tables from dump, split into train and test parts
+
+        starts dump again at its end, so batches never run out
+        """
+        self.check_batch_size(batch_size)
+        if self.pointer + batch_size > self.num_tables:
+            self.pointer = 0
+        with h5py.File(self.config.filename, "r") as f:
+            end = self.pointer + batch_size
+            num_features = f["num_features"][self.pointer : end].max()
+            if self.has_num_datapoints:
+                max_seq_in_batch = int(f["num_datapoints"][self.pointer : end].max())
+            else:
+                max_seq_in_batch = int(self.num_datapoints_max)
+            x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])
+            y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])
+            splits = f[self.sep_key][self.pointer : end]
+            if splits.min() != splits.max():
+                raise ValueError(f"batch has different train test splits in range {splits.min()} to {splits.max()}")
+            sep = int(splits[0])
+            self.pointer += batch_size
+        loaded_batch_size = x.shape[0]
+        if loaded_batch_size != batch_size:
+            raise ValueError(f"batch size is {batch_size} but dump gives {loaded_batch_size}")
+        x = x.to(self.device)
+        y = y.to(self.device)
+        return x[:, :sep], y[:, :sep], x[:, sep:], y[:, sep:]
 
 
 class PriorDumpDataLoader(DataLoader):
@@ -62,14 +93,16 @@ class PriorDumpDataLoader(DataLoader):
         self.num_steps = num_steps
         self.batch_size = batch_size
         with h5py.File(self.filename, "r") as f:
-            self.num_datapoints_max = f["X"].shape[0]
+            self.num_tables = f["X"].shape[0]
+            self.num_datapoints_max = f["X"].shape[1]
+            self.num_features_max = f["X"].shape[2]
             if "max_num_classes" in f:
                 self.max_num_classes = f["max_num_classes"][0]
             else:
                 self.max_num_classes = None
             self.problem_type = f["problem_type"][()].decode("utf-8")
             self.has_num_datapoints = "num_datapoints" in f
-            self.stored_max_seq_len = f["X"].shape[1]
+            self.sep_key = "train_test_split_index" if "train_test_split_index" in f else "single_eval_pos"
         self.device = device
         self.pointer = starting_index
 
@@ -83,17 +116,14 @@ class PriorDumpDataLoader(DataLoader):
                     num_datapoints_batch = f["num_datapoints"][self.pointer : end]
                     max_seq_in_batch = int(num_datapoints_batch.max())
                 else:
-                    max_seq_in_batch = int(self.stored_max_seq_len)
+                    max_seq_in_batch = int(self.num_datapoints_max)
 
                 x = torch.from_numpy(f["X"][self.pointer : end, :max_seq_in_batch, :num_features])
                 y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])
-                if "train_test_split_index" in f:
-                    train_test_split_index = f["train_test_split_index"][self.pointer : end]
-                else:
-                    train_test_split_index = f["single_eval_pos"][self.pointer : end]
+                train_test_split_index = f[self.sep_key][self.pointer : end]
 
                 self.pointer += self.batch_size
-                if self.pointer >= f["X"].shape[0]:
+                if self.pointer >= self.num_tables:
                     print(
                         """Finished iteration over all stored datasets! """
                         """Will start reusing the same data with different splits now."""

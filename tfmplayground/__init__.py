@@ -1,3 +1,4 @@
-from tfmplayground.interface import NanoTabPFNClassifier, NanoTabPFNRegressor
+from tfmplayground.interface import TabularClassifier, TabularRegressor
+from tfmplayground.training.pretrain import pretrainTFM
 
-__all__ = ["NanoTabPFNClassifier", "NanoTabPFNRegressor"]
+__all__ = ["TabularClassifier", "TabularRegressor", "pretrainTFM"]

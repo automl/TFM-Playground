@@ -1,5 +1,6 @@
 checkpoints/
 workdir/
+build/
 wandb/
 logs/
 log/
@@ -18,5 +19,6 @@ __pycache__/
 *.zip
 
 .DS_Store
+.idea/
 
 uv.lock

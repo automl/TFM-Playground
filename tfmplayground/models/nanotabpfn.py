@@ -7,10 +7,19 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
+from tfmplayground.configs.models import NanoTabPFNClassifierConfig, NanoTabPFNRegressorConfig
+from tfmplayground.models.base import TabularFoundationModel
 
-class NanoTabPFNModel(nn.Module):
+
+class NanoTabPFN(nn.Module):
     def __init__(
-        self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int
+        self,
+        embedding_size: int,
+        num_attention_heads: int,
+        mlp_hidden_size: int,
+        num_layers: int,
+        num_outputs: int,
+        num_mem_chunks: int = 1,
     ):
         """Initializes the feature/target encoder, transformer blocks and decoder"""
         super().__init__()
@@ -19,6 +28,7 @@ class NanoTabPFNModel(nn.Module):
         self.mlp_hidden_size = mlp_hidden_size
         self.num_layers = num_layers
         self.num_outputs = num_outputs
+        self.num_mem_chunks = num_mem_chunks
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
@@ -28,45 +38,23 @@ class NanoTabPFNModel(nn.Module):
             )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
-    # TODO: consider getting rid of this and just provide a single interface
-    def forward(self, *args, **kwargs) -> torch.Tensor:
+    def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
         """
-        Provides two interfaces:
-        model(X_train, y_train, X_test)
-            Args:
-                X_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, num_features)
-                y_train: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
-                X_test: (torch.Tensor) a tensor of shape (batch_size, num_test_datapoints, num_features)
+        Predicts the outputs for X_test given the labelled (X_train, y_train) context.
 
-        model((x,y), train_test_split_index)
-            Args:
-                x: (torch.Tensor) a tensor of shape (batch_size, num_datapoints, num_features)
-                y: (torch.Tensor) a tensor of shape (batch_size, num_train_datapoints, 1)
+        Parameters
+        ----------
+        src : tuple of torch.Tensor
+            a tensor of shape (batch_size, num_rows, num_features) that holds X_train and X_test,
+            and a tensor of shape (batch_size, num_train_datapoints, 1) that holds y_train
+        train_test_split_index : int
+            the number of datapoints in X_train
 
-
-        The former is similar to the sklearn interface.
-        In the latter x is the concatenation of X_train and X_test, y is y_train and
-        train_test_split_index is the length of X_train.
-        Our model internally works with the latter representation, so we convert the former into
-        the latter and forward it to _forward.
-
-        Returns:
-            (torch.Tensor) a tensor of shape (batch_size, num_test_datapoints, num_classes),
-                           which represent the predicted logits
+        Returns
+        -------
+        torch.Tensor
+            a tensor of shape (batch_size, num_test_datapoints, num_classes), which represent the predicted logits
         """
-        if len(args) == 3:
-            # case model(train_x, train_y, test_x)
-            x = args[0]
-            if args[2] is not None:
-                x = torch.cat((x, args[2]), dim=1)
-            return self._forward((x, args[1]), train_test_split_index=args[0].shape[1], **kwargs)
-        elif len(args) == 1 and isinstance(args[0], tuple):
-            # case model((x,y), train_test_split_index=None)
-            return self._forward(*args, **kwargs)
-
-    def _forward(
-        self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int, num_mem_chunks: int = 1
-    ) -> torch.Tensor:
         x_src, y_src = src
         # we expect the labels to look like (batches, num_train_datapoints, 1),
         # so we add the last dimension if it is missing
@@ -84,7 +72,11 @@ class NanoTabPFNModel(nn.Module):
         src = torch.cat([x_src, y_src], 2)
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
-            src = block(src, train_test_split_index=train_test_split_index)
+            src = block(
+                src,
+                train_test_split_index=train_test_split_index,
+                num_mem_chunks=self.num_mem_chunks,
+            )
         # selects the target embeddings (B,num_targets,1,E)
         output = src[:, train_test_split_index:, -1, :]
         # runs the embeddings through the decoder to get
@@ -179,15 +171,22 @@ class TransformerEncoderLayer(nn.Module):
         Takes the embeddings of the table as input and applies self-attention between features
         and self-attention between datapoints followed by a simple 2 layer MLP.
 
-        Args:
-            src: (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
-                                that contains all the embeddings for all the cells in the table
-            train_test_split_index: (int) the length of X_train
-            num_mem_chunks: (int) Number of chunks that memory-intense operations will be split into.
-                                  Higher values use less memory but are slower. Needs to be set to 1
-                                  during training to get correct gradients.
+        Parameters
+        ----------
+        src : torch.Tensor
+            a tensor of shape (batch_size, num_rows, num_features, embedding_size)
+            that contains all the embeddings for all the cells in the table
+        train_test_split_index : int
+            the length of X_train
+        num_mem_chunks : int
+            number of chunks that memory-intense operations will be split into,
+            higher values use less memory but are slower,
+            needs to be set to 1 during training to get correct gradients
+
         Returns
-            (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
+        -------
+        torch.Tensor
+            a tensor of shape (batch_size, num_rows, num_features, embedding_size)
         """
         batch_size, rows_size, col_size, embedding_size = src.shape
         # attention between features
@@ -195,7 +194,7 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def feature_attention(x):
-            return self.self_attention_between_features(x, x, x)[0] + x
+            return self.self_attention_between_features(x, x, x, need_weights=False)[0] + x
 
         src = feature_attention(src)
         src = src.reshape(batch_size, rows_size, col_size, embedding_size)
@@ -206,19 +205,14 @@ class TransformerEncoderLayer(nn.Module):
 
         @memory_chunking(num_mem_chunks)
         def datapoint_attention(x):
-            # training data attends to itself
-            x_left = self.self_attention_between_datapoints(
+            # training and test data attend to the training data
+            x_attended = self.self_attention_between_datapoints(
+                x,
                 x[:, :train_test_split_index],
                 x[:, :train_test_split_index],
-                x[:, :train_test_split_index],
+                need_weights=False,
             )[0]
-            # test data attends to the training data
-            x_right = self.self_attention_between_datapoints(
-                x[:, train_test_split_index:],
-                x[:, :train_test_split_index],
-                x[:, :train_test_split_index],
-            )[0]
-            return torch.cat([x_left, x_right], dim=1) + x
+            return x_attended + x
 
         src = datapoint_attention(src)
         src = src.reshape(batch_size, col_size, rows_size, embedding_size)
@@ -239,11 +233,20 @@ class TransformerEncoderLayer(nn.Module):
 
 def memory_chunking(num_mem_chunks: int) -> callable:
     """
-    This decorator will split the first dimension of the input into chunks and apply the wrapped function
-    to each chunk separately.
-    Args:
-        num_mem_chunks: (int) Number of chunks to split the input into, higher values use less memory but are slower.
-                          Needs to be set to 1 during training to disable chunking and get correct gradients.
+    This decorator will split the first dimension of the input into chunks
+    and apply the wrapped function to each chunk separately.
+
+    Parameters
+    ----------
+    num_mem_chunks : int
+        number of chunks to split the input into,
+        higher values use less memory but are slower,
+        needs to be set to 1 during training to disable chunking and get correct gradients
+
+    Returns
+    -------
+    callable
+        decorator that applies wrapped function to one chunk at a time
     """
 
     def decorator(func: Callable[[torch.Tensor], torch.Tensor]) -> Callable[[torch.Tensor], torch.Tensor]:
@@ -286,3 +289,39 @@ class Decoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_outputs)
         """
         return self.linear2(F.gelu(self.linear1(x)))
+
+
+class NanoTabPFNModel(NanoTabPFN, TabularFoundationModel):
+    """
+    adapts nanotabpfn to tabularfoundationmodel interface
+    """
+
+    def __init__(self, config: NanoTabPFNClassifierConfig | NanoTabPFNRegressorConfig) -> None:
+        """
+        builds nanotabpfn from config and reserves its borders
+        """
+        self.config = config
+        super().__init__(
+            embedding_size=config.embedding_size,
+            num_attention_heads=config.num_attention_heads,
+            mlp_hidden_size=config.mlp_hidden_size,
+            num_layers=config.num_layers,
+            num_outputs=config.num_outputs,
+            num_mem_chunks=config.num_mem_chunks,
+        )
+        self.register_buffer("borders", torch.zeros(config.num_outputs + 1))
+
+    def forward(
+        self,
+        X_train: torch.Tensor,
+        y_train: torch.Tensor,
+        X_test: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        takes train rows as context and predicts test rows through nanotabpfn forward
+
+        joins train and test rows into one table and takes split index from train targets
+        """
+        src = torch.cat([X_train, X_test], dim=1), y_train
+        train_test_split_index = y_train.shape[1]
+        return super().forward(src, train_test_split_index)
