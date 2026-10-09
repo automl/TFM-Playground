@@ -11,7 +11,7 @@
 
 </div>
 
-A fully open source playground for tabular foundation models: many architectures behind one interface, with many priors, a pretraining loop and an evaluation pipeline. It is a starting point for anyone who wants to see how these models work, and a base for research on top of them.
+A fully open source playground for tabular foundation models: many architectures behind one interface, with many priors, a pretraining loop and an evaluation pipeline. It is a starting point for anyone who wants to develop or research tabular foundation models. If you are a new to tabular foundation models we recommend checking out [nanoTabPFN](https://github.com/automl/nanoTabPFN) first as an introduction.
 
 ### Quickstart
 
@@ -26,19 +26,19 @@ uv run python examples/pretraining_quickstart.py
 That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
 
 ```python
-modelconfig = ...
-priorconfig = ...
-evalconfig = ...
-trainconfig = ...
-experimentconfig = ...
+model_config = ...
+prior_config = ...
+eval_config = ...
+train_config = ...
+experiment_config = ...
 
 model = pretrainTFM(
     problem="classification",
-    model=...Model(config=modelconfig),
-    prior=...Prior(config=priorconfig),
-    eval=evalconfig,
-    training=trainconfig,
-    experiment=experimentconfig,
+    model=...Model(config=model_config),
+    prior=...Prior(config=prior_config),
+    eval=eval_config,
+    training=train_config,
+    experiment=experiment_config,
 )
 ```
 
@@ -90,11 +90,24 @@ Load a dump with:
 
 ### Citation
 
+If you use the TFM-Playground please cite:
+
 ```bibtex
-@misc{tfmplayground2026,
-  title        = {TFM-Playground},
-  author       = {TFM-Playground Authors},
-  year         = {2026},
-  howpublished = {\url{https://github.com/automl/TFM-Playground}}
+@misc{pfefferle2026tfmplayground,
+  title={TFM-Playground: A Playground for Tabular Foundation Models},
+  author={Pfefferle, Alexander and Hog, Johannes and Öztürk, Salih Bora and Kaya, Kürşat and Türkmen, Zeynep and Hutter, Frank},
+  year={2026},
+  url={https://github.com/automl/TFM-Playground/}
+}
+```
+
+and if you are using the nanoTabPFN-Model specifically please also cite:
+
+```bibtex
+@article{pfefferle2025nanotabpfn,
+  title={nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
+  author={Pfefferle, Alexander and Hog, Johannes and Purucker, Lennart and Hutter, Frank},
+  journal={arXiv preprint arXiv:2511.03634},
+  year={2025}
 }
 ```
