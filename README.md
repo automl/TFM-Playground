@@ -1,45 +1,113 @@
+<div align="center">
+
+<img src="https://ml.informatik.uni-freiburg.de/research-artifacts/TFM-Playground/tfmplayground-logo.png" width="200" alt="TFM-Playground">
+
 # TFM-Playground
 
-The purpose of this repository is to provide a fully open source playground for tabular foundation models.
+**Tabular Foundation Models and Priors. One Interface. Training and Inference.**
+
+[![python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/downloads/release/python-3120/)
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+</div>
+
+A fully open source playground for tabular foundation models: many architectures behind one interface, with many priors, a pretraining loop and an evaluation pipeline. It is a starting point for anyone who wants to develop or research tabular foundation models. If you are a new to tabular foundation models we recommend checking out [nanoTabPFN](https://github.com/automl/nanoTabPFN) first as an introduction.
+
+### Quickstart
 
 ```
-todo: clone and uv instructions (to set it up as package editable?)
+pip install uv
+git clone https://github.com/automl/TFM-Playground.git
+cd TFM-Playground
+uv sync
+uv run python examples/pretraining_quickstart.py
 ```
 
-### Pretrain a TFM with configurations
+That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
 
 ```python
-modelconfig = ...
-priorconfig = ...
-evalconfig = ...
-trainconfig = ...
-experimentconfig=...
+model_config = ...
+prior_config = ...
+eval_config = ...
+train_config = ...
+experiment_config = ...
 
 model = pretrainTFM(
     problem="classification",
-    model=...Model(config=modelconfig),
-    prior=...Prior(config=priorconfig, device=device),
-    eval=evalconfig,
-    training=trainconfig,
-    experiment=experimentconfig,
+    model=...Model(config=model_config),
+    prior=...Prior(config=prior_config),
+    eval=eval_config,
+    training=train_config,
+    experiment=experiment_config,
 )
 ```
 
-full examples in [examples/pretraining_classification.py](examples/pretraining_classification.py) and  [examples/pretraining_regression.py](examples/pretraining_regression.py)
+Fully configurable examples are in [examples](examples):
 
-### model list
+```
+uv run python examples/pretraining_classification.py
+uv run python examples/pretraining_regression.py
+```
 
-- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
-- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
-- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [repo](https://github.com/soda-inria/nanotabicl)
-- tabicl - [adapter](tfmplayground/models/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
-- tabfm - [adapter](tfmplayground/models/tabfm.py) · [repo](https://github.com/google-research/tabfm) · [blog](https://research.google/blog/introducing-tabfm-a-zero-shot-foundation-model-for-tabular-data/)
+### Models
 
-### prior list 
+Each one is an adapter over upstream code, with a classifier and a regressor config.
 
-- nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [repo](https://github.com/soda-inria/nanotabicl)
-- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- nanotabpfn - [adapter](tfmplayground/models/nanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/automl/nanoTabPFN) · [paper](https://arxiv.org/abs/2511.03634)
+- moddednanotabpfn - [adapter](tfmplayground/models/moddednanotabpfn.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/borawhocodess/modded-nanotabpfn) · [paper](https://arxiv.org/abs/2606.03681)
+- nanotabicl - [adapter](tfmplayground/models/nanotabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/models/tabicl.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+- tabfm - [adapter](tfmplayground/models/tabfm.py) · [config](tfmplayground/configs/models.py) · [repo](https://github.com/google-research/tabfm) · [paper](https://arxiv.org/abs/2609.37959)
 
-### eval stuff 
+### Priors
 
-### train stuff 
+Priors generate the synthetic tables for pretraining.
+
+#### On the fly
+
+Each batch is sampled when the training loop asks for it.
+
+- nanotabicl - [adapter](tfmplayground/priors/nanotabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/nanotabicl)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [config](tfmplayground/configs/priors.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2602.11139)
+
+#### Dumping
+
+Priors can also be written to a dump that you can use later:
+
+```
+uv run python -m tfmplayground.priors --lib tabicl --prior_type mix_scm --num_batches 1000 --batch_size 4 --max_classes 3 --max_seq_len 50 --min_features 3 --max_features 3 --save_path dump-d1000b4r50c3-3-tabicl.h5
+```
+
+These priors can be dumped:
+
+- ticl - [adapter](tfmplayground/priors/ticl.py) · [repo](https://github.com/microsoft/ticl)
+- tabicl - [adapter](tfmplayground/priors/tabicl.py) · [repo](https://github.com/soda-inria/tabicl) · [paper](https://arxiv.org/abs/2502.05564)
+- tabpfn - [adapter](tfmplayground/priors/tabpfn.py) · [repo](https://github.com/automl/tabpfn-v1-prior)
+
+Load a dump with:
+
+- dump - [adapter](tfmplayground/priors/dump.py) · [config](tfmplayground/configs/priors.py)
+
+### Citation
+
+If you use the TFM-Playground please cite:
+
+```bibtex
+@misc{pfefferle2026tfmplayground,
+  title={TFM-Playground: A Playground for Tabular Foundation Models},
+  author={Pfefferle, Alexander and Hog, Johannes and Öztürk, Salih Bora and Kaya, Kürşat and Türkmen, Zeynep and Hutter, Frank},
+  year={2026},
+  url={https://github.com/automl/TFM-Playground/}
+}
+```
+
+and if you are using the nanoTabPFN-Model specifically please also cite:
+
+```bibtex
+@article{pfefferle2025nanotabpfn,
+  title={nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
+  author={Pfefferle, Alexander and Hog, Johannes and Purucker, Lennart and Hutter, Frank},
+  journal={arXiv preprint arXiv:2511.03634},
+  year={2025}
+}
+```
