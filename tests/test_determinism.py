@@ -28,3 +28,4 @@ def test_classifier_is_deterministic():
     second = classifier.predict_proba(X_test)
 
     np.testing.assert_array_equal(first, second)
+import os
