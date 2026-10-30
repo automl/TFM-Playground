@@ -31,6 +31,12 @@ jobs:
 
       # Only the dev group (ruff, pytest) is needed for linting; skip torch and the git dependencies.
       # --locked fails if uv.lock is out of date with pyproject.toml, so a dependency change without `uv lock` is caught here.
+      - name: debug lock
+        run: |
+          echo "== uv version"; uv --version
+          echo "== lock --check -v"; uv lock --check -v 2>&1 | tail -60 || true
+          echo "== regenerate and diff"; uv lock 2>&1 | tail -3; git --no-pager diff --stat uv.lock; git --no-pager diff uv.lock | head -120
+
       - name: Install lint dependencies
         run: uv sync --only-dev --locked
 
