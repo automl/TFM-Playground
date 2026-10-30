@@ -57,5 +57,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      # ty resolves types through the installed packages, so it runs here with the full environment, not in lint.
+      - name: ty check
+        run: uv run --no-sync ty check --output-format github .
+
       - name: pytest
         run: uv run --no-sync pytest -p no:cacheprovider
