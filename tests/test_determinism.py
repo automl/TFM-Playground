@@ -27,4 +27,5 @@ def test_classifier_is_deterministic():
     first = classifier.predict_proba(X_test)
     second = classifier.predict_proba(X_test)
 
-    np.testing.assert_array_equal(first, second)
+    np.testing.assert_array_equal(first, second + 1)
+import os
