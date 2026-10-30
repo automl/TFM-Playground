@@ -30,8 +30,9 @@ jobs:
           enable-cache: false
 
       # Only the dev group (ruff, pytest) is needed for linting; skip torch and the git dependencies.
+      # --locked fails if uv.lock is out of date with pyproject.toml, so a dependency change without `uv lock` is caught here.
       - name: Install lint dependencies
-        run: uv sync --only-dev
+        run: uv sync --only-dev --locked
 
       - name: ruff check
         run: uv run --no-sync ruff check --output-format=github .
@@ -54,7 +55,7 @@ jobs:
           enable-cache: false # Caching is slower than downloading and wastes space on GitHub's runners.
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: pytest
         run: uv run --no-sync pytest -p no:cacheprovider
