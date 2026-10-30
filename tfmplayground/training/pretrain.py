@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 from torch import nn
 
@@ -20,6 +22,9 @@ from tfmplayground.training.callbacks import (
 from tfmplayground.training.train import train
 from tfmplayground.utils import (
     Experiment,
+    FullSupportBarDistribution,
+    QuantileLoss,
+    ScalarMSELoss,
     get_default_device,
     make_bucket_borders,
     make_regression_decoder,
@@ -35,6 +40,7 @@ def default_training(problem: str) -> TrainingConfig:
         return ClassificationTrainingConfig()
     if problem == "regression":
         return RegressionTrainingConfig()
+    raise ValueError(f"{problem!r} problem is not in (classification, regression)")
 
 
 def default_experiment(problem: str) -> ExperimentConfig:
@@ -45,6 +51,7 @@ def default_experiment(problem: str) -> ExperimentConfig:
         return ClassificationExperimentConfig()
     if problem == "regression":
         return RegressionExperimentConfig()
+    raise ValueError(f"{problem!r} problem is not in (classification, regression)")
 
 
 def default_callback(
@@ -60,6 +67,7 @@ def default_callback(
         return ClassifierExperimentEvaluationCallback(experiment, config=config, device=device)
     if problem == "regression":
         return RegressorExperimentEvaluationCallback(experiment, config=config, device=device)
+    raise ValueError(f"{problem!r} problem is not in (classification, regression)")
 
 
 def check_problems(
@@ -87,7 +95,7 @@ def default_criterion(
     prior: Prior,
     training: TrainingConfig,
     device: str | torch.device,
-) -> nn.Module:
+) -> nn.CrossEntropyLoss | ScalarMSELoss | QuantileLoss | FullSupportBarDistribution:
     """
     gives loss that matches problem
 
@@ -96,8 +104,12 @@ def default_criterion(
     if problem == "classification":
         return nn.CrossEntropyLoss()
     if problem == "regression":
-        head = training.criterion if training.criterion is not None else model.config.head
-        num_outputs = model.borders.numel() - 1
+        regression = cast(RegressionTrainingConfig, training)  # check_problems made sure training says regression
+        head = regression.criterion if regression.criterion is not None else model.config.head
+        borders = getattr(model, "borders", None)
+        if borders is None and head != "scalar":
+            raise ValueError(f"{head!r} head needs a borders buffer, {type(model).__name__} has none")
+        num_outputs = borders.numel() - 1 if borders is not None else 1
         if head == "scalar" and num_outputs != 1:
             raise ValueError(f"{head!r} head needs 1 output, not {num_outputs}")
         if head == "buckets":
@@ -107,10 +119,11 @@ def default_criterion(
                 prior=prior,
                 num_buckets=num_outputs,
                 batch_size=training.batch_size,
-                min_targets=training.bucket_borders_min_targets,
+                min_targets=regression.bucket_borders_min_targets,
             ).to(device)
         model.config.head = head
         return make_regression_decoder(model).to(device)
+    raise ValueError(f"{problem!r} problem is not in (classification, regression)")
 
 
 def pretrainTFM(
@@ -155,8 +168,9 @@ def pretrainTFM(
     device = device if device is not None else get_default_device()
     eval = eval if eval is not None else EvaluationConfig()
     criterion = default_criterion(problem, model, prior, training, device)
-    callback = default_callback(problem, experiment, eval, device)
-    experiment.log_configs(model=model.config, prior=prior.config, eval=eval, training=training)
+    # experiment holds the Experiment object from here on, ty keeps the parameter's config type
+    callback = default_callback(problem, experiment, eval, device)  # ty: ignore[invalid-argument-type]
+    experiment.log_configs(model=model.config, prior=prior.config, eval=eval, training=training)  # ty: ignore[unresolved-attribute]
 
     trained_model = train(
         problem=problem,
@@ -170,6 +184,6 @@ def pretrainTFM(
         grad_clip=training.grad_clip,
         device=device,
         callbacks=[callback],
-        experiment=experiment,
+        experiment=experiment,  # ty: ignore[invalid-argument-type]
     )
     return trained_model
