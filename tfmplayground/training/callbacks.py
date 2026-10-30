@@ -72,7 +72,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 class WandbLoggerCallback(BaseLoggerCallback):
     """Logger callback that logs epoch information to Weights & Biases."""
 
-    def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
+    def __init__(self, project: str, name: str | None = None, config: dict | None = None, log_dir: str | None = None):
         """
         Initializes a WandbLoggerCallback.
 
@@ -135,6 +135,8 @@ class ExperimentEvaluationCallback(ExperimentCallback):
     """
     measures how good model is while it trains
     """
+
+    metric: str  # name of the score, set by subclasses
 
     def __init__(
         self,

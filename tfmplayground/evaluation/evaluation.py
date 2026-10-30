@@ -1,8 +1,11 @@
+from typing import cast
+
 import numpy as np
 import openml
+import pandas as pd
 import torch
 from openml.config import set_root_cache_directory
-from openml.tasks import TaskType
+from openml.tasks import OpenMLSupervisedTask, TaskType
 from sklearn.preprocessing import LabelEncoder
 
 from tfmplayground.interface import TabularClassifier, TabularRegressor
@@ -135,8 +138,11 @@ def get_openml_predictions(
         if not classification and task.task_type_id != TaskType.SUPERVISED_REGRESSION:
             continue  # skip task, only regression
 
+        task = cast(OpenMLSupervisedTask, task)  # the task type filters above leave only supervised tasks
         dataset = task.get_dataset(download_data=False)
 
+        if dataset.qualities is None:
+            raise ValueError(f"dataset {dataset.name!r} has no qualities, cannot check its size")
         n_features = dataset.qualities["NumberOfFeatures"]
         n_samples = dataset.qualities["NumberOfInstances"]
         if n_features > max_n_features or n_samples > max_n_samples:
@@ -154,6 +160,10 @@ def get_openml_predictions(
             X, y, categorical_indicator, attribute_names = dataset.get_data(
                 target=task.target_name, dataset_format="dataframe"
             )
+            # openml annotates get_data with one union for every dataset_format, so the cast states what the
+            # dataframe format and a target name guarantee
+            X = cast(pd.DataFrame, X)
+            y = cast(pd.Series, y)
             train_indices, test_indices = task.get_train_test_split_indices(fold=fold, repeat=repeat)
             X_train = X.iloc[train_indices].to_numpy()
             y_train = y.iloc[train_indices].to_numpy()
@@ -170,7 +180,7 @@ def get_openml_predictions(
             y_pred = model.predict(X_test)
             predictions.append(y_pred)
             if classification:
-                y_proba = model.predict_proba(X_test)
+                y_proba = model.predict_proba(X_test)  # ty: ignore[unresolved-attribute]
                 if y_proba.shape[1] == 2:  # binary classification
                     y_proba = y_proba[:, 1]
                 probabilities.append(y_proba)

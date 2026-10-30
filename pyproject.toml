@@ -86,6 +86,28 @@ exclude = [
     "tfmplayground/priors/nanotabicl.py",
 ]
 
+[tool.ty.src]
+exclude = [
+    # vendored, kept diffable against upstream
+    "tfmplayground/models/moddednanotabpfn.py",
+    "tfmplayground/models/nanotabicl.py",
+    "tfmplayground/priors/nanotabicl.py",
+]
+
+[tool.ty.rules]
+# torch declares nn.Module.forward as a callable attribute, so every forward method trips this
+invalid-mutable-override = "ignore"
+# a variable that changes type mid-function is reported but does not fail the check
+invalid-assignment = "warn"
+
+[[tool.ty.overrides]]
+# adapters change the vendor forward signature on purpose, that is what an adapter is for
+include = ["tfmplayground/models/*.py"]
+rules = { invalid-method-override = "ignore" }
+
+[tool.ty.terminal]
+error-on-warning = false  # warnings print, only errors fail the check
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
@@ -93,4 +115,5 @@ testpaths = ["tests"]
 dev = [
     "ruff>=0.15.10",
     "pytest>=8",
+    "ty==0.0.95",
 ]
