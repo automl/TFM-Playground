@@ -30,8 +30,9 @@ jobs:
           enable-cache: false
 
       # Only the dev group (ruff, pytest) is needed for linting; skip torch and the git dependencies.
+      # --locked fails if uv.lock is out of date with pyproject.toml, so a dependency change without `uv lock` is caught here.
       - name: Install lint dependencies
-        run: uv sync --only-dev
+        run: uv sync --only-dev --locked
 
       - name: ruff check
         run: uv run --no-sync ruff check --output-format=github .
@@ -51,12 +52,14 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          # Caching is slower than downloading here: the environment is ~4 GB (torch + CUDA libs),
-          # restoring it took ~80s while a fresh install from PyPI takes ~25s on GitHub's runners.
-          enable-cache: false
+          enable-cache: false # Caching is slower than downloading and wastes space on GitHub's runners.
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
+
+      # ty resolves types through the installed packages, so it runs here with the full environment, not in lint.
+      - name: ty check
+        run: uv run --no-sync ty check --output-format github .
 
       - name: pytest
         run: uv run --no-sync pytest -p no:cacheprovider

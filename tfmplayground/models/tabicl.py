@@ -11,6 +11,8 @@ class TabICLModel(TabICL, TabularFoundationModel):
     adapts tabicl to tabularfoundationmodel interface
     """
 
+    borders: torch.Tensor  # bucket or quantile borders, registered in __init__
+
     def __init__(self, config: TabICLClassifierConfig | TabICLRegressorConfig) -> None:
         """
         builds tabicl from config and reserves its borders
@@ -24,10 +26,10 @@ class TabICLModel(TabICL, TabularFoundationModel):
             col_nhead=config.col_nhead,
             col_num_inds=config.col_num_inds,
             col_affine=config.col_affine,
-            col_feature_group=config.col_feature_group,
+            col_feature_group=config.col_feature_group,  # ty: ignore[invalid-argument-type]  str in config, Literal upstream
             col_feature_group_size=config.col_feature_group_size,
             col_target_aware=config.col_target_aware,
-            col_ssmax=config.col_ssmax,
+            col_ssmax=config.col_ssmax,  # ty: ignore[invalid-argument-type]
             row_num_blocks=config.row_num_blocks,
             row_nhead=config.row_nhead,
             row_num_cls=config.row_num_cls,
@@ -35,7 +37,7 @@ class TabICLModel(TabICL, TabularFoundationModel):
             row_rope_interleaved=config.row_rope_interleaved,
             icl_num_blocks=config.icl_num_blocks,
             icl_nhead=config.icl_nhead,
-            icl_ssmax=config.icl_ssmax,
+            icl_ssmax=config.icl_ssmax,  # ty: ignore[invalid-argument-type]
             ff_factor=config.ff_factor,
             dropout=config.dropout,
             activation=config.activation,
@@ -63,5 +65,5 @@ class TabICLModel(TabICL, TabularFoundationModel):
         config = InferenceConfig()
         device = next(self.parameters()).device
         for stage in (config.COL_CONFIG, config.ROW_CONFIG, config.ICL_CONFIG):
-            stage.device = device
+            stage.device = device  # ty: ignore[unresolved-attribute]  MgrConfig sets its keys with setattr
         return super().forward(X, y_train, inference_config=config).float()
