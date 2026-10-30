@@ -56,11 +56,15 @@ select = [
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
 ]
 ignore = [
     "E741",  # ambiguous variable name
     "SIM102",  # nested if instead of a single if
 ]
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true  # callbacks accept **kwargs they do not read
 
 [tool.ruff.lint.per-file-ignores]
 "tfmplayground/models/nanotabicl.py" = [

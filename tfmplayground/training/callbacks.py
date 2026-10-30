@@ -45,7 +45,7 @@ class BaseLoggerCallback(Callback):
 class ConsoleLoggerCallback(BaseLoggerCallback):
     """Logger callback that prints epoch information to the console."""
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         print(f"Epoch {epoch:5d} | Time {epoch_time:5.2f}s | Mean Loss {loss:5.2f}", flush=True)
 
     def close(self):
@@ -61,7 +61,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 
         self.writer = SummaryWriter(log_dir=log_dir)
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         self.writer.add_scalar("Loss/train", loss, epoch)
         self.writer.add_scalar("Time/epoch", epoch_time, epoch)
 
@@ -90,7 +90,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
         except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         log_dict = {"epoch": epoch, "loss": loss, "epoch_time": epoch_time}
         self.wandb.log(log_dict)
 
@@ -115,7 +115,7 @@ class ExperimentCallback(BaseLoggerCallback):
         epoch: int,
         epoch_time: float,
         loss: float,
-        model: TabularFoundationModel,
+        model: TabularFoundationModel,  # noqa: ARG002
         **kwargs,
     ) -> None:
         """
