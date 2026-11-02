@@ -6,6 +6,7 @@ from torch import nn
 
 from tfmplayground.configs.models import ModdedNanoTabPFNClassifierConfig, ModdedNanoTabPFNRegressorConfig
 from tfmplayground.models.base import TabularFoundationModel
+from tfmplayground.models.nanotabpfn import memory_chunking
 
 
 class LowerPrecisionRMSNorm(nn.RMSNorm):
@@ -153,48 +154,63 @@ class TransformerEncoderLayer(nn.Module):
 
     def forward(self, src, sep):
         b, r, c, e = src.shape
+        num_mem_chunks = 1 if torch.is_grad_enabled() else b * r * c // 2**20 + 1
 
         x = src.reshape(b * r, c, e)
-        res = x
-        x = self.norm1(x)
 
-        qkv = self.qkv_features(x)
-        qkv = qkv.reshape(b * r, c, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        @memory_chunking(num_mem_chunks)
+        def feature_attention(x):
+            res = x
+            x = self.norm1(x)
 
-        x = F.scaled_dot_product_attention(q, k, v)
-        x = x.transpose(1, 2).reshape(b * r, c, e)
+            qkv = self.qkv_features(x)
+            qkv = qkv.reshape(-1, c, 3, self.num_heads, self.head_dim)
+            qkv = qkv.permute(2, 0, 3, 1, 4)
+            q, k, v = qkv[0], qkv[1], qkv[2]
 
-        src = res + x
+            x = F.scaled_dot_product_attention(q, k, v)
+            x = x.transpose(1, 2).reshape(-1, c, e)
+
+            return res + x
+
+        src = feature_attention(x)
         src = src.reshape(b, r, c, e)
 
         x = src.transpose(1, 2).reshape(b * c, r, e)
-        res = x
-        x = self.norm2(x)
 
-        qkv = self.qkv_datapoints(x)
-        qkv = qkv.reshape(b * c, r, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        @memory_chunking(num_mem_chunks)
+        def datapoint_attention(x):
+            res = x
+            x = self.norm2(x)
 
-        q_left, q_right = q.split([sep, r - sep], dim=2)
+            qkv = self.qkv_datapoints(x)
+            qkv = qkv.reshape(-1, r, 3, self.num_heads, self.head_dim)
+            qkv = qkv.permute(2, 0, 3, 1, 4)
+            q, k, v = qkv[0], qkv[1], qkv[2]
 
-        k_train = k[:, :, :sep, :]
-        v_train = v[:, :, :sep, :]
+            q_left, q_right = q.split([sep, r - sep], dim=2)
 
-        x_left = F.scaled_dot_product_attention(q_left, k_train, v_train)
-        x_right = F.scaled_dot_product_attention(q_right, k_train, v_train)
+            k_train = k[:, :, :sep, :]
+            v_train = v[:, :, :sep, :]
 
-        x = torch.cat([x_left, x_right], dim=2)
-        x = x.transpose(1, 2).reshape(b * c, r, e)
+            x_left = F.scaled_dot_product_attention(q_left, k_train, v_train)
+            x_right = F.scaled_dot_product_attention(q_right, k_train, v_train)
 
-        src = res + x
+            x = torch.cat([x_left, x_right], dim=2)
+            x = x.transpose(1, 2).reshape(-1, r, e)
+
+            return res + x
+
+        src = datapoint_attention(x)
         src = src.reshape(b, c, r, e).transpose(2, 1)
 
-        x = self.norm3(src)
-        x = self.linear2(F.gelu(self.linear1(x)))
-        src = src + x
+        @memory_chunking(num_mem_chunks)
+        def mlp(src):
+            x = self.norm3(src)
+            x = self.linear2(F.gelu(self.linear1(x)))
+            return src + x
+
+        src = mlp(src.reshape(b * r * c, e)).reshape(b, r, c, e)
 
         return src
 
