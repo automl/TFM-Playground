@@ -172,4 +172,15 @@ def pretrainTFM(
         callbacks=[callback],
         experiment=experiment,
     )
+    if eval.tabarena_subset is not None:
+        from tfmplayground.evaluation.tabarena import evaluate_tabarena
+
+        row = evaluate_tabarena(
+            problem,
+            experiment.best_checkpoint_path,
+            experiment.dir / "tabarena",
+            subset=eval.tabarena_subset,
+            plot_only=eval.plot_only,
+        )
+        experiment.log(f"tabarena | elo {row['elo']:.0f} | rank {row['rank']:.1f} | winrate {row['winrate']:.2f}", True)
     return trained_model
