@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import torch
 from torch import nn
 
@@ -175,6 +177,7 @@ def pretrainTFM(
     if eval.tabarena_subset is not None:
         from tfmplayground.evaluation.tabarena import evaluate_tabarena
 
+        started = datetime.now()
         row = evaluate_tabarena(
             problem,
             experiment.best_checkpoint_path,
@@ -182,5 +185,10 @@ def pretrainTFM(
             subset=eval.tabarena_subset,
             plot_only=eval.plot_only,
         )
-        experiment.log(f"tabarena | elo {row['elo']:.0f} | rank {row['rank']:.1f} | winrate {row['winrate']:.2f}", True)
+        minutes = (datetime.now() - started).total_seconds() / 60
+        experiment.log(
+            f"tabarena | elo {row['elo']:.0f} | rank {row['rank']:.1f} | winrate {row['winrate']:.2f}"
+            f" | eval time {minutes:.2f} mins",
+            True,
+        )
     return trained_model
