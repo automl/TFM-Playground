@@ -180,7 +180,7 @@ def pretrainTFM(
         started = datetime.now()
         row = evaluate_tabarena(
             problem,
-            experiment.best_checkpoint_path,
+            experiment.last_checkpoint_path,
             experiment.dir / eval.tabarena_dir,
             subset=eval.tabarena_subset,
             plot_only=eval.plot_only,
