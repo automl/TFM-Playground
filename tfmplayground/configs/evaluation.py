@@ -11,6 +11,7 @@ class EvaluationConfig:
     max_n_features: int = 100
     max_n_samples: int = 1000
     tabarena_subset: str | list | None = None
+    tabarena_dir: str = "tabarena"
     plot_only: tuple[str, ...] | None = (
         "Linear",
         "RandomForest",
