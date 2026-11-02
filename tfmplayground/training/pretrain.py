@@ -186,8 +186,9 @@ def pretrainTFM(
             plot_only=eval.plot_only,
         )
         minutes = (datetime.now() - started).total_seconds() / 60
-        experiment.log(f"tabarena elo: {row['elo']:.0f}", True)
-        experiment.log(f"tabarena rank: {row['rank']:.1f}", True)
-        experiment.log(f"tabarena winrate: {row['winrate']:.2f}", True)
-        experiment.log(f"tabarena runtime: {minutes:.2f} mins", True)
+        experiment.log("tabarena:", True)
+        experiment.log(f"  elo: {row['elo']:.0f}", True)
+        experiment.log(f"  rank: {row['rank']:.1f}", True)
+        experiment.log(f"  winrate: {row['winrate']:.2f}", True)
+        experiment.log(f"  runtime: {minutes:.2f} mins", True)
     return trained_model
