@@ -149,6 +149,30 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         self.config = config
         self.device = device
 
+    def close(self) -> None:
+        """
+        closes run, then ranks last checkpoint on tabarena when asked
+        """
+        super().close()
+        if self.config.tabarena_subset is None:
+            return
+        from tfmplayground.evaluation.tabarena import evaluate_on_tabarena
+
+        started = datetime.now()
+        row = evaluate_on_tabarena(
+            self.experiment.last_checkpoint_path,
+            self.experiment.dir / self.config.tabarena_dir,
+            subset=self.config.tabarena_subset,
+            plot_only=self.config.plot_only,
+            method=self.config.tabarena_method,
+        )
+        minutes = (datetime.now() - started).total_seconds() / 60
+        self.experiment.log("tabarena:", console=True)
+        self.experiment.log(f"  elo: {row['elo']:.0f} (+{row['elo+']:.0f}/-{row['elo-']:.0f})", console=True)
+        self.experiment.log(f"  rank: {row['rank']:.2f}", console=True)
+        self.experiment.log(f"  winrate: {row['winrate']:.2f}", console=True)
+        self.experiment.log(f"  runtime: {minutes:.2f} mins", console=True)
+
     def predictions(self, model: TabularClassifier | TabularRegressor) -> dict[str, tuple]:
         """
         asks model to predict tasks chosen for evaluation

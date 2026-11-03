@@ -40,8 +40,7 @@ class TFMPlaygroundModel(AbstractTorchModel):
         self.model.model = self.model.model.to(device)
 
 
-def evaluate_tabarena(
-    problem: str,
+def evaluate_on_tabarena(
     checkpoint: str | Path,
     output_dir: str | Path,
     subset: str | list[str] = "lite",
@@ -49,11 +48,12 @@ def evaluate_tabarena(
     method: str = "TFMPlayground",
 ) -> pd.Series:
     """
-    fits checkpoint on tabarena tasks of problem, and gives its row of the leaderboard against tabarena baselines
+    fits checkpoint on tabarena tasks of its problem, and gives its row of the leaderboard against tabarena baselines
 
     plot_only keeps only these baselines and ours in figures, leaderboard still counts every baseline
     """
     output_dir = Path(output_dir)
+    problem = load_model(checkpoint).config.problem
     subset = [subset] if isinstance(subset, str) else list(subset)
     TFMPlaygroundModel.ag_key = TFMPlaygroundModel.ag_name = method
     config = ConfigGenerator(
