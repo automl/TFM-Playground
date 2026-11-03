@@ -15,8 +15,6 @@ class TFMPlaygroundModel(AbstractTorchModel):
     autogluon wrapper, so tabarena can fit and score a playground checkpoint
     """
 
-    ag_key = "TFMP"
-    ag_name = "TFMPlayground"
     default_num_gpus = 1
 
     def _fit(self, X: pd.DataFrame, y: pd.Series, num_gpus: float = 0, **kwargs) -> None:
@@ -48,6 +46,7 @@ def evaluate_tabarena(
     output_dir: str | Path,
     subset: str | list[str] = "lite",
     plot_only: tuple[str, ...] | None = None,
+    method: str = "TFMPlayground",
 ) -> pd.Series:
     """
     fits checkpoint on tabarena tasks of problem, and gives its row of the leaderboard against tabarena baselines
@@ -56,6 +55,7 @@ def evaluate_tabarena(
     """
     output_dir = Path(output_dir)
     subset = [subset] if isinstance(subset, str) else list(subset)
+    TFMPlaygroundModel.ag_key = TFMPlaygroundModel.ag_name = method
     config = ConfigGenerator(
         model_cls=TFMPlaygroundModel,
         manual_configs=[{"checkpoint": str(checkpoint)}],
@@ -67,11 +67,10 @@ def evaluate_tabarena(
         experiments,
         expname=str(output_dir / "results"),
         subset=[*subset, problem],
-        new_result_prefix="[New] ",
         debug_mode=True,
         raise_on_failure=False,
     )
     if plot_only is not None:
-        plot_only = [*plot_only, f"[New] {TFMPlaygroundModel.ag_key}"]
+        plot_only = [*plot_only, method]
     leaderboard = context.compare(output_dir=output_dir / "eval", plot_only=plot_only)
-    return leaderboard[leaderboard["method"].str.startswith("[New] ")].iloc[0]
+    return leaderboard[leaderboard["method"].str.startswith(method)].iloc[0]

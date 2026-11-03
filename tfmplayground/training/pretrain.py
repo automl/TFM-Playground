@@ -184,6 +184,7 @@ def pretrainTFM(
             experiment.dir / eval.tabarena_dir,
             subset=eval.tabarena_subset,
             plot_only=eval.plot_only,
+            method=eval.tabarena_method,
         )
         minutes = (datetime.now() - started).total_seconds() / 60
         experiment.log("tabarena:", True)

@@ -11,6 +11,7 @@ class EvaluationConfig:
     max_n_features: int = 100
     max_n_samples: int = 1000
     tabarena_dir: str = "tabarena"
+    tabarena_method: str = "TFMPlayground"
     tabarena_subset: str | list | None = None
     plot_only: tuple[str, ...] | None = (
         "Linear",
