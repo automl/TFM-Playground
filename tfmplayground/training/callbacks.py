@@ -162,9 +162,7 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         row = evaluate_on_tabarena(
             self.experiment.last_checkpoint_path,
             self.experiment.dir / self.config.tabarena_dir,
-            subset=self.config.tabarena_subset,
-            plot_only=self.config.plot_only,
-            method=self.config.tabarena_method,
+            self.config,
         )
         minutes = (datetime.now() - started).total_seconds() / 60
         self.experiment.log("tabarena:", console=True)

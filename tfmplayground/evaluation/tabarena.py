@@ -6,6 +6,7 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
+from tfmplayground.configs.evaluation import EvaluationConfig
 from tfmplayground.interface import TabularClassifier, TabularRegressor
 from tfmplayground.utils import load_model
 
@@ -40,13 +41,7 @@ class TFMPlaygroundModel(AbstractTorchModel):
         self.model.model = self.model.model.to(device)
 
 
-def evaluate_on_tabarena(
-    checkpoint: str | Path,
-    output_dir: str | Path,
-    subset: str | list[str] = "lite",
-    plot_only: tuple[str, ...] | None = None,
-    method: str = "TFMPlayground",
-) -> pd.Series:
+def evaluate_on_tabarena(checkpoint: str | Path, output_dir: str | Path, config: EvaluationConfig) -> pd.Series:
     """
     fits checkpoint on tabarena tasks of its problem, and gives its row of the leaderboard against tabarena baselines
 
@@ -54,14 +49,16 @@ def evaluate_on_tabarena(
     """
     output_dir = Path(output_dir)
     problem = load_model(checkpoint).config.problem
+    subset = config.tabarena_subset
     subset = [subset] if isinstance(subset, str) else list(subset)
+    method = config.tabarena_method
     TFMPlaygroundModel.ag_key = TFMPlaygroundModel.ag_name = method
-    config = ConfigGenerator(
+    generator = ConfigGenerator(
         model_cls=TFMPlaygroundModel,
         manual_configs=[{"checkpoint": str(checkpoint)}],
         search_space={},
     )
-    experiments = TabArenaV0pt1ExperimentBundle(models=[(config, 0)]).build_experiments()
+    experiments = TabArenaV0pt1ExperimentBundle(models=[(generator, 0)]).build_experiments()
     context = TabArenaContext()
     context.build_and_run_jobs(
         experiments,
@@ -70,6 +67,7 @@ def evaluate_on_tabarena(
         debug_mode=True,
         raise_on_failure=False,
     )
+    plot_only = config.plot_only
     if plot_only is not None:
         plot_only = [*plot_only, method]
     leaderboard = context.compare(output_dir=output_dir / "eval", plot_only=plot_only)
