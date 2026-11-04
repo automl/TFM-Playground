@@ -16,7 +16,7 @@ set_randomness_seed(11)  # important for making model weight initialization repr
 model_config = ModdedNanoTabPFNRegressorConfig(l=10, head="scalar", o=1)
 prior_config = NanoTabICLRegressionPriorConfig(max_num_datapoints=2048, min_num_features=5, max_num_features=32)
 eval_config = EvaluationConfig(tasks="tabarena", max_n_samples=50000, max_n_features=200)
-train_config = RegressionTrainingConfig(seed=11, batch_size=2, epochs=100, steps=100)
+train_config = RegressionTrainingConfig(seed=11, batch_size=2, epochs=100, steps=1000)
 experiment_config = RegressionExperimentConfig(name="regression_example")
 
 model = pretrainTFM(
