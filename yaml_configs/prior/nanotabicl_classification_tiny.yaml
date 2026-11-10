@@ -1,0 +1,8 @@
+# refines tfmplayground.configs.priors.NanoTabICLClassificationPriorConfig with the quickstart's tiny tables
+defaults:
+  - NanoTabICLClassificationPriorConfig
+
+min_num_datapoints: 50
+max_num_datapoints: 50
+max_num_features: 3
+max_num_classes: 3

@@ -49,6 +49,75 @@ uv run python examples/pretraining_classification.py
 uv run python examples/pretraining_regression.py
 ```
 
+The same runs can be driven from yaml instead of Python, see [Configuration](#configuration):
+
+```
+uv run python -m tfmplayground.training --config-name debug      # tiny model, tiny tables, a few steps
+```
+
+### Configuration
+
+There are two ways to configure a run, and they describe the same thing:
+
+- **In Python**, build the config dataclasses from [tfmplayground/configs](tfmplayground/configs) and pass models and
+  priors to `pretrainTFM`, as the [examples](examples) do. This is the way to use the package as a library.
+- **From yaml**, compose a run from the files in [yaml_configs](yaml_configs) and start it with
+  `python -m tfmplayground.training`. This is the way to run experiments in a clone of the repo.
+
+The yaml files never define configuration on their own: each one refines one of the dataclasses, so every field is
+checked against it and unknown fields are rejected. The tree has run configs at the top level and one directory per
+part of a run:
+
+```
+yaml_configs/
+  classification.yaml  regression.yaml  quickstart.yaml  debug.yaml     # run configs
+  model/       nanotabpfn_classifier.yaml  tabfm_regressor.yaml  ...     # one file per model and problem
+  prior/       nanotabicl_classification.yaml  tabicl_regression.yaml ...
+  training/    classification.yaml  regression.yaml  *_debug.yaml
+  experiment/  classification.yaml  regression.yaml
+  eval/        toy.yaml  tabarena.yaml
+```
+
+A run config picks one file from each directory; the command line can swap any of them or set any field,
+using [Hydra's override syntax](https://hydra.cc/docs/advanced/override_grammar/basic/):
+
+```
+uv run python -m tfmplayground.training --config-name classification          # the run config to start from
+uv run python -m tfmplayground.training --config-name regression model=tabfm_regressor prior=tabicl_regression
+uv run python -m tfmplayground.training --config-name classification training.epochs=2 model.num_layers=4
+```
+
+`group=option` swaps the file `yaml_configs/<group>/<option>.yaml` in, `group.field=value` sets one field. Files
+named plainly, like `tabicl_classifier`, keep the dataclass defaults, which are the upstream model sizes; `*_small`,
+`*_tiny` and `*_debug` variants carry laptop sizes.
+
+To keep your own setup, copy a file and change fields in it. A model variant:
+
+```yaml
+# yaml_configs/model/tabicl_classifier_wide.yaml
+defaults:
+  - TabICLClassifierConfig   # the dataclass this file refines
+embed_dim: 256
+```
+
+A run config that reuses another and swaps parts, as `debug.yaml` does:
+
+```yaml
+defaults:
+  - classification
+  - override model: tabicl_classifier_wide
+  - _self_
+experiment:
+  name: wide
+```
+
+Every run also writes its full configuration as `<run id>-config.yaml` into its experiment directory, next to the
+log and the checkpoints. That file composes as is, so a finished run can be repeated or tweaked:
+
+```
+uv run python -m tfmplayground.training --config-dir workdir/experiments/classification/debug/<run id> --config-name <run id>-config training.epochs=5
+```
+
 ### Models
 
 Each one is an adapter over upstream code, with a classifier and a regressor config.

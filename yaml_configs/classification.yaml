@@ -1,0 +1,14 @@
+# one classification pretraining run, composed from the groups below
+#
+# swap a part with e.g. `model=tabfm_classifier`,
+# set a field with e.g. `training.epochs=2 model.l=10`
+defaults:
+  - RunConfig
+  - model: moddednanotabpfn_classifier
+  - prior: nanotabicl_classification
+  - training: classification
+  - experiment: classification
+  - eval: toy
+  - _self_
+
+problem: classification

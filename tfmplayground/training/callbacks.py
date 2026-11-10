@@ -155,7 +155,8 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         """
         return get_openml_predictions(
             model=model,
-            tasks=self.config.tasks,
+            suite=self.config.suite,
+            task_ids=self.config.task_ids,
             max_n_features=self.config.max_n_features,
             max_n_samples=self.config.max_n_samples,
         )

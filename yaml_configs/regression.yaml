@@ -1,0 +1,14 @@
+# one regression pretraining run, composed from the groups below
+#
+# swap a part with e.g. `model=tabfm_regressor`,
+# set a field with e.g. `training.epochs=2 model.l=10`
+defaults:
+  - RunConfig
+  - model: moddednanotabpfn_regressor
+  - prior: nanotabicl_regression
+  - training: regression
+  - experiment: regression
+  - eval: toy
+  - _self_
+
+problem: regression

@@ -15,7 +15,7 @@ from torch import nn
 
 from tfmplayground import models
 from tfmplayground.configs import models as model_configs
-from tfmplayground.configs.training import ExperimentConfig
+from tfmplayground.configs.training import ExperimentConfig, TrainingConfig
 from tfmplayground.models.base import TabularFoundationModel
 
 if TYPE_CHECKING:
@@ -394,6 +394,7 @@ class Experiment:
         self.best_score = None
         self.best_checkpoint_path = self.dir / f"{self.id}-ckpt-best.pth"
         self.last_checkpoint_path = self.dir / f"{self.id}-ckpt-last.pth"
+        self.run_config_path = self.dir / f"{self.id}-config.yaml"
 
     def log_configs(self, **configs) -> None:
         """
@@ -405,6 +406,36 @@ class Experiment:
             self.log(f"{label}: {type(config).__name__}")
             for name, value in asdict(config).items():
                 self.log(f"  {name}: {value}")
+
+    def save_run_config(
+        self,
+        problem: str,
+        model,
+        prior,
+        training: "TrainingConfig",
+        experiment: ExperimentConfig,
+        eval,
+        device: str | torch.device | None,
+    ) -> None:
+        """
+        writes the run's configs as one yaml that composes again with `python -m tfmplayground.training`
+
+        the defaults list names the config dataclasses by class name, which `tfmplayground.configs.store`
+        registers, so the file needs no other yaml to compose. rerun it with
+        `--config-dir <this run's dir> --config-name <this run's id>-config`
+        """
+        import yaml  # local import, so plain `import tfmplayground` does not need it
+
+        parts = {"model": model, "prior": prior, "training": training, "experiment": experiment, "eval": eval}
+        defaults = ["RunConfig", *({group: type(config).__name__} for group, config in parts.items()), "_self_"]
+        run = {"defaults": defaults, "problem": problem}
+        run.update({group: asdict(config) for group, config in parts.items()})
+        run["device"] = None if device is None else str(device)
+        header = (
+            f"# configs of run {self.id}, composable as is:\n"
+            f"#   python -m tfmplayground.training --config-dir {self.dir} --config-name {self.id}-config\n"
+        )
+        self.run_config_path.write_text(header + yaml.safe_dump(run, sort_keys=False))
 
     def save_checkpoint(self, path: Path, model: TabularFoundationModel) -> None:
         """

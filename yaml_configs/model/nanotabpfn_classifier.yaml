@@ -1,0 +1,3 @@
+# refines tfmplayground.configs.models.NanoTabPFNClassifierConfig; fields left out keep the dataclass defaults
+defaults:
+  - NanoTabPFNClassifierConfig

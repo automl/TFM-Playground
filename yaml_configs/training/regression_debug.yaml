@@ -1,0 +1,8 @@
+# refines tfmplayground.configs.training.RegressionTrainingConfig with a handful of steps, for debugging a pipeline
+defaults:
+  - RegressionTrainingConfig
+
+batch_size: 2
+steps: 5
+epochs: 2
+bucket_borders_min_targets: 20000

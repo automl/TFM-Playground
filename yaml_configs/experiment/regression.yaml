@@ -1,0 +1,3 @@
+# refines tfmplayground.configs.training.RegressionExperimentConfig; fields left out keep the dataclass defaults
+defaults:
+  - RegressionExperimentConfig

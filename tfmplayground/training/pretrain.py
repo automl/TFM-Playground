@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import torch
 from torch import nn
 
@@ -10,7 +12,9 @@ from tfmplayground.configs.training import (
     RegressionTrainingConfig,
     TrainingConfig,
 )
+from tfmplayground.models import build_model
 from tfmplayground.models.base import TabularFoundationModel
+from tfmplayground.priors import build_prior
 from tfmplayground.priors.base import Prior
 from tfmplayground.training.callbacks import (
     ClassifierExperimentEvaluationCallback,
@@ -25,6 +29,9 @@ from tfmplayground.utils import (
     make_regression_decoder,
     set_randomness_seed,
 )
+
+if TYPE_CHECKING:  # keeps hydra off the import path of `import tfmplayground`
+    from tfmplayground.configs.store import RunConfig
 
 
 def default_training(problem: str) -> TrainingConfig:
@@ -157,6 +164,15 @@ def pretrainTFM(
     criterion = default_criterion(problem, model, prior, training, device)
     callback = default_callback(problem, experiment, eval, device)
     experiment.log_configs(model=model.config, prior=prior.config, eval=eval, training=training)
+    experiment.save_run_config(
+        problem=problem,
+        model=model.config,
+        prior=prior.config,
+        training=training,
+        experiment=experimentconfig,
+        eval=eval,
+        device=device,
+    )
 
     trained_model = train(
         problem=problem,
@@ -173,3 +189,34 @@ def pretrainTFM(
         experiment=experiment,
     )
     return trained_model
+
+
+def pretrain_from_config(cfg: "RunConfig") -> TabularFoundationModel:
+    """
+    builds model and prior from a composed run config and pretrains
+
+    seeds before the model is built, so weight initialization is covered too; `pretrainTFM` seeds again but only
+    after the model exists
+
+    Parameters
+    ----------
+    cfg : RunConfig
+        composed run config, as `OmegaConf.to_object()` gives it
+
+    Returns
+    -------
+    TabularFoundationModel
+        pretrained model ready for inference
+    """
+    set_randomness_seed(cfg.training.seed)
+    model = build_model(cfg.model)
+    prior = build_prior(cfg.prior, device=cfg.device)
+    return pretrainTFM(
+        problem=cfg.problem,
+        model=model,
+        prior=prior,
+        eval=cfg.eval,
+        training=cfg.training,
+        experiment=cfg.experiment,
+        device=cfg.device,
+    )

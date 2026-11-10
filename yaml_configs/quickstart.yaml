@@ -1,0 +1,14 @@
+# same run as examples/pretraining_quickstart.py: a toy classifier on toy tables, a few minutes on a laptop
+defaults:
+  - classification
+  - override model: nanotabpfn_classifier
+  - override prior: nanotabicl_classification_tiny
+  - _self_
+
+training:
+  batch_size: 2
+  steps: 100
+  epochs: 10
+
+experiment:
+  name: quickstart

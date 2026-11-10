@@ -71,24 +71,32 @@ TABARENA_TASKS = [
 ]
 
 
-def get_task_ids(tasks):
-    if tasks == "toy":
-        task_ids = TOY_TASKS
-    elif tasks == "tabarena":
-        task_ids = TABARENA_TASKS
-    elif isinstance(tasks, list):
-        task_ids = tasks
-    else:
-        benchmark_suite = openml.study.get_suite(tasks)
-        task_ids = benchmark_suite.tasks
-    return task_ids
+def get_task_ids(suite: str | None = None, task_ids: list[int] | None = None) -> list[int]:
+    """
+    resolves what to evaluate on into openml task ids
+
+    task_ids win when given. suite is "toy", "tabarena", or the name of an openml benchmark suite
+    """
+    if task_ids is not None:
+        return list(task_ids)
+    if suite is None:
+        raise ValueError("evaluation needs a suite or task ids, both are unset")
+    if suite == "toy":
+        return TOY_TASKS
+    if suite == "tabarena":
+        return TABARENA_TASKS
+    suite_tasks = openml.study.get_suite(suite).tasks
+    if suite_tasks is None:
+        raise ValueError(f"openml suite {suite!r} lists no tasks")
+    return suite_tasks
 
 
 @torch.no_grad()
 def get_openml_predictions(
     *,
     model: TabularRegressor | TabularClassifier,
-    tasks: list[int] | str = "tabarena-v0.1",
+    suite: str | None = "tabarena-v0.1",
+    task_ids: list[int] | None = None,
     max_n_features: int = 500,
     max_n_samples: int = 10_000,
     classification: bool | None = None,
@@ -103,8 +111,10 @@ def get_openml_predictions(
     Args:
         model (TabularRegressor | TabularClassifier):
             A scikit-learn compatible model or classifier to be evaluated.
-        tasks (list[int] | str, optional):
-            A list of OpenML task IDs or the name of a benchmark suite.
+        suite (str | None, optional):
+            "toy", "tabarena", or the name of an OpenML benchmark suite.
+        task_ids (list[int] | None, optional):
+            OpenML task IDs to evaluate on; when given, suite is ignored.
         max_n_features (int, optional):
             Maximum number of features allowed for a task. Tasks exceeding this limit are skipped.
         max_n_samples (int, optional):
@@ -123,7 +133,7 @@ def get_openml_predictions(
     if cache_directory is not None:
         set_root_cache_directory(cache_directory)
 
-    task_ids = get_task_ids(tasks)
+    task_ids = get_task_ids(suite, task_ids)
 
     dataset_predictions = {}
 

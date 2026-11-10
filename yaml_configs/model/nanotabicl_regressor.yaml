@@ -1,0 +1,3 @@
+# refines tfmplayground.configs.models.NanoTabICLRegressorConfig; fields left out keep the dataclass defaults
+defaults:
+  - NanoTabICLRegressorConfig
