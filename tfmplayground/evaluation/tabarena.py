@@ -2,6 +2,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pandas as pd
+import torch
 from autogluon.tabular.models.abstract.abstract_torch_model import AbstractTorchModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
@@ -21,7 +22,7 @@ class TFMPlaygroundModel(AbstractTorchModel):
     default_num_gpus = 1
 
     def _fit(self, X: pd.DataFrame, y: pd.Series, num_gpus: float = 0, **kwargs) -> None:
-        device = self._resolve_fit_device(num_gpus=num_gpus)
+        device = self._resolve_fit_device(num_gpus=num_gpus) if torch.cuda.is_available() else "cpu"
         model = load_model(self._get_model_params()["checkpoint"])
         interface = TabularRegressor if self.problem_type == "regression" else TabularClassifier
         self.model = interface(model, device=device).fit(self.preprocess(X), y.to_numpy())
