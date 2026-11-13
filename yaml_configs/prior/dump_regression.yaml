@@ -1,0 +1,4 @@
+# refines tfmplayground.configs.priors.RegressionPriorDumpConfig; fields left out keep the dataclass defaults
+# point filename at a dump written by `python -m tfmplayground.priors`
+defaults:
+  - RegressionPriorDumpConfig

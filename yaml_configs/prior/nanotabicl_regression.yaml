@@ -1,0 +1,3 @@
+# refines tfmplayground.configs.priors.NanoTabICLRegressionPriorConfig; fields left out keep the dataclass defaults
+defaults:
+  - NanoTabICLRegressionPriorConfig

@@ -33,6 +33,8 @@ dependencies = [
     "interpret-core",  # ticl
     "mlflow",  # ticl
     "wandb>=0.20",  # ticl
+    "hydra-core>=1.3",
+    "pyyaml>=6",  # run configs written next to checkpoints
 ]
 
 [project.optional-dependencies]

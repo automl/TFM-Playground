@@ -1,0 +1,5 @@
+# refines tfmplayground.configs.evaluation.EvaluationConfig; fields left out keep the dataclass defaults
+defaults:
+  - EvaluationConfig
+
+suite: tabarena

@@ -1,0 +1,7 @@
+# refines tfmplayground.configs.priors.NanoTabICLRegressionPriorConfig with the quickstart's tiny tables
+defaults:
+  - NanoTabICLRegressionPriorConfig
+
+min_num_datapoints: 50
+max_num_datapoints: 50
+max_num_features: 3

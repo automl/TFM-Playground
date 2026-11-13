@@ -1,0 +1,12 @@
+# smallest run that exercises the whole pipeline: a tiny model, tiny tables, a few steps, seconds on a laptop
+#
+# for regression: `--config-name regression model=nanotabpfn_regressor_small prior=nanotabicl_regression_tiny training=regression_debug`
+defaults:
+  - classification
+  - override model: nanotabpfn_classifier_small
+  - override prior: nanotabicl_classification_tiny
+  - override training: classification_debug
+  - _self_
+
+experiment:
+  name: debug

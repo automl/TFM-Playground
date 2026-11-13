@@ -1,0 +1,8 @@
+# refines tfmplayground.configs.models.NanoTabPFNClassifierConfig with laptop sizes for debugging a pipeline
+defaults:
+  - NanoTabPFNClassifierConfig
+
+embedding_size: 32
+num_attention_heads: 2
+mlp_hidden_size: 64
+num_layers: 2

@@ -1,0 +1,3 @@
+# refines tfmplayground.configs.models.TabICLRegressorConfig; fields left out keep the dataclass defaults
+defaults:
+  - TabICLRegressorConfig

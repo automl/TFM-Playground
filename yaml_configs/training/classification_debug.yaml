@@ -1,0 +1,7 @@
+# refines tfmplayground.configs.training.ClassificationTrainingConfig with a handful of steps, for debugging a pipeline
+defaults:
+  - ClassificationTrainingConfig
+
+batch_size: 2
+steps: 5
+epochs: 2
