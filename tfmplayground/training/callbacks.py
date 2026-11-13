@@ -156,7 +156,7 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         super().close()
         if self.config.tabarena_subset is None:
             return
-        from tfmplayground.evaluation.tabarena import evaluate_on_tabarena
+        from tfmplayground.evaluation.tabarena import evaluate_on_tabarena, tabarena_version
 
         started = datetime.now()
         row = evaluate_on_tabarena(
@@ -166,6 +166,7 @@ class ExperimentEvaluationCallback(ExperimentCallback):
         )
         minutes = (datetime.now() - started).total_seconds() / 60
         self.experiment.log("tabarena:", console=True)
+        self.experiment.log(f"  version: {tabarena_version()}", console=True)
         self.experiment.log(f"  elo: {row['elo']:.0f} (+{row['elo+']:.0f}/-{row['elo-']:.0f})", console=True)
         self.experiment.log(f"  rank: {row['rank']:.2f}", console=True)
         self.experiment.log(f"  winrate: {row['winrate']:.2f}", console=True)

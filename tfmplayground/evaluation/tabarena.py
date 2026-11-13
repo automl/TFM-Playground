@@ -1,9 +1,11 @@
+from importlib.metadata import version
 from pathlib import Path
 
 import pandas as pd
 from autogluon.tabular.models.abstract.abstract_torch_model import AbstractTorchModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.contexts import TabArenaContext
+from tabarena.contexts.tabarena.methods import tabarena_method_metadata_collection
 from tabarena.utils.config_utils import ConfigGenerator
 
 from tfmplayground.configs.evaluation import EvaluationConfig
@@ -39,6 +41,14 @@ class TFMPlaygroundModel(AbstractTorchModel):
     def _set_device(self, device: str) -> None:
         self.model.device = device
         self.model.model = self.model.model.to(device)
+
+
+def tabarena_version() -> str:
+    """
+    gives tabarena package version and date of its newest baseline, so results say which leaderboard they rank on
+    """
+    dates = [m.date for m in tabarena_method_metadata_collection.method_metadata_lst if m.date]
+    return f"{version('tabarena')} (baselines up to {max(dates)})"
 
 
 def evaluate_on_tabarena(checkpoint: str | Path, output_dir: str | Path, config: EvaluationConfig) -> pd.Series:
