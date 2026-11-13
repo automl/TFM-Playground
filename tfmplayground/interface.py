@@ -21,6 +21,11 @@ def to_numeric(x):
     return x.apply(pd.to_numeric, errors="coerce").to_numpy()
 
 
+def to_batch(array: np.ndarray, device: str | torch.device) -> torch.Tensor:
+    """turns one array into a float tensor batch of one table on device"""
+    return torch.from_numpy(array).unsqueeze(0).to(torch.float).to(device)
+
+
 def get_feature_preprocessor(X: np.ndarray | pd.DataFrame) -> Pipeline:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
@@ -110,11 +115,12 @@ class TabularClassifier:
         X_test = self.feature_preprocessor.transform(X_test)
         self.model.eval()
         with torch.no_grad():
-            # introduce batch size 1
-            X_train = torch.from_numpy(self.X_train).unsqueeze(0).to(torch.float).to(self.device)
-            X_test = torch.from_numpy(X_test).unsqueeze(0).to(torch.float).to(self.device)
-            y_train = torch.from_numpy(self.y_train).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model(X_train, y_train, X_test).squeeze(0)  # remove batch size 1
+            # batch of one table in, batch dimension squeezed out again
+            out = self.model(
+                to_batch(self.X_train, self.device),
+                to_batch(self.y_train, self.device),
+                to_batch(X_test, self.device),
+            ).squeeze(0)
             if out.shape[-1] < self.num_classes:
                 raise ValueError(f"model has {out.shape[-1]} outputs, data has {self.num_classes} classes")
             # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
@@ -159,11 +165,11 @@ class TabularRegressor:
         X_test = self.feature_preprocessor.transform(X_test)
         self.model.eval()
         with torch.no_grad():
-            X_train = torch.from_numpy(self.X_train).unsqueeze(0).to(torch.float).to(self.device)
-            X_test = torch.from_numpy(X_test).unsqueeze(0).to(torch.float).to(self.device)
-            y_train = torch.from_numpy(self.y_train_n).unsqueeze(0).to(torch.float).to(self.device)
-
-            logits = self.model(X_train, y_train, X_test).squeeze(0)
+            logits = self.model(
+                to_batch(self.X_train, self.device),
+                to_batch(self.y_train_n, self.device),
+                to_batch(X_test, self.device),
+            ).squeeze(0)
             preds_n = self.dist.mean(logits)
             preds = preds_n * self.y_train_std + self.y_train_mean
 

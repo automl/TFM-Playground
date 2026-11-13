@@ -88,7 +88,14 @@ class PriorDumpDataLoader(DataLoader):
         device (torch.device): Device to load tensors onto.
     """
 
-    def __init__(self, filename, num_steps, batch_size, device, starting_index=0):
+    def __init__(
+        self,
+        filename: str,
+        num_steps: int,
+        batch_size: int,
+        device: str | torch.device,
+        starting_index: int = 0,
+    ) -> None:
         self.filename = filename
         self.num_steps = num_steps
         self.batch_size = batch_size
@@ -107,9 +114,10 @@ class PriorDumpDataLoader(DataLoader):
         self.pointer = starting_index
 
     def __iter__(self):
+        batch_size: int = self.batch_size  # DataLoader declares it optional, this loader always has one
         with h5py.File(self.filename, "r") as f:
             for _ in range(self.num_steps):
-                end = self.pointer + self.batch_size
+                end = self.pointer + batch_size
 
                 num_features = f["num_features"][self.pointer : end].max()
                 if self.has_num_datapoints:
@@ -122,7 +130,7 @@ class PriorDumpDataLoader(DataLoader):
                 y = torch.from_numpy(f["y"][self.pointer : end, :max_seq_in_batch])
                 train_test_split_index = f[self.sep_key][self.pointer : end]
 
-                self.pointer += self.batch_size
+                self.pointer += batch_size
                 if self.pointer >= self.num_tables:
                     print(
                         """Finished iteration over all stored datasets! """

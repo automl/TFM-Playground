@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from typing import Any
 
 import torch
 
@@ -9,7 +10,7 @@ class Prior(ABC):
     base class for every prior this package trains on
     """
 
-    config = None
+    config: Any = None
 
     @abstractmethod
     def batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:

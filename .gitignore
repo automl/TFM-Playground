@@ -21,4 +21,3 @@ __pycache__/
 .DS_Store
 .idea/
 
-uv.lock
