@@ -43,7 +43,7 @@ class ThinkingRows(nn.Module):
 
 
 class ModdedNanoTabPFN(nn.Module):
-    def __init__(self, l, a, e, h, o, residual_decay=1.0, thinking_rows=16, feature_group_size=3):
+    def __init__(self, l, a, e, h, o, residual_decay=1.0, thinking_rows=16, feature_group_size=3, num_mem_chunks=1):
         """
         l : num layers
         a : num attention heads
@@ -51,6 +51,7 @@ class ModdedNanoTabPFN(nn.Module):
         h : mlp hidden size
         o : num outputs
         residual_decay : exponential decay of residual stream per layer (1.0 = no decay)
+        num_mem_chunks : inference chunks per attention and mlp (1 = no chunking)
         """
         super().__init__()
         self.l = l
@@ -60,7 +61,9 @@ class ModdedNanoTabPFN(nn.Module):
         self.o = o
         self.feature_encoder = FeatureEncoder(e, feature_group_size=feature_group_size)
         self.target_encoder = TargetEncoder(e)
-        self.transformer_encoder = TransformerEncoderStack(l, a, e, h, residual_decay=residual_decay)
+        self.transformer_encoder = TransformerEncoderStack(
+            l, a, e, h, residual_decay=residual_decay, num_mem_chunks=num_mem_chunks
+        )
         self.decoder = Decoder(e, h, o)
         self.thinking_rows = ThinkingRows(num_thinking_rows=thinking_rows, e=e)
 
@@ -121,9 +124,10 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderStack(nn.Module):
-    def __init__(self, l, a, e, h, residual_decay=1.0):
+    def __init__(self, l, a, e, h, residual_decay=1.0, num_mem_chunks=1):
         super().__init__()
         self.residual_decay = residual_decay
+        self.num_mem_chunks = num_mem_chunks
         self.transformer_blocks = nn.ModuleList()
         for _ in range(l):
             self.transformer_blocks.append(TransformerEncoderLayer(a, e, h))
@@ -131,7 +135,7 @@ class TransformerEncoderStack(nn.Module):
     def forward(self, x, sep):
         for i, block in enumerate(self.transformer_blocks):
             x = x * (self.residual_decay ** i)
-            x = block(x, sep=sep)
+            x = block(x, sep=sep, num_mem_chunks=self.num_mem_chunks)
         return x
 
 
@@ -152,9 +156,8 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LowerPrecisionRMSNorm(e, eps=eps)
         self.norm3 = LowerPrecisionRMSNorm(e, eps=eps)
 
-    def forward(self, src, sep):
+    def forward(self, src, sep, num_mem_chunks=1):
         b, r, c, e = src.shape
-        num_mem_chunks = 1 if torch.is_grad_enabled() else b * r * c // 2**20 + 1
 
         x = src.reshape(b * r, c, e)
 
@@ -244,6 +247,7 @@ class ModdedNanoTabPFNModel(ModdedNanoTabPFN, TabularFoundationModel):
             residual_decay=config.residual_decay,
             thinking_rows=config.thinking_rows,
             feature_group_size=config.feature_group_size,
+            num_mem_chunks=config.num_mem_chunks,
         )
         self.register_buffer("borders", torch.zeros(config.o + 1))
 
