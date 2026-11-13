@@ -44,7 +44,7 @@ model = pretrainTFM(
 
 [examples/pretraining_quickstart_regression.py](examples/pretraining_quickstart_regression.py) does the same for regression.
 
-Fully configurable examples are in [examples](examples):
+Fully configurable longer pretraining examples are in [examples](examples):
 
 ```
 uv run python examples/pretraining_classification.py
