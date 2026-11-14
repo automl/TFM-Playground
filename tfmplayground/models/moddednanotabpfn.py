@@ -134,7 +134,7 @@ class TransformerEncoderStack(nn.Module):
 
     def forward(self, x, sep):
         for i, block in enumerate(self.transformer_blocks):
-            x = x * (self.residual_decay ** i)
+            x.mul_(self.residual_decay ** i)
             x = block(x, sep=sep, num_mem_chunks=self.num_mem_chunks)
         return x
 
