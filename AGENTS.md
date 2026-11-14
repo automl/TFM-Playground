@@ -23,7 +23,7 @@ A single Python package, `tfmplayground`, plus examples and tests:
 - `tfmplayground/priors/`: one adapter file per prior. `base.py` holds the `Prior` base class and `PriorDataLoader`. `dump.py` reads and writes HDF5 prior dumps. `main.py` / `__main__.py` is the dump CLI (`python -m tfmplayground.priors`).
 - `tfmplayground/configs/`: dataclass configs, one file per area (`models.py`, `priors.py`, `training.py`, `evaluation.py`).
 - `tfmplayground/training/`: `pretrain.py` (`pretrainTFM`, the public entry point), `train.py` (the training loop), `callbacks.py` (logging and evaluation callbacks).
-- `tfmplayground/evaluation/`: OpenML task lists (`TOY_TASKS`, `TABARENA_TASKS`) and `get_openml_predictions`.
+- `tfmplayground/evaluation/`: OpenML task lists (`TOY_TASKS`, `TABARENA_TASKS`) and `get_openml_predictions`. `tabarena.py` ranks a checkpoint on the official TabArena benchmark (`evaluate_on_tabarena`, `tabarena_version`).
 - `tfmplayground/interface.py`: `TabularClassifier` / `TabularRegressor`, the scikit-learn style wrappers around a trained model.
 - `tfmplayground/utils.py`: device and seed helpers, regression heads and losses (`BarDistribution`, `FullSupportBarDistribution`, `QuantileLoss`, `ScalarMSELoss`), bucket borders, `Experiment` and `load_model`.
 - `examples/`: runnable pretraining scripts (`pretraining_quickstart.py`, `pretraining_classification.py`, `pretraining_regression.py`).
@@ -36,6 +36,7 @@ Requires Python 3.12 exactly (`requires-python = "==3.12.*"`) and [uv](https://d
 ```bash
 uv sync                                            # Install the package, its dependencies and the dev group (ruff, pytest)
 uv sync --extra tensorboard                        # + TensorBoard logging
+uv sync --extra tabarena                           # + official TabArena evaluation
 uv run python examples/pretraining_quickstart.py   # Smoke run, about 5 minutes on a laptop
 ```
 
@@ -80,7 +81,7 @@ Prior.batch() → train() → model(X_train, y_train, X_test) → criterion → 
 - **Configs** (`configs/`): plain dataclasses. Each model, prior, training and experiment config comes as a shared base plus a `...Classifier...` / `...Classification...` and a `...Regressor...` / `...Regression...` subclass that sets the `problem` field. `check_problems` in `pretrain.py` rejects a mix of classification and regression configs.
 - **Regression heads** (`utils.py`): `model.config.head` is one of `scalar`, `buckets`, `quantiles`. `make_regression_decoder` maps it to `ScalarMSELoss`, `FullSupportBarDistribution` or `QuantileLoss`. For `buckets`, `default_criterion` fits the bucket borders from the prior (`make_bucket_borders`) and writes them into `model.borders` before training. Regression targets are standardized per table inside `train()`.
 - **`train()`** (`training/train.py`): currently `schedulefree.AdamWScheduleFree`, gradient clipping, a fixed number of valid steps per epoch, callbacks at the end of each epoch, checkpoints after each epoch. `KeyboardInterrupt` ends training and still closes the callbacks and returns the model.
-- **Callbacks** (`training/callbacks.py`): `ClassifierExperimentEvaluationCallback` (mean ROC AUC) and `RegressorExperimentEvaluationCallback` (mean R²) evaluate on the OpenML tasks named by `EvaluationConfig.tasks` (`"toy"`, `"tabarena"`, a list of task ids, or an OpenML suite name) and set `experiment.score`. Console, TensorBoard and Weights & Biases loggers live in the same file.
+- **Callbacks** (`training/callbacks.py`): `ClassifierExperimentEvaluationCallback` (mean ROC AUC) and `RegressorExperimentEvaluationCallback` (mean R²) evaluate on the OpenML tasks named by `EvaluationConfig.tasks` (`"toy"`, `"tabarena"`, a list of task ids, or an OpenML suite name) and set `experiment.score`. When `EvaluationConfig.tabarena_subset` is set (e.g. `"lite"`), `close()` also ranks the last checkpoint on TabArena with `evaluate_on_tabarena` (needs the `tabarena` extra) and logs the TabArena version, Elo, rank, winrate and runtime. Console, TensorBoard and Weights & Biases loggers live in the same file.
 - **`Experiment`** (`utils.py`): one run directory at `<experiments_dir>/<problem>/<name>/<id>/` (default `workdir/experiments/...`) with a log file and `-ckpt-last.pth` / `-ckpt-best.pth`. Checkpoints store the model and config class names, so `load_model(path)` can rebuild the model with `getattr(models, ...)` and `getattr(configs.models, ...)`.
 - **`TabularClassifier` / `TabularRegressor`** (`interface.py`): `fit` stores the preprocessed training data (imputation, ordinal encoding, constant-column removal, standard scaling), `predict` / `predict_proba` run one forward pass with the training data as context. They must stay picklable (TabArena runs them), which is why the preprocessing helpers are module-level functions and not lambdas.
 
