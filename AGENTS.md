@@ -26,7 +26,7 @@ A single Python package, `tfmplayground`, plus examples and tests:
 - `tfmplayground/evaluation/`: OpenML task lists (`TOY_TASKS`, `TABARENA_TASKS`) and `get_openml_predictions`.
 - `tfmplayground/interface.py`: `TabularClassifier` / `TabularRegressor`, the scikit-learn style wrappers around a trained model.
 - `tfmplayground/utils.py`: device and seed helpers, regression heads and losses (`BarDistribution`, `FullSupportBarDistribution`, `QuantileLoss`, `ScalarMSELoss`), bucket borders, `Experiment` and `load_model`.
-- `examples/`: runnable pretraining scripts (`pretraining_quickstart.py`, `pretraining_classification.py`, `pretraining_regression.py`).
+- `examples/`: runnable pretraining scripts (`pretraining_quickstart_classification.py`, `pretraining_quickstart_regression.py`, `pretraining_classification.py`, `pretraining_regression.py`).
 - `tests/`: all tests.
 
 ## Setup Commands
@@ -36,7 +36,7 @@ Requires Python 3.12 exactly (`requires-python = "==3.12.*"`) and [uv](https://d
 ```bash
 uv sync                                            # Install the package, its dependencies and the dev group (ruff, pytest)
 uv sync --extra tensorboard                        # + TensorBoard logging
-uv run python examples/pretraining_quickstart.py   # Smoke run, about 5 minutes on a laptop
+uv run python examples/pretraining_quickstart_classification.py   # Smoke run, about 5 minutes on a laptop
 ```
 
 Several dependencies (`tabicl`, `ticl`, `tabpfn-v1-prior`) are installed from git at a pinned commit in `pyproject.toml`. When an adapter breaks after an upstream change, bump the pinned commit deliberately; do not switch to an unpinned branch. `uv.lock` is in `.gitignore` and is not committed.
@@ -105,7 +105,7 @@ Some priors are only available as dumps. `python -m tfmplayground.priors --lib {
 - Keep commits focused; do not bundle unrelated refactors with bug fixes.
 - Run `uv run ruff check .`, `uv run ruff format --check .` and `uv run pytest` before opening a PR. There is no CI to catch it afterwards.
 - Check that `AGENTS.md` and `.claude/skills/add-model/SKILL.md` still match the code after your change (see [Keeping This File and the Skills Up to Date](#keeping-this-file-and-the-skills-up-to-date)) and include any updates in the same PR.
-- For a change to the training loop, a model or a prior, also run `uv run python examples/pretraining_quickstart.py` (or a shortened copy of it) and confirm the loss goes down.
+- For a change to the training loop, a model or a prior, also run `uv run python examples/pretraining_quickstart_classification.py` or `examples/pretraining_quickstart_regression.py` (or a shortened copy of it) and confirm the loss goes down.
 - PR description: a two-to-four sentence summary first, then a `<details><summary>Details</summary>` block (collapsed by default) with the longer description. Keep the whole body short.
 
 ## Things to Avoid
