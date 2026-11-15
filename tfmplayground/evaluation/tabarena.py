@@ -39,6 +39,9 @@ class TFMPlaygroundModel(AbstractTorchModel):
             "refit_folds": True,
         }
 
+    def _more_tags(self) -> dict:
+        return {"can_refit_full": True}
+
     @classmethod
     def supported_problem_types(cls) -> list[str]:
         return ["binary", "multiclass", "regression"]
