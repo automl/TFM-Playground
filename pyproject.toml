@@ -37,6 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tensorboard = ["tensorboard>=2.19"]
+tabarena = ["tabarena[plot]>=0.1.0"]
 [project.urls]
 Homepage = "https://github.com/automl/TFM-Playground"
 Issues = "https://github.com/automl/TFM-Playground/issues"
