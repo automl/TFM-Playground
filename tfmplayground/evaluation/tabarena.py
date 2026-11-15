@@ -33,6 +33,13 @@ class TFMPlaygroundModel(AbstractTorchModel):
         return params
 
     @classmethod
+    def _get_default_ag_args_ensemble(cls, **kwargs) -> dict:
+        return super()._get_default_ag_args_ensemble(**kwargs) | {
+            "fold_fitting_strategy": "sequential_local",
+            "refit_folds": True,
+        }
+
+    @classmethod
     def supported_problem_types(cls) -> list[str]:
         return ["binary", "multiclass", "regression"]
 
