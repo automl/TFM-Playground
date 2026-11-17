@@ -6,6 +6,7 @@ from torch import nn
 
 from tfmplayground.configs.models import ModdedNanoTabPFNClassifierConfig, ModdedNanoTabPFNRegressorConfig
 from tfmplayground.models.base import TabularFoundationModel
+from tfmplayground.models.nanotabpfn import memory_chunking
 
 
 class LowerPrecisionRMSNorm(nn.RMSNorm):
@@ -42,7 +43,7 @@ class ThinkingRows(nn.Module):
 
 
 class ModdedNanoTabPFN(nn.Module):
-    def __init__(self, l, a, e, h, o, residual_decay=1.0, thinking_rows=16, feature_group_size=3):
+    def __init__(self, l, a, e, h, o, residual_decay=1.0, thinking_rows=16, feature_group_size=3, num_mem_chunks=1):
         """
         l : num layers
         a : num attention heads
@@ -50,6 +51,7 @@ class ModdedNanoTabPFN(nn.Module):
         h : mlp hidden size
         o : num outputs
         residual_decay : exponential decay of residual stream per layer (1.0 = no decay)
+        num_mem_chunks : inference chunks per attention and mlp (1 = no chunking)
         """
         super().__init__()
         self.l = l
@@ -59,7 +61,9 @@ class ModdedNanoTabPFN(nn.Module):
         self.o = o
         self.feature_encoder = FeatureEncoder(e, feature_group_size=feature_group_size)
         self.target_encoder = TargetEncoder(e)
-        self.transformer_encoder = TransformerEncoderStack(l, a, e, h, residual_decay=residual_decay)
+        self.transformer_encoder = TransformerEncoderStack(
+            l, a, e, h, residual_decay=residual_decay, num_mem_chunks=num_mem_chunks
+        )
         self.decoder = Decoder(e, h, o)
         self.thinking_rows = ThinkingRows(num_thinking_rows=thinking_rows, e=e)
 
@@ -120,9 +124,10 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderStack(nn.Module):
-    def __init__(self, l, a, e, h, residual_decay=1.0):
+    def __init__(self, l, a, e, h, residual_decay=1.0, num_mem_chunks=1):
         super().__init__()
         self.residual_decay = residual_decay
+        self.num_mem_chunks = num_mem_chunks
         self.transformer_blocks = nn.ModuleList()
         for _ in range(l):
             self.transformer_blocks.append(TransformerEncoderLayer(a, e, h))
@@ -130,7 +135,7 @@ class TransformerEncoderStack(nn.Module):
     def forward(self, x, sep):
         for i, block in enumerate(self.transformer_blocks):
             x.mul_(self.residual_decay ** i)
-            x = block(x, sep=sep)
+            x = block(x, sep=sep, num_mem_chunks=self.num_mem_chunks)
         return x
 
 
@@ -151,50 +156,64 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = LowerPrecisionRMSNorm(e, eps=eps)
         self.norm3 = LowerPrecisionRMSNorm(e, eps=eps)
 
-    def forward(self, src, sep):
+    def forward(self, src, sep, num_mem_chunks=1):
         b, r, c, e = src.shape
 
         x = src.reshape(b * r, c, e)
-        res = x
-        x = self.norm1(x)
 
-        qkv = self.qkv_features(x)
-        qkv = qkv.reshape(b * r, c, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        @memory_chunking(num_mem_chunks)
+        def feature_attention(x):
+            res = x
+            x = self.norm1(x)
 
-        x = F.scaled_dot_product_attention(q, k, v)
-        x = x.transpose(1, 2).reshape(b * r, c, e)
+            qkv = self.qkv_features(x)
+            qkv = qkv.reshape(-1, c, 3, self.num_heads, self.head_dim)
+            qkv = qkv.permute(2, 0, 3, 1, 4)
+            q, k, v = qkv[0], qkv[1], qkv[2]
 
-        src = res + x
+            x = F.scaled_dot_product_attention(q, k, v)
+            x = x.transpose(1, 2).reshape(-1, c, e)
+
+            return res + x
+
+        src = feature_attention(x)
         src = src.reshape(b, r, c, e)
 
         x = src.transpose(1, 2).reshape(b * c, r, e)
-        res = x
-        x = self.norm2(x)
 
-        qkv = self.qkv_datapoints(x)
-        qkv = qkv.reshape(b * c, r, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        @memory_chunking(num_mem_chunks)
+        def datapoint_attention(x):
+            res = x
+            x = self.norm2(x)
 
-        q_left, q_right = q.split([sep, r - sep], dim=2)
+            qkv = self.qkv_datapoints(x)
+            qkv = qkv.reshape(-1, r, 3, self.num_heads, self.head_dim)
+            qkv = qkv.permute(2, 0, 3, 1, 4)
+            q, k, v = qkv[0], qkv[1], qkv[2]
 
-        k_train = k[:, :, :sep, :]
-        v_train = v[:, :, :sep, :]
+            q_left, q_right = q.split([sep, r - sep], dim=2)
 
-        x_left = F.scaled_dot_product_attention(q_left, k_train, v_train)
-        x_right = F.scaled_dot_product_attention(q_right, k_train, v_train)
+            k_train = k[:, :, :sep, :]
+            v_train = v[:, :, :sep, :]
 
-        x = torch.cat([x_left, x_right], dim=2)
-        x = x.transpose(1, 2).reshape(b * c, r, e)
+            x_left = F.scaled_dot_product_attention(q_left, k_train, v_train)
+            x_right = F.scaled_dot_product_attention(q_right, k_train, v_train)
 
-        src = res + x
+            x = torch.cat([x_left, x_right], dim=2)
+            x = x.transpose(1, 2).reshape(-1, r, e)
+
+            return res + x
+
+        src = datapoint_attention(x)
         src = src.reshape(b, c, r, e).transpose(2, 1)
 
-        x = self.norm3(src)
-        x = self.linear2(F.gelu(self.linear1(x)))
-        src = src + x
+        @memory_chunking(num_mem_chunks)
+        def mlp(src):
+            x = self.norm3(src)
+            x = self.linear2(F.gelu(self.linear1(x)))
+            return src + x
+
+        src = mlp(src.reshape(b * r * c, e)).reshape(b, r, c, e)
 
         return src
 
@@ -228,6 +247,7 @@ class ModdedNanoTabPFNModel(ModdedNanoTabPFN, TabularFoundationModel):
             residual_decay=config.residual_decay,
             thinking_rows=config.thinking_rows,
             feature_group_size=config.feature_group_size,
+            num_mem_chunks=config.num_mem_chunks,
         )
         self.register_buffer("borders", torch.zeros(config.o + 1))
 

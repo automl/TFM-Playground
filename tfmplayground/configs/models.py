@@ -151,6 +151,8 @@ class ModdedNanoTabPFNModelConfig:
         number of learned rows added to each table
     feature_group_size : int
         number of features embedded together
+    num_mem_chunks : int
+        number of chunks attention and mlp run in at inference, 1 gives no chunking
     """
 
     l: int = 5
@@ -160,6 +162,7 @@ class ModdedNanoTabPFNModelConfig:
     residual_decay: float = 0.95
     thinking_rows: int = 24
     feature_group_size: int = 5
+    num_mem_chunks: int = 1
 
 
 @dataclass
