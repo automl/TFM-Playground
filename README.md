@@ -20,10 +20,10 @@ pip install uv
 git clone https://github.com/automl/TFM-Playground.git
 cd TFM-Playground
 uv sync
-uv run python examples/pretraining_quickstart.py
+uv run python examples/pretraining_quickstart_classification.py
 ```
 
-That last command runs [examples/pretraining_quickstart.py](examples/pretraining_quickstart.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
+That last command runs [examples/pretraining_quickstart_classification.py](examples/pretraining_quickstart_classification.py). It trains a toy classifier on toy tables in about 5 minutes on a laptop, from swappable configurations like these:
 
 ```python
 model_config = ...
@@ -42,7 +42,9 @@ model = pretrainTFM(
 )
 ```
 
-Fully configurable examples are in [examples](examples):
+[examples/pretraining_quickstart_regression.py](examples/pretraining_quickstart_regression.py) does the same for regression.
+
+Fully configurable longer pretraining examples are in [examples](examples):
 
 ```
 uv run python examples/pretraining_classification.py

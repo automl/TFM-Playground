@@ -228,7 +228,8 @@ way, do not write a test for that property; mention it in the report.
 1. `uv run ruff check <touched files>` and `uv run ruff format --check <touched files>`; fix what they report.
 2. `uv run pytest` (all tests, not only the new file).
 3. A short pretraining run per supported problem, to confirm the loss goes down. Write the script to the scratchpad,
-   adapted from `examples/pretraining_quickstart.py`, and run it from the repo root so outputs land in `workdir/`:
+   adapted from `examples/pretraining_quickstart_classification.py` and
+   `examples/pretraining_quickstart_regression.py`, and run it from the repo root so outputs land in `workdir/`:
    - classification: the new classifier config with a small network, `NanoTabICLPrior` with
      `NanoTabICLClassificationPriorConfig(min_num_datapoints=50, max_num_datapoints=50, max_num_features=3,
      max_num_classes=3)`, `ClassificationTrainingConfig(batch_size=2, steps=100, epochs=10)`;
