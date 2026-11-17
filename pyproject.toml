@@ -56,11 +56,15 @@ select = [
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
 ]
 ignore = [
     "E741",  # ambiguous variable name
     "SIM102",  # nested if instead of a single if
 ]
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true  # callbacks accept **kwargs they do not read
 
 [tool.ruff.lint.per-file-ignores]
 "tfmplayground/models/nanotabicl.py" = [
@@ -82,6 +86,28 @@ exclude = [
     "tfmplayground/priors/nanotabicl.py",
 ]
 
+[tool.ty.src]
+exclude = [
+    # vendored, kept diffable against upstream
+    "tfmplayground/models/moddednanotabpfn.py",
+    "tfmplayground/models/nanotabicl.py",
+    "tfmplayground/priors/nanotabicl.py",
+]
+
+[tool.ty.rules]
+# torch declares nn.Module.forward as a callable attribute, so every forward method trips this
+invalid-mutable-override = "ignore"
+# a variable that changes type mid-function is reported but does not fail the check
+invalid-assignment = "warn"
+
+[[tool.ty.overrides]]
+# adapters change the vendor forward signature on purpose, that is what an adapter is for
+include = ["tfmplayground/models/*.py"]
+rules = { invalid-method-override = "ignore" }
+
+[tool.ty.terminal]
+error-on-warning = false  # warnings print, only errors fail the check
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
@@ -89,4 +115,5 @@ testpaths = ["tests"]
 dev = [
     "ruff>=0.15.10",
     "pytest>=8",
+    "ty==0.0.95",
 ]

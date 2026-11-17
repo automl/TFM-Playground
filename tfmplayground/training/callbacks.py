@@ -45,7 +45,7 @@ class BaseLoggerCallback(Callback):
 class ConsoleLoggerCallback(BaseLoggerCallback):
     """Logger callback that prints epoch information to the console."""
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         print(f"Epoch {epoch:5d} | Time {epoch_time:5.2f}s | Mean Loss {loss:5.2f}", flush=True)
 
     def close(self):
@@ -61,7 +61,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 
         self.writer = SummaryWriter(log_dir=log_dir)
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         self.writer.add_scalar("Loss/train", loss, epoch)
         self.writer.add_scalar("Time/epoch", epoch_time, epoch)
 
@@ -72,7 +72,7 @@ class TensorboardLoggerCallback(BaseLoggerCallback):
 class WandbLoggerCallback(BaseLoggerCallback):
     """Logger callback that logs epoch information to Weights & Biases."""
 
-    def __init__(self, project: str, name: str = None, config: dict = None, log_dir: str = None):
+    def __init__(self, project: str, name: str | None = None, config: dict | None = None, log_dir: str | None = None):
         """
         Initializes a WandbLoggerCallback.
 
@@ -90,7 +90,7 @@ class WandbLoggerCallback(BaseLoggerCallback):
         except ImportError as e:
             raise ImportError("wandb is not installed. Install it with: pip install wandb") from e
 
-    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):
+    def on_epoch_end(self, epoch: int, epoch_time: float, loss: float, model, **kwargs):  # noqa: ARG002
         log_dict = {"epoch": epoch, "loss": loss, "epoch_time": epoch_time}
         self.wandb.log(log_dict)
 
@@ -115,7 +115,7 @@ class ExperimentCallback(BaseLoggerCallback):
         epoch: int,
         epoch_time: float,
         loss: float,
-        model: TabularFoundationModel,
+        model: TabularFoundationModel,  # noqa: ARG002
         **kwargs,
     ) -> None:
         """
@@ -135,6 +135,8 @@ class ExperimentEvaluationCallback(ExperimentCallback):
     """
     measures how good model is while it trains
     """
+
+    metric: str  # name of the score, set by subclasses
 
     def __init__(
         self,

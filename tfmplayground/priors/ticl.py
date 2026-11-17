@@ -66,7 +66,7 @@ def _get_ticl_prior_config(prior_type: str) -> dict:
 
 
 def build_ticl_prior(
-    prior_type: str, base_prior: str = None, max_num_classes: int = None
+    prior_type: str, base_prior: str | None = None, max_num_classes: int | None = None
 ) -> MLPPrior | GPPrior | ClassificationAdapterPrior | BooleanConjunctionPrior | StepFunctionPrior:
     """Builds a TICL prior based on the prior type string using the defaults in this module.
 

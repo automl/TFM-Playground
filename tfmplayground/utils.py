@@ -132,6 +132,8 @@ class BarDistribution(nn.Module):
     inspired by pfns.model.bar_distribution BarDistribution
     """
 
+    borders: torch.Tensor
+
     def __init__(
         self,
         borders: torch.Tensor,
@@ -302,11 +304,11 @@ class ScalarMSELoss(nn.MSELoss):
         """
         super().__init__(reduction="none")
 
-    def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
         measures squared error of each prediction
         """
-        scalars = logits.reshape(target.shape)
+        scalars = input.reshape(target.shape)
         return super().forward(scalars, target)
 
     def mean(self, logits: torch.Tensor) -> torch.Tensor:
@@ -320,6 +322,8 @@ class QuantileLoss(nn.Module):
     """
     pinball loss averaged over a fixed grid of quantile levels
     """
+
+    alphas: torch.Tensor
 
     def __init__(self, n_quantiles: int) -> None:
         """
@@ -354,10 +358,13 @@ def make_regression_decoder(
     head = model.config.head
     if head == "scalar":
         return ScalarMSELoss()
+    borders = getattr(model, "borders", None)
+    if borders is None:
+        raise ValueError(f"{head!r} head needs a borders buffer, {type(model).__name__} has none")
     if head == "quantiles":
-        return QuantileLoss(model.borders.numel() - 1)
+        return QuantileLoss(borders.numel() - 1)
     if head == "buckets":
-        return FullSupportBarDistribution(model.borders)
+        return FullSupportBarDistribution(borders)
     raise ValueError(f"{head!r} head is not in (scalar, quantiles, buckets)")
 
 

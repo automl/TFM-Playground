@@ -78,7 +78,7 @@ class NanoTabPFN(nn.Module):
                 num_mem_chunks=self.num_mem_chunks,
             )
         # selects the target embeddings (B,num_targets,1,E)
-        output = src[:, train_test_split_index:, -1, :]
+        output = src[:, train_test_split_index:, -1, :]  # ty: ignore[invalid-argument-type]  src is a tensor by now
         # runs the embeddings through the decoder to get
         # the logits of our predictions (B,num_targets,num_classes)
         output = self.decoder(output)
@@ -104,8 +104,8 @@ class FeatureEncoder(nn.Module):
                            the embeddings of the features
         """
         x = x.unsqueeze(-1)
-        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-8  # TODO: maybe change the constant
+        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdim=True)
+        std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + 1e-8  # TODO: maybe change the constant
         x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)
@@ -129,7 +129,7 @@ class TargetEncoder(nn.Module):
                            the embeddings of the targets
         """
         # nan padding & nan handler instead?
-        mean = torch.mean(y_train, axis=1, keepdim=True)
+        mean = torch.mean(y_train, dim=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
         y = torch.cat([y_train, padding], dim=1)
         y = y.unsqueeze(-1)
@@ -231,7 +231,7 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
-def memory_chunking(num_mem_chunks: int) -> callable:
+def memory_chunking(num_mem_chunks: int) -> Callable:
     """
     This decorator will split the first dimension of the input into chunks
     and apply the wrapped function to each chunk separately.
@@ -295,6 +295,8 @@ class NanoTabPFNModel(NanoTabPFN, TabularFoundationModel):
     """
     adapts nanotabpfn to tabularfoundationmodel interface
     """
+
+    borders: torch.Tensor  # bucket or quantile borders, registered in __init__
 
     def __init__(self, config: NanoTabPFNClassifierConfig | NanoTabPFNRegressorConfig) -> None:
         """
